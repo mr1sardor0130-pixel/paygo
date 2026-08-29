@@ -1,0 +1,6 @@
+{
+  "name": "Google AI Studio",
+  "description": "A modern, full-featured Google AI Studio web application with Chat prompts, Freeform prompts, JSON Schema generation, Model tuning parameters, and Code export powered by Gemini.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
