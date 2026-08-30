@@ -16,6 +16,8 @@ import {
 } from '@/lib/userbot-onboarding'
 import { startHumoUserbot } from '@/lib/telegram-userbot'
 
+export const dynamic = 'force-dynamic'
+
 const APP_URL = process.env.APP_URL || process.env.BETTER_AUTH_URL || ''
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || '8021115446'
 
