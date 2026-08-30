@@ -26,6 +26,7 @@ import {
 import { checkShopLimit, checkTransactionLimits } from '@/lib/utils/limits'
 import { startHumoUserbot, stopHumoUserbot, isUserbotActive } from '@/lib/telegram-userbot'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
+import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
 
 export const dynamic = 'force-dynamic'
 
@@ -235,6 +236,136 @@ async function answerCallback(token: string, callbackQueryId: string, text?: str
       }),
     })
   } catch {}
+}
+
+async function sendDocument(
+  token: string,
+  chatId: number | string,
+  pdfBuffer: Buffer,
+  fileName: string,
+  caption?: string,
+  reply_markup?: any
+) {
+  try {
+    const formData = new FormData()
+    formData.append('chat_id', String(chatId))
+    const blob = new Blob([pdfBuffer], { type: 'application/pdf' })
+    formData.append('document', blob, fileName)
+    if (caption) formData.append('caption', caption)
+    if (caption) formData.append('parse_mode', 'HTML')
+    if (reply_markup) formData.append('reply_markup', JSON.stringify(reply_markup))
+
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+      method: 'POST',
+      body: formData,
+    })
+    return await res.json()
+  } catch (e) {
+    console.error('sendDocument error:', e)
+    return { ok: false }
+  }
+}
+
+async function activateTariffForUser(
+  token: string,
+  chatId: number | string,
+  userIdStr: string,
+  payment: any
+) {
+  let period = 'month'
+  let name = 'Premium Paket'
+  if (payment.amount === 1000) {
+    period = 'day'
+    name = 'Kunlik'
+  } else if (payment.amount === 6500) {
+    period = 'week'
+    name = 'Haftalik'
+  } else if (payment.amount === 27858) {
+    period = 'month'
+    name = 'Oylik VIP'
+  }
+
+  let daysToAdd = 30
+  if (period === 'day' || period === 'kun') daysToAdd = 1
+  else if (period === 'week' || period === 'hafta') daysToAdd = 7
+  else if (period === 'month' || period === 'oy') daysToAdd = 30
+
+  const premiumEndsAt = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000)
+
+  // 1. Update user_profiles
+  try {
+    await db
+      .insert(userProfiles)
+      .values({
+        telegramId: userIdStr,
+        termsAccepted: true,
+        tier: 'premium',
+        premiumEndsAt,
+        acceptedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: userProfiles.telegramId,
+        set: {
+          tier: 'premium',
+          premiumEndsAt,
+        },
+      })
+  } catch (err) {
+    console.warn('User profile tier update err:', err)
+  }
+
+  // 2. Update user's shops tier
+  try {
+    await db.update(shops).set({ tier: 'premium' }).where(eq(shops.userId, userIdStr))
+  } catch (err) {
+    console.warn('Shops tier update err:', err)
+  }
+
+  // 3. Mark payment as paid
+  await db.update(payments).set({ status: 'paid', matchedAt: new Date() }).where(eq(payments.id, payment.id))
+
+  // 4. Generate PDF Receipt and send to user
+  try {
+    const pdfBuffer = await generateReceiptPdfBuffer({
+      paymentId: payment.id,
+      title: `PayGo Premium - ${name}`,
+      amount: payment.amount,
+      cardNumber: '9860350123453587',
+      cardOwner: 'AZizbek I',
+      date: new Date().toLocaleString('uz-UZ'),
+      userId: userIdStr,
+      status: 'PAID',
+    })
+
+    await send(
+      token,
+      chatId,
+      `🎉 <b>Tabriklaymiz! To‘lovingiz Muvaffaqiyatli Tasdiqlandi!</b>\n\n` +
+      `💎 <b>Aktivlashtirilgan Tarif:</b> ${name}\n` +
+      `⏳ <b>Amal qilish muddati:</b> ${premiumEndsAt.toLocaleDateString('uz-UZ')} gacha\n` +
+      `🚀 <b>Imkoniyatlar:</b> Cheksiz do‘konlar, cheksiz to‘lovlar va to‘liq monitoring faollashtirildi!\n\n` +
+      `📄 <i>Quyida rasmiy to‘lov chekingiz PDF shaklida yuborilmoqda.</i>`,
+      menu
+    )
+
+    await sendDocument(
+      token,
+      chatId,
+      pdfBuffer,
+      `PayGo_Receipt_${payment.id}.pdf`,
+      `📄 <b>PayGo Rasmiy To‘lov Cheki</b> (ID: <code>${payment.id}</code>)`
+    )
+  } catch (pdfErr) {
+    console.error('PDF generation or sending error:', pdfErr)
+    await send(
+      token,
+      chatId,
+      `🎉 <b>Tabriklaymiz! To‘lovingiz Tasdiqlandi va Tarif Faollashtirildi!</b>\n\n` +
+      `💎 <b>Aktivlashtirilgan Tarif:</b> ${name}\n` +
+      `⏳ <b>Amal qilish muddati:</b> ${premiumEndsAt.toLocaleDateString('uz-UZ')} gacha`,
+      menu
+    )
+  }
 }
 
 // Check if user has an active userbot connection
@@ -734,6 +865,109 @@ export async function POST(request: Request) {
           menu
         )
       }
+      return NextResponse.json({ ok: true })
+    }
+
+    // -------------------------------------------------------------
+    // TARIFF PAYMENT CALLBACK HANDLERS
+    // -------------------------------------------------------------
+    if (data.startsWith('buy_tariff_')) {
+      const tariffId = data.replace('buy_tariff_', '')
+
+      let tariff: any = null
+      try {
+        const tariffs = await db.select().from(systemTariffs).where(eq(systemTariffs.id, tariffId)).limit(1)
+        tariff = tariffs[0]
+      } catch {}
+
+      if (!tariff) {
+        if (tariffId.includes('daily') || tariffId.includes('kun')) {
+          tariff = { id: 'tariff-daily', name: 'Kunlik', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' }
+        } else if (tariffId.includes('weekly') || tariffId.includes('hafta')) {
+          tariff = { id: 'tariff-weekly', name: 'Haftalik', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' }
+        } else {
+          tariff = { id: 'tariff-monthly', name: 'Oylik VIP', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' }
+        }
+      }
+
+      const paymentId = `pay_tariff_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+
+      try {
+        await db.insert(payments).values({
+          id: paymentId,
+          shopId: 'system_tariff',
+          userId: userIdStr,
+          amount: Number(tariff.price),
+          currency: 'UZS',
+          status: 'pending',
+          isTest: false,
+          expiresAt,
+        })
+      } catch (insertErr) {
+        console.error('Tariff payment insert error:', insertErr)
+      }
+
+      const cardFormatted = formatCard(tariff.cardNumber || '9860350123453587')
+
+      await send(
+        token,
+        chatId,
+        `💎 <b>PayGo Premium — To‘lov Buyurtmasi Yaratildi</b>\n\n` +
+        `📦 <b>Tarif:</b> ${tariff.name}\n` +
+        `💰 <b>To‘lov summasi:</b> <code>${Number(tariff.price).toLocaleString('uz-UZ')}</code> UZS\n` +
+        `💳 <b>To‘lov kartasi:</b> <code>${cardFormatted}</code>\n` +
+        `👤 <b>Karta egasi:</b> ${tariff.cardOwner || 'AZizbek I'}\n` +
+        `🏦 <b>Bank:</b> ${tariff.cardBank || 'HUMOCARD'}\n\n` +
+        `⏱ <i>To‘lov kutilmoqda: <b>5 daqiqa (300 soniya)</b></i>\n` +
+        `🆔 <b>Buyurtma ID:</b> <code>${paymentId}</code>\n\n` +
+        `ℹ️ <i>To‘lovni kartaga o‘tkazgach, <b>"🔄 To‘lovni tekshirish"</b> tugmasini bosing yoki userbot avtomatik tasdiqlashini kuting.</i>`,
+        {
+          inline_keyboard: [
+            [{ text: '🔄 To‘lovni tekshirish (Qo‘lda)', callback_data: `check_tariff_pay_${paymentId}` }],
+            [{ text: '❌ Bekor qilish', callback_data: `cancel_tariff_pay_${paymentId}` }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('check_tariff_pay_')) {
+      const paymentId = data.replace('check_tariff_pay_', '')
+      const payList = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1)
+      const payment = payList[0]
+
+      if (!payment) {
+        await send(token, chatId, '⚠️ To‘lov buyurtmasi topilmadi yoki o‘chirilgan.', menu)
+        return NextResponse.json({ ok: true })
+      }
+
+      if (payment.status === 'paid') {
+        await activateTariffForUser(token, chatId, userIdStr, payment)
+        return NextResponse.json({ ok: true })
+      }
+
+      if (payment.expiresAt < new Date() || payment.status === 'expired') {
+        await db.update(payments).set({ status: 'expired' }).where(eq(payments.id, paymentId))
+        await send(
+          token,
+          chatId,
+          `❌ <b>To‘lov vaqti (5 daqiqa) tugagan.</b>\n\n` +
+          `Siz ushbu to‘lov buyurtmasi vaqtida to‘lov qilmadingiz. Qaytadan <b>💎 Tariflar</b> bo‘limidan yangi to‘lov yarating.`,
+          menu
+        )
+        return NextResponse.json({ ok: true })
+      }
+
+      // Activate tariff on manual check
+      await activateTariffForUser(token, chatId, userIdStr, payment)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('cancel_tariff_pay_')) {
+      const paymentId = data.replace('cancel_tariff_pay_', '')
+      await db.update(payments).set({ status: 'rejected' }).where(eq(payments.id, paymentId))
+      await send(token, chatId, '❌ <b>To‘lov buyurtmasi bekor qilindi.</b>', menu)
       return NextResponse.json({ ok: true })
     }
 
@@ -1828,7 +2062,7 @@ export async function POST(request: Request) {
   // -------------------------------------------------------------
   // TARIFLAR
   // -------------------------------------------------------------
-  if (text === 'Tariflar' || text === 'Premium' || raw === '/tariffs') {
+  if (text === 'Tariflar' || text === 'Premium' || text === '💎 Tariflar' || raw === '/tariffs') {
     let tariffList: any[] = []
     try {
       tariffList = await db.select().from(systemTariffs).where(eq(systemTariffs.active, true))
@@ -1836,26 +2070,30 @@ export async function POST(request: Request) {
 
     if (!tariffList.length) {
       tariffList = [
-        { name: 'Kunlik', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I' },
-        { name: 'Haftalik', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I' },
-        { name: 'Oylik VIP', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I' },
+        { id: 'tariff-daily', name: 'Kunlik', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', description: '1 kunlik sinov va faol monitoring' },
+        { id: 'tariff-weekly', name: 'Haftalik', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', description: '7 kunlik do‘kon integratsiyasi' },
+        { id: 'tariff-monthly', name: 'Oylik VIP', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', description: '30 kunlik to‘liq cheksiz imkoniyat' },
       ]
     }
 
     const tTxt = tariffList.map((t) =>
-      `💎 <b>${t.name}</b> — <b>${Number(t.price).toLocaleString()} UZS</b> / ${t.period}\n` +
+      `💎 <b>${t.name}</b> — <b>${Number(t.price).toLocaleString('uz-UZ')} UZS</b> / ${t.period}\n` +
       `📝 ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}\n` +
       `💳 <b>To‘lov kartasi:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
       `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'}`
     ).join('\n\n─────────────\n\n')
 
+    const inlineButtons = tariffList.map((t) => [
+      { text: `💳 ${t.name} (${Number(t.price).toLocaleString('uz-UZ')} UZS) — To‘lov yaratish`, callback_data: `buy_tariff_${t.id}` }
+    ])
+
     await send(
       token,
       chatId,
       `💎 <b>PayGo Maxsus Premium Tariflari:</b>\n\n${tTxt}\n\n` +
-      `ℹ️ <i>Tarifga to‘lov qilish uchun yuqoridagi kartaga o‘tkazma qiling. Userbot orqali to‘lovingiz avtomatik tasdiqlanadi.</i>\n\n` +
+      `ℹ️ <i>Tarifga to‘lov qilish uchun quyidagi tugmalardan birini bosing va 5 daqiqalik to‘lov buyurtmasini yarating. Userbot orqali to‘lovingiz avtomatik tasdiqlanadi yoki qo‘lda tekshirishingiz mumkin:</i>\n\n` +
       `🌐 Boshqaruv CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
-      menu
+      { inline_keyboard: inlineButtons }
     )
     return NextResponse.json({ ok: true })
   }
