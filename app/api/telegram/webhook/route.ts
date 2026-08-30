@@ -1046,14 +1046,52 @@ export async function POST(request: Request) {
           token,
           chatId,
           `❌ <b>To‘lov vaqti (5 daqiqa) tugagan.</b>\n\n` +
-          `Siz ushbu to‘lov buyurtmasi vaqtida to‘lov qilmadingiz. Qaytadan <b>💎 Tariflar</b> bo‘limidan yangi to‘lov yarating.`,
+          `Siz ushbu to‘lov buyurtmasi vaqtida to‘lov qilmadingiz yoki vaqt o‘tib ketdi. Qaytadan <b>💎 Tariflar</b> bo‘limidan yangi to‘lov yarating.`,
           menu
         )
         return NextResponse.json({ ok: true })
       }
 
-      // Activate tariff on manual check
-      await activateTariffForUser(token, chatId, userIdStr, payment)
+      // If status is still pending (payment hasn't arrived via Userbot yet)
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      const inlineButtons: any[] = [
+        [{ text: '🔄 Qayta tekshirish', callback_data: `check_tariff_pay_${paymentId}` }],
+        [{ text: '❌ Bekor qilish', callback_data: `cancel_tariff_pay_${paymentId}` }],
+      ]
+
+      if (isAdmin) {
+        inlineButtons.unshift([
+          { text: '🧪 Admin Test Tasdiqlash (Demo)', callback_data: `admin_force_pay_${paymentId}` },
+        ])
+      }
+
+      await send(
+        token,
+        chatId,
+        `⏳ <b>To‘lov hali tizimga yetib kelmadi!</b>\n\n` +
+        `💳 <b>Karta:</b> <code>${formatCard('9860350123453587')}</code>\n` +
+        `💰 <b>Kutilayotgan summa:</b> <code>${Number(payment.amount).toLocaleString('uz-UZ')}</code> UZS\n` +
+        `🆔 <b>Buyurtma ID:</b> <code>${paymentId}</code>\n\n` +
+        `🔍 <b>To‘lovni tekshirish tartibi:</b>\n` +
+        `1. Kartangizdan roppa-rosa <b>${Number(payment.amount).toLocaleString('uz-UZ')} UZS</b> o‘tkazganingizga ishonch hosil qiling.\n` +
+        `2. HumoCard Telegram botidan o‘tkazma haqida xabarnoma kelishi bilan (10-60 soniya), Userbot to‘lovni avtomatik tasdiqlaydi va sizga PDF chek yuboriladi.\n\n` +
+        `<i>O‘tkazma yuborgan bo‘lsangiz, bir oz kuting va qayta tekshiring:</i>`,
+        { inline_keyboard: inlineButtons }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('admin_force_pay_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+
+      const paymentId = data.replace('admin_force_pay_', '')
+      const payList = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1)
+      const payment = payList[0]
+
+      if (payment) {
+        await activateTariffForUser(token, chatId, userIdStr, payment)
+      }
       return NextResponse.json({ ok: true })
     }
 

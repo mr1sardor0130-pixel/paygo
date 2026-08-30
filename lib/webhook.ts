@@ -2,9 +2,18 @@ import crypto from 'node:crypto'
 
 export type PaymentEvent = {
   eventId: string
-  type: 'payment.paid'
+  type: 'payment.paid' | 'payment.expired' | 'payment.rejected'
   createdAt: string
-  payment: { id: string; amount: number; currency: string; status: 'paid' }
+  payment: {
+    id: string
+    shopId: string
+    userId: string
+    amount: number
+    currency: string
+    status: 'paid' | 'expired' | 'rejected'
+    isTest?: boolean
+    matchedAt?: string
+  }
 }
 
 export function signPayload(payload: string, secret: string) {
