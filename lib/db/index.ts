@@ -17,8 +17,28 @@ export async function ensureDbSchema() {
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "cardNumber" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "cardBank" text DEFAULT 'HUMOCARD';
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "accountOwner" text;
+      ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "logoUrl" text;
+      ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "webhookUrl" text;
+      ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "telegramChannelId" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "userbotSession" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "tier" text DEFAULT 'free';
+
+      CREATE TABLE IF NOT EXISTS "auth_sessions" (
+        "token" text PRIMARY KEY,
+        "userId" text NOT NULL,
+        "telegramId" text,
+        "shopId" text,
+        "role" text DEFAULT 'user',
+        "createdAt" timestamp NOT NULL DEFAULT NOW(),
+        "expiresAt" timestamp NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS "user_profiles" (
+        "telegramId" text PRIMARY KEY,
+        "termsAccepted" boolean NOT NULL DEFAULT false,
+        "acceptedAt" timestamp,
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
 
       CREATE TABLE IF NOT EXISTS "userbot_connections" (
         "id" text PRIMARY KEY,

@@ -80,6 +80,23 @@ export const systemTariffs = pgTable(
 )
 
 // App-specific tables
+export const authSessions = pgTable('auth_sessions', {
+  token: text('token').primaryKey(),
+  userId: text('userId').notNull(),
+  telegramId: text('telegramId'),
+  shopId: text('shopId'),
+  role: text('role').default('user'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  expiresAt: timestamp('expiresAt').notNull(),
+})
+
+export const userProfiles = pgTable('user_profiles', {
+  telegramId: text('telegramId').primaryKey(),
+  termsAccepted: boolean('termsAccepted').notNull().default(false),
+  acceptedAt: timestamp('acceptedAt'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
 export const shops = pgTable(
   'shops',
   {

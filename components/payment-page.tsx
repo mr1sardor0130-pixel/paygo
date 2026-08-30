@@ -12,7 +12,10 @@ import {
   AlertCircle,
   CheckCircle2,
   RefreshCw,
+  Sparkles,
+  ArrowLeft,
 } from 'lucide-react'
+import Link from 'next/link'
 
 type PaymentData = {
   id: string
@@ -28,6 +31,7 @@ type PaymentData = {
     cardLast4: string
     cardBank: string
     accountOwner: string
+    logoUrl?: string | null
   }
 }
 
@@ -44,9 +48,11 @@ function formatAmount(amount: number): string {
 export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [data, setData] = useState<PaymentData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [seconds, setSeconds] = useState(600)
+  const [seconds, setSeconds] = useState(300)
   const [copiedCard, setCopiedCard] = useState(false)
   const [copiedAmount, setCopiedAmount] = useState(false)
+  const [simulating, setSimulating] = useState(false)
+  const [simulationResult, setSimulationResult] = useState<string | null>(null)
 
   // Fetch payment data
   const fetchPayment = async () => {
@@ -104,6 +110,28 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
     }
   }
 
+  // Simulate instant payment for testing
+  const handleSimulatePayment = async () => {
+    setSimulating(true)
+    setSimulationResult(null)
+    try {
+      const res = await fetch(`/api/pay/${paymentId}`, {
+        method: 'POST',
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setSimulationResult('To‘lov tasdiqlandi! Webhook va Kanalga JSON yuborildi.')
+        fetchPayment()
+      } else {
+        setSimulationResult(json.error || 'Xatolik yuz berdi')
+      }
+    } catch {
+      setSimulationResult('Server bilan aloqa xatosi')
+    } finally {
+      setSimulating(false)
+    }
+  }
+
   const cardNumber = data?.shop?.cardNumber || '9860350123453587'
   const formattedCard = formatCardNumber(cardNumber)
   const cardOwner = data?.shop?.accountOwner || 'HUMO hisob egasi'
@@ -121,9 +149,17 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
         {/* Brand Header */}
         <header className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="grid size-11 place-items-center rounded-2xl bg-[#1769e0] text-base font-bold text-white shadow-md shadow-blue-500/20">
-              P
-            </div>
+            {data?.shop?.logoUrl ? (
+              <img
+                src={data.shop.logoUrl}
+                alt={shopName}
+                className="size-11 rounded-2xl object-cover border border-[#e2e8f0] shadow-sm"
+              />
+            ) : (
+              <div className="grid size-11 place-items-center rounded-2xl bg-[#1769e0] text-base font-bold text-white shadow-md shadow-blue-500/20">
+                P
+              </div>
+            )}
             <div>
               <p className="font-mono text-[11px] font-bold tracking-[.18em] text-[#1769e0]">
                 PAYGO • HUMO
@@ -164,6 +200,10 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                   </span>
                 </div>
                 <div className="flex justify-between text-xs text-[#718096]">
+                  <span>Karta egasi:</span>
+                  <span className="font-medium text-[#152238]">{cardOwner}</span>
+                </div>
+                <div className="flex justify-between text-xs text-[#718096]">
                   <span>Holati:</span>
                   <span className="font-bold text-[#16865b]">Muvaffaqiyatli ✅</span>
                 </div>
@@ -173,6 +213,15 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                     {paymentId}
                   </span>
                 </div>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2">
+                <Link
+                  href="/panel"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#1769e0] py-3 text-xs font-bold text-white hover:bg-[#1254b7] transition"
+                >
+                  <ArrowLeft size={15} /> Veb-panelga qaytish
+                </Link>
               </div>
             </div>
           ) : isExpired ? (
@@ -185,14 +234,22 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 To‘lov muddati tugadi
               </h1>
               <p className="mt-2 text-sm text-[#718096]">
-                Ajratilgan 10 daqiqalik to‘lov vaqti yakunlandi.
+                Ajratilgan 5 daqiqalik to‘lov vaqti yakunlandi.
               </p>
-              <button
-                onClick={() => window.location.reload()}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#1769e0] px-5 py-3 text-sm font-semibold text-white"
-              >
-                <RefreshCw size={16} /> Qayta tekshirish
-              </button>
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1769e0] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1254b7] transition"
+                >
+                  <RefreshCw size={16} /> Qayta tekshirish
+                </button>
+                <Link
+                  href="/panel"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-5 py-2.5 text-xs font-semibold text-[#64748b] hover:bg-[#f8fafc] transition"
+                >
+                  <ArrowLeft size={14} /> Panelga qaytish
+                </Link>
+              </div>
             </div>
           ) : (
             /* Status: PENDING */
@@ -231,7 +288,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 </div>
               </div>
 
-              {/* SPECIAL FULL CARD CONTAINER (High visual clarity) */}
+              {/* SPECIAL FULL CARD CONTAINER */}
               <div className="mt-6 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#10223d] via-[#162a4a] to-[#0d1b32] p-6 text-white shadow-xl shadow-blue-950/15">
                 <div className="flex items-center justify-between opacity-80">
                   <div className="flex items-center gap-2">
@@ -289,7 +346,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 </button>
               </div>
 
-              {/* Countdown timer */}
+              {/* Countdown timer (5 minutes limit) */}
               <div className="mt-6 flex items-center justify-between rounded-xl bg-[#f8fafc] p-4 border border-[#e2e8f0]">
                 <div className="flex items-center gap-2 text-xs font-medium text-[#64748b]">
                   <Clock3 size={17} className="text-[#2563eb]" /> To‘lov uchun
@@ -300,15 +357,42 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 </span>
               </div>
 
+              {/* Instant Simulation Button for Testing */}
+              <div className="mt-5 rounded-2xl border border-dashed border-[#2563eb]/40 bg-[#f0f7ff] p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-[#2563eb]" />
+                    <span className="text-xs font-bold text-[#1e40af]">
+                      Test Rejimi (Simulyatsiya):
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-1 text-[11px] text-[#3b82f6]">
+                  Haqiqiy pul o‘tkazmasdan to‘lovni sinab ko‘rish va Webhook / Telegram Kanalga JSON yuborilishini tekshirish uchun bosing:
+                </p>
+                <button
+                  onClick={handleSimulatePayment}
+                  disabled={simulating}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#2563eb] py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#1d4ed8] transition disabled:opacity-50"
+                >
+                  {simulating ? 'Tasdiqlanmoqda...' : '⚡️ Test To‘lovni Tasdiqlash (Simulyatsiya)'}
+                </button>
+                {simulationResult && (
+                  <p className="mt-2 text-center text-xs font-medium text-[#16865b]">
+                    {simulationResult}
+                  </p>
+                )}
+              </div>
+
               {/* Instructions */}
-              <div className="mt-5 space-y-2 rounded-xl bg-[#f0f7ff] p-4 text-xs leading-5 text-[#1e40af]">
-                <p className="font-bold">To‘lov bo‘yicha qo‘llanma:</p>
+              <div className="mt-5 space-y-2 rounded-xl bg-[#f8fafc] p-4 text-xs leading-5 text-[#64748b] border border-[#e2e8f0]">
+                <p className="font-bold text-[#152238]">To‘lov bo‘yicha qo‘llanma:</p>
                 <p>
                   1. <b>Payme, Click</b> yoki <b>bank ilovangizni</b> oching.
                 </p>
                 <p>
                   2. Yuqoridagi <b>{formattedCard}</b> kartasiga aynan{' '}
-                  <b>{formatAmount(amountNumber)} UZS</b> pul yuboring.
+                  <b>{formatAmount(amountNumber)} UZS</b> pul o‘tkazing.
                 </p>
                 <p>
                   3. Userbot <b>@humocardbot</b> xabarini o‘qishi bilanoq ushbu
@@ -327,4 +411,3 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
     </main>
   )
 }
-

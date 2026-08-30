@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, ensureDbSchema } from '@/lib/db'
-import { payments, shops, userbotConnections, systemRoles, systemTariffs } from '@/lib/db/schema'
+import {
+  payments,
+  shops,
+  userbotConnections,
+  systemRoles,
+  systemTariffs,
+  authSessions,
+  userProfiles,
+} from '@/lib/db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
 import {
@@ -16,18 +24,34 @@ import {
   cancelOnboarding,
 } from '@/lib/userbot-onboarding'
 import { startHumoUserbot } from '@/lib/telegram-userbot'
+import { deliverWebhook, signPayload } from '@/lib/webhook'
 
 export const dynamic = 'force-dynamic'
 
-const APP_URL = process.env.APP_URL || process.env.BETTER_AUTH_URL || ''
+const APP_URL = process.env.APP_URL || process.env.BETTER_AUTH_URL || 'http://localhost:3000'
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || '8021115446'
 
 type Message = {
-  chat: { id: number }
+  message_id?: number
+  chat: { id: number; title?: string; type?: string }
   text?: string
-  from?: { id: number; first_name?: string }
+  photo?: Array<{ file_id: string; file_size?: number }>
+  forward_from_chat?: { id: number; title?: string; username?: string; type?: string }
+  from?: { id: number; first_name?: string; username?: string }
 }
-type Update = { message?: Message }
+
+type CallbackQuery = {
+  id: string
+  from: { id: number; first_name?: string; username?: string }
+  message?: Message
+  data?: string
+}
+
+type Update = {
+  update_id: number
+  message?: Message
+  callback_query?: CallbackQuery
+}
 
 type Flow = {
   step: string
@@ -37,29 +61,41 @@ type Flow = {
     cardNumber?: string
     cardLast4?: string
     owner?: string
+    cardBank?: string
+    logoUrl?: string
+    webhookUrl?: string
+    telegramChannelId?: string
   }
   userbot?: {
     apiId?: number
     apiHash?: string
     phone?: string
   }
-  tariff?: {
-    name?: string
-    price?: number
-    cardNumber?: string
-    cardOwner?: string
-    period?: string
+  testPayment?: {
+    amount?: number
   }
-  shopId?: string
+  targetShopId?: string
 }
 
 const menu = {
   keyboard: [
     [{ text: '🛍 Do‘kon ochish' }, { text: '🏪 Mening do‘konim' }],
     [{ text: '💳 Mening kartam' }, { text: '🔐 Userbot ulash' }],
-    [{ text: '💎 Tariflar' }, { text: '🧪 Test to‘lov' }],
-    [{ text: '📊 Statistika' }, { text: '🔗 Webhook sozlash' }],
-    [{ text: '📣 Kanal ulash' }, { text: '📚 API hujjat' }],
+    [{ text: '🧪 Test to‘lov' }, { text: '📣 Kanal ulash' }],
+    [{ text: '🔗 Webhook sozlash' }, { text: '💎 Tariflar' }],
+    [{ text: '📊 Statistika' }, { text: '🌐 Veb-panelga kirish' }],
+    [{ text: '📚 API hujjat' }],
+  ],
+  resize_keyboard: true,
+  is_persistent: true,
+}
+
+const adminMenu = {
+  keyboard: [
+    [{ text: '🏪 Do‘konlar boshqaruvi' }, { text: '💎 Tariflar boshqaruvi' }],
+    [{ text: '👥 Adminlar boshqaruvi' }, { text: '📊 Barcha statistika' }],
+    [{ text: '🤖 Userbotlar holati' }, { text: '🌐 Web CRM Dashboard' }],
+    [{ text: '🏠 Asosiy menyuga qaytish' }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -70,14 +106,23 @@ const back = {
   resize_keyboard: true,
 }
 
+const testAmountsKeyboard = {
+  keyboard: [
+    [{ text: '💵 1 000 UZS' }, { text: '💵 5 000 UZS' }],
+    [{ text: '💵 10 000 UZS' }, { text: '💵 50 000 UZS' }],
+    [{ text: '↩️ Orqaga' }, { text: '❌ Bekor qilish' }],
+  ],
+  resize_keyboard: true,
+}
+
 const clean = (text: string) => text.replace(/^[^\p{L}\p{N}]+/u, '').trim()
 
 function formatCard(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
+  const digits = (raw || '').replace(/\D/g, '')
   if (digits.length >= 16) {
     return `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)} ${digits.slice(12, 16)}`
   }
-  return digits
+  return digits || '9860 3501 2345 3587'
 }
 
 const memoryStates = new Map<number, { flow: Flow; expiresAt: number }>()
@@ -121,31 +166,189 @@ async function stateDelete(chatId: number) {
   } catch {}
 }
 
-async function send(token: string, chatId: number, text: string, reply_markup: any = menu) {
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      reply_markup,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-    }),
-  })
+async function send(token: string, chatId: number | string, text: string, reply_markup: any = menu) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        reply_markup,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
+    })
+    return await res.json()
+  } catch (e) {
+    console.error('send error:', e)
+    return { ok: false }
+  }
+}
+
+async function answerCallback(token: string, callbackQueryId: string, text?: string) {
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        text: text || '',
+      }),
+    })
+  } catch {}
+}
+
+// Generate authenticated login URL for user
+async function generateAuthUrl(userIdStr: string): Promise<string> {
+  const token = `auth_${randomUUID().replace(/-/g, '').slice(0, 24)}`
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+  try {
+    await db.insert(authSessions).values({
+      token,
+      userId: userIdStr,
+      telegramId: userIdStr,
+      expiresAt,
+    })
+  } catch (e) {
+    console.warn('Auth token insert warning:', e)
+  }
+  return `${APP_URL}/panel?auth_token=${token}&userId=${userIdStr}`
 }
 
 export async function GET() {
-  return NextResponse.json({ ok: true, service: 'paygo-telegram-webhook' })
+  return NextResponse.json({ ok: true, service: 'paygo-telegram-webhook', time: new Date().toISOString() })
 }
 
 export async function POST(request: Request) {
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token) return NextResponse.json({ ok: true })
 
+  let update: Update
+  try {
+    update = await request.json()
+  } catch {
+    return NextResponse.json({ ok: true })
+  }
+
   await ensureDbSchema()
 
-  const update = (await request.json()) as Update
+  // -------------------------------------------------------------
+  // CALLBACK QUERY HANDLER (Inline button clicks)
+  // -------------------------------------------------------------
+  if (update.callback_query) {
+    const cb = update.callback_query
+    const chatId = cb.message?.chat.id || cb.from.id
+    const userIdStr = String(cb.from.id)
+    const data = cb.data || ''
+
+    await answerCallback(token, cb.id)
+
+    // Shop settings inline actions
+    if (data === 'edit_shop_name') {
+      await stateSet(chatId, { step: 'edit_shop_name' })
+      await send(token, chatId, '✏️ <b>Do‘kon nomini o‘zgartirish:</b>\n\nYangi nomni kiriting (masalan: <i>PayGo Super Market</i>):', back)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'edit_shop_card') {
+      await stateSet(chatId, { step: 'edit_shop_card_num' })
+      await send(
+        token,
+        chatId,
+        `💳 <b>Karta raqamini o‘zgartirish:</b>\n\n` +
+        `Yangi 16 ta raqamdan iborat HUMO karta raqamini yuboring:\n(Masalan: <code>9860350123453587</code>)`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'edit_shop_webhook') {
+      await stateSet(chatId, { step: 'edit_shop_webhook_url' })
+      await send(
+        token,
+        chatId,
+        `🔗 <b>Webhook URL manzilini sozlash:</b>\n\n` +
+        `To‘lovlar muvaffaqiyatli bo‘lganda JSON xabarnoma yuboriladigan HTTPS URL manzilingizni kiriting:\n` +
+        `(Masalan: <code>https://mysite.uz/api/paygo-webhook</code>)\n\n` +
+        `Webhookni o‘chirish uchun <code>ochirish</code> deb yuboring.`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'edit_shop_channel') {
+      await stateSet(chatId, { step: 'channel_connect' })
+      await send(
+        token,
+        chatId,
+        `📣 <b>Telegram Kanal Ulash / O‘zgartirish:</b>\n\n` +
+        `1️⃣ Botimizni kanalingizga <b>Administrator</b> qilib qo‘shing.\n` +
+        `2️⃣ Kanalingiz username (@kanalingiz) yoki ID (-100...) sini yuboring, yoki kanaldan biror xabarni shu yerga <b>Forward</b> qiling:`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'edit_shop_logo') {
+      await stateSet(chatId, { step: 'edit_shop_logo_url' })
+      await send(
+        token,
+        chatId,
+        `🖼 <b>Do‘kon Logotipi / Rasmi:</b>\n\n` +
+        `Logotip rasm havolasini (URL) yuboring yoki to‘g‘ridan-to‘g‘ri rasm faylini botga yuboring:\n` +
+        `(Masalan: <code>https://mysite.uz/logo.png</code>)`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'test_channel_post') {
+      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+      const shop = userShops[0]
+      if (!shop?.telegramChannelId) {
+        await send(token, chatId, '⚠️ Sizda kanal ulanmagan. Avval "📣 Kanal ulash" orqali kanal ulang.', menu)
+        return NextResponse.json({ ok: true })
+      }
+
+      const testPost =
+        `📣 <b>PayGo Test To‘lov Xabarnomasi</b>\n\n` +
+        `🏪 <b>Do‘kon:</b> ${shop.name}\n` +
+        `💰 <b>Summa:</b> 5 000 UZS\n` +
+        `💳 <b>Karta:</b> <code>${formatCard(shop.cardNumber || '9860350123453587')}</code>\n` +
+        `👤 <b>Karta egasi:</b> ${shop.accountOwner || 'Hisob egasi'}\n` +
+        `⚡️ <b>Holat:</b> ✅ To‘landi (Test xabar)\n\n` +
+        `📦 <b>Webhook JSON Payload:</b>\n` +
+        `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "amount": 5000,\n  "currency": "UZS",\n  "shop_id": "${shop.id}",\n  "status": "paid"\n}</code></pre>`
+
+      const channelRes = await send(token, shop.telegramChannelId, testPost, { inline_keyboard: [] })
+      if (channelRes.ok) {
+        await send(token, chatId, `✅ <b>Kanalga test xabar va JSON ma’lumot muvaffaqiyatli yuborildi!</b>\nKanalingizni tekshiring.`, menu)
+      } else {
+        await send(token, chatId, `❌ <b>Kanalga xabar yuborishda xatolik:</b> ${channelRes.description || 'Bot kanalda admin emas'}.\nIltimos botni kanalga admin qiling.`, menu)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'unlink_channel') {
+      await db.update(shops).set({ telegramChannelId: null }).where(eq(shops.userId, userIdStr))
+      await send(token, chatId, '✅ Telegram kanal muvaffaqiyatli uzildi.', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('approve_shop_')) {
+      const targetId = data.replace('approve_shop_', '')
+      await db.update(shops).set({ approved: true }).where(eq(shops.id, targetId))
+      await send(token, chatId, `✅ Do‘kon (ID: <code>${targetId}</code>) tasdiqlandi!`, adminMenu)
+      return NextResponse.json({ ok: true })
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // MESSAGE HANDLER
+  // -------------------------------------------------------------
   const message = update.message
   if (!message?.chat?.id) return NextResponse.json({ ok: true })
 
@@ -155,16 +358,135 @@ export async function POST(request: Request) {
   const text = clean(raw)
   let flow = await stateGet(chatId)
 
-  // /start command
+  // -------------------------------------------------------------
+  // PHOTO UPLOAD (e.g. for Logo)
+  // -------------------------------------------------------------
+  if (message.photo && message.photo.length > 0) {
+    if (flow?.step === 'edit_shop_logo_url') {
+      const bestPhoto = message.photo[message.photo.length - 1]
+      const fileId = bestPhoto.file_id
+      try {
+        const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`)
+        const fileJson = await fileRes.json()
+        if (fileJson.ok && fileJson.result?.file_path) {
+          const photoUrl = `https://api.telegram.org/file/bot${token}/${fileJson.result.file_path}`
+          await db.update(shops).set({ logoUrl: photoUrl }).where(eq(shops.userId, userIdStr))
+          await stateDelete(chatId)
+          await send(token, chatId, `✅ <b>Do‘kon logotipi rasm orqali muvaffaqiyatli saqlandi!</b>`, menu)
+          return NextResponse.json({ ok: true })
+        }
+      } catch (err) {
+        console.warn('Photo download error:', err)
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // FORWARDED MESSAGE (Channel detection)
+  // -------------------------------------------------------------
+  if (flow?.step === 'channel_connect' && message.forward_from_chat) {
+    const fChat = message.forward_from_chat
+    const channelId = String(fChat.id)
+    const channelTitle = fChat.title || fChat.username || channelId
+
+    // Test sending to channel
+    const testPost =
+      `✅ <b>PayGo to‘lov xabarnomasi muvaffaqiyatli ulandi!</b>\n\n` +
+      `📣 Kanal: <b>${channelTitle}</b>\n` +
+      `⚡️ Ushbu kanalga qabul qilingan barcha to‘lovlar va ularning to‘liq JSON ma’lumotlari avtomatik joylanadi.`
+
+    const testRes = await send(token, channelId, testPost, { inline_keyboard: [] })
+    if (testRes.ok) {
+      await db.update(shops).set({ telegramChannelId: channelId }).where(eq(shops.userId, userIdStr))
+      await stateDelete(chatId)
+      await send(
+        token,
+        chatId,
+        `🎉 <b>Tabriklaymiz! Telegram kanal muvaffaqiyatli ulandi!</b>\n\n` +
+        `📣 <b>Kanal:</b> ${channelTitle} (<code>${channelId}</code>)\n\n` +
+        `Endi har bir muvaffaqiyatli to‘lov haqidagi chek va JSON xabarnoma to‘g‘ridan-to‘g‘ri shu kanalingizga tushadi!`,
+        {
+          inline_keyboard: [
+            [{ text: '📣 Test xabar yuborish', callback_data: 'test_channel_post' }],
+            [{ text: '🗑 Kanalni uzish', callback_data: 'unlink_channel' }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    } else {
+      await send(
+        token,
+        chatId,
+        `⚠️ <b>Kanalga ulanish amalga oshmadi:</b>\n${testRes.description || 'Bot kanalda administrator emas'}.\n\n` +
+        `Iltimos, botimizni <b>${channelTitle}</b> kanaliga administrator qilib qo‘shing va xabar yozish huquqini bering, so‘ngra qaytadan xabar forward qiling:`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+  }
+
+  // -------------------------------------------------------------
+  // /start command (with terms check and deep auth link)
+  // -------------------------------------------------------------
   if (/^\/start/.test(raw)) {
     await stateDelete(chatId)
     cancelOnboarding(userIdStr)
+
+    // Check if this is a web login auth token: /start auth_xyz
+    const startPayload = raw.replace('/start', '').trim()
+    if (startPayload.startsWith('auth_')) {
+      const authToken = startPayload
+      try {
+        const authRows = await db.select().from(authSessions).where(eq(authSessions.token, authToken)).limit(1)
+        if (authRows.length && authRows[0]) {
+          await db.update(authSessions).set({
+            userId: userIdStr,
+            telegramId: userIdStr,
+          }).where(eq(authSessions.token, authToken))
+
+          await send(
+            token,
+            chatId,
+            `✅ <b>Veb-panelga muvaffaqiyatli kirdingiz!</b>\n\n` +
+            `Brauzeringizdagi oyna avtomatik tarzda ochildi. Barcha do‘koningiz va to‘lov ma’lumotlarini boshqarishingiz mumkin.\n\n` +
+            `🔗 Agar oyna ochilmagan bo‘lsa: <a href="${APP_URL}/panel?auth_token=${authToken}&userId=${userIdStr}">Veb-panelga o‘tish</a>`,
+            menu
+          )
+          return NextResponse.json({ ok: true })
+        }
+      } catch (authErr) {
+        console.warn('Auth session update error:', authErr)
+      }
+    }
+
+    // Check if terms are already accepted by user
+    let accepted = false
+    try {
+      const prof = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, userIdStr)).limit(1)
+      if (prof.length && prof[0]?.termsAccepted) {
+        accepted = true
+      }
+    } catch {}
+
+    if (accepted) {
+      await send(
+        token,
+        chatId,
+        `👋 <b>Xush kelibsiz, ${message.from?.first_name ?? 'foydalanuvchi'}!</b>\n\n` +
+        `⚡️ <b>PayGo</b> — HUMO to‘lovlarini avtomatlashtirish, Telegram kanallar va Webhooklar tizimi.\n` +
+        `Quyidagi menyudan kerakli xizmatni tanlang:`,
+        menu
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    // First time user: show terms only once
     await send(
       token,
       chatId,
       `👋 <b>PayGo avtomatlashtirilgan to‘lov botiga xush kelibsiz, ${message.from?.first_name ?? 'foydalanuvchi'}!</b>\n\n` +
-      `⚡️ Ushbu bot orqali HUMO to‘lov bildirishnomalarini (@humocardbot) Telegram Userbot orqali avtomatik qabul qilib, o‘z do‘koningiz va tizimlaringizga ulashingiz mumkin.\n\n` +
-      `Davom etish uchun shartlarni qabul qiling:`,
+      `⚡️ Ushbu bot orqali HUMO to‘lov bildirishnomalarini (@humocardbot) Telegram Userbot orqali avtomatik qabul qilib, o‘z do‘koningiz, kanalingiz va veb-saytlaringizga ulashingiz mumkin.\n\n` +
+      `Davom etish uchun foydalanish shartlarini 1 marta qabul qiling:`,
       {
         keyboard: [
           [{ text: '📄 Foydalanish shartlari' }, { text: '📜 Ommaviy oferta' }],
@@ -177,20 +499,20 @@ export async function POST(request: Request) {
   }
 
   // Cancel / Back
-  if (text === 'Orqaga' || text === 'Bekor qilish' || raw === '/cancel') {
+  if (text === 'Orqaga' || text === 'Bekor qilish' || raw === '/cancel' || text === 'Asosiy menyuga qaytish') {
     await stateDelete(chatId)
     cancelOnboarding(userIdStr)
     await send(token, chatId, '🏠 Asosiy menyudasiz.', menu)
     return NextResponse.json({ ok: true })
   }
 
-  // Terms & Conditions
+  // Terms & Conditions acceptance (Persisted permanently!)
   if (text === 'Foydalanish shartlari') {
     await send(
       token,
       chatId,
       `📄 <b>Foydalanish shartlari</b>\n\n` +
-      `PayGo xizmati HUMO to‘lovlarini @humocardbot bildirishnomalari orqali tekshirish imkonini beradi. Barcha sessiyalar va ma’lumotlar xavfsiz himoyalangan.`,
+      `PayGo xizmati HUMO to‘lovlarini @humocardbot bildirishnomalari orqali tekshirish va kanallarga uzatish imkonini beradi. Barcha sessiyalar va ma’lumotlar xavfsiz shifrlangan.`,
       {
         keyboard: [[{ text: '📜 Ommaviy oferta' }], [{ text: '✅ Qabul qilaman' }, { text: '↩️ Orqaga' }]],
         resize_keyboard: true,
@@ -204,7 +526,7 @@ export async function POST(request: Request) {
       token,
       chatId,
       `📜 <b>Ommaviy oferta</b>\n\n` +
-      `PayGo tizimi orqali to‘lovlarni tekshirish, webhook va telegram kanal bildirishnomalaridan foydalanish shartlariga rozilik bildirasiz.`,
+      `PayGo tizimi orqali to‘lovlarni tekshirish, webhook va telegram kanal bildirishnomalaridan foydalanish shartlariga to‘liq rozilik bildirasiz.`,
       {
         keyboard: [[{ text: '📄 Foydalanish shartlari' }], [{ text: '✅ Qabul qilaman' }, { text: '↩️ Orqaga' }]],
         resize_keyboard: true,
@@ -214,239 +536,402 @@ export async function POST(request: Request) {
   }
 
   if (text === 'Qabul qilaman') {
-    await send(token, chatId, '✅ Shartlar qabul qilindi. Asosiy menyudan kerakli bo‘limni tanlang:', menu)
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // USERBOT ULASH OQIMI (Multi-step interactive flow in chat)
-  // -------------------------------------------------------------
-  if (
-    text === 'Userbot ulash' ||
-    raw === '/userbot' ||
-    raw.startsWith('/userbot') ||
-    text.toLowerCase().includes('userbot') ||
-    raw.toLowerCase().includes('userbot')
-  ) {
-    beginOnboarding(userIdStr)
-    const newFlow: Flow = { step: 'userbot_api_id', userbot: {} }
-    await stateSet(chatId, newFlow)
-    await send(
-      token,
-      chatId,
-      `🔐 <b>Telegram Userbot ulash (1/4)</b>\n\n` +
-      `Userbot @humocardbot dan kelgan HUMO to‘lov xabarnomalarini avtomatik o‘qib, to‘lovlarni tasdiqlaydi.\n\n` +
-      `1️⃣ Iltimos, <b>Telegram API ID</b> raqamingizni yuboring:\n` +
-      `(Uni <a href="https://my.telegram.org">my.telegram.org</a> saytidan olasiz, masalan: <code>12345678</code>)`,
-      back
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // 1. API ID input
-  if (flow?.step === 'userbot_api_id') {
-    const apiIdNum = Number(raw.replace(/\D/g, ''))
-    if (!apiIdNum || isNaN(apiIdNum) || apiIdNum < 1000) {
-      await send(token, chatId, '❗ Noto‘g‘ri API ID. Iltimos faqat raqamlardan iborat API ID ni yuboring (masalan: <code>12345678</code>):', back)
-      return NextResponse.json({ ok: true })
-    }
-    setApiId(userIdStr, apiIdNum)
-    flow.userbot = { ...flow.userbot, apiId: apiIdNum }
-    flow.step = 'userbot_api_hash'
-    await stateSet(chatId, flow)
-    await send(
-      token,
-      chatId,
-      `🔑 <b>API Hash kiritish (2/4)</b>\n\n` +
-      `API ID: <code>${apiIdNum}</code> ✅\n\n` +
-      `Endi <a href="https://my.telegram.org">my.telegram.org</a> dagi <b>API Hash</b> (32 xonali matn) ni yuboring:\n` +
-      `(Masalan: <code>0123456789abcdef0123456789abcdef</code>)`,
-      back
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // 2. API Hash input
-  if (flow?.step === 'userbot_api_hash') {
-    const apiHash = raw.trim()
-    if (apiHash.length < 10) {
-      await send(token, chatId, '❗ API Hash juda qisqa yoki noto‘g‘ri. Qaytadan yuboring:', back)
-      return NextResponse.json({ ok: true })
-    }
-    setApiHash(userIdStr, apiHash)
-    flow.userbot = { ...flow.userbot, apiHash }
-    flow.step = 'userbot_phone'
-    await stateSet(chatId, flow)
-    await send(
-      token,
-      chatId,
-      `📞 <b>Telefon raqami (3/4)</b>\n\n` +
-      `Telegram hisobingiz telefon raqamini xalqaro formatda yuboring:\n` +
-      `(Masalan: <code>+998901234567</code>)`,
-      back
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // 3. Phone input -> Send code
-  if (flow?.step === 'userbot_phone') {
-    const phone = raw.replace(/[^0-9+]/g, '').trim()
-    if (phone.length < 9) {
-      await send(token, chatId, '❗ Telefon raqami noto‘g‘ri. Masalan: <code>+998901234567</code> shaklida yuboring:', back)
-      return NextResponse.json({ ok: true })
-    }
-    await send(token, chatId, '⏳ Telegramdan tasdiqlash kodi so‘ralmoqda, kuting...')
     try {
-      await startTelegramLogin(userIdStr, phone)
-      flow.userbot = { ...flow.userbot, phone }
-      flow.step = 'userbot_code'
-      await stateSet(chatId, flow)
+      await db
+        .insert(userProfiles)
+        .values({
+          telegramId: userIdStr,
+          termsAccepted: true,
+          acceptedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: userProfiles.telegramId,
+          set: { termsAccepted: true, acceptedAt: new Date() },
+        })
+    } catch (profErr) {
+      console.warn('Profile save warning:', profErr)
+    }
+
+    await send(token, chatId, '✅ <b>Shartlar qabul qilindi!</b> Endi botdan to‘liq foydalanishingiz mumkin:', menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // 1-CLICK WEB PANEL AUTH LINK
+  // -------------------------------------------------------------
+  if (text === 'Veb-panelga kirish' || raw === '/panel' || text === 'Panel') {
+    const authUrl = await generateAuthUrl(userIdStr)
+    await send(
+      token,
+      chatId,
+      `🌐 <b>PayGo Veb Boshqaruv Paneli (CRM)</b>\n\n` +
+      `Saytga avtomatik kirish va barcha do‘kon, to‘lovlar, webhook va karta sozlamalarini boshqarish uchun quyidagi havola orqali kiring:\n\n` +
+      `🔗 <a href="${authUrl}"><b>Veb-panelni ochish (1-klikda kirish)</b></a>\n\n` +
+      `<i>Eslatma: Ushbu havola sizning shaxsiy xavfsiz kalitingiz bilan yaratilgan.</i>`,
+      menu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // KANAL ULASH OQIMI (Interactive Channel Link directly in bot)
+  // -------------------------------------------------------------
+  if (text === 'Kanal ulash' || raw === '/channel' || text === 'Telegram kanal ulash') {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (!userShops.length) {
       await send(
         token,
         chatId,
-        `📩 <b>Telegram tasdiqlash kodi yuborildi! (4/4)</b>\n\n` +
-        `⚠️ <b>DIQQAT (Muhim!)</b>: Telegram rasmiy xavfsizlik filtri kodni chatga to‘g‘ridan-to‘g‘ri yuborishni bloklashi mumkin.\n` +
-        `Shuning uchun kod raqamlari orasiga <b>nuqta</b> yoki <b>bo‘shliq</b> qo‘yib yuboring:\n\n` +
-        `👉 Masalan: <code>2.1.2.3.4</code> yoki <code>2 1 2 3 4</code>`,
+        '⚠️ Kanal ulashdan oldin do‘kon yaratishingiz kerak. Iltimos, avval <b>🛍 Do‘kon ochish</b> tugmasini bosing.',
+        menu
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    const shop = userShops[0]
+    await stateSet(chatId, { step: 'channel_connect', targetShopId: shop.id })
+
+    let currentChannelInfo = ''
+    if (shop.telegramChannelId) {
+      currentChannelInfo = `\n📌 <i>Hozir ulangan kanal:</i> <code>${shop.telegramChannelId}</code>\n`
+    }
+
+    await send(
+      token,
+      chatId,
+      `📣 <b>Telegram Kanal Ulash</b>${currentChannelInfo}\n` +
+      `To‘lovlar amalga oshirilganda barcha cheklar va to‘liq <b>JSON ma’lumotlar</b> to‘g‘ridan-to‘g‘ri kanalingizga post qilib tashlanadi!\n\n` +
+      `<b>Qanday ulanadi:</b>\n` +
+      `1️⃣ Avval botimizni kanalingizga <b>Administrator</b> qilib qo‘shing (xabar yozish huquqi bilan).\n` +
+      `2️⃣ So‘ngra kanalingiz username (<code>@mening_kanalim</code>) yoki ID (<code>-1001234567890</code>) sini shu yerga yozing, yoki kanaldan ixtiyoriy bitta xabarni shu yerga <b>Forward (Uzatish)</b> qiling:\n`,
+      back
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // Channel ID / Username text input
+  if (flow?.step === 'channel_connect') {
+    let targetChannel = raw.trim()
+    if (!targetChannel.startsWith('@') && !targetChannel.startsWith('-100') && !/^\d+$/.test(targetChannel)) {
+      targetChannel = `@${targetChannel}`
+    }
+
+    const testPost =
+      `✅ <b>PayGo to‘lov xabarnomasi muvaffaqiyatli ulandi!</b>\n\n` +
+      `⚡️ Ushbu kanalga qabul qilingan barcha to‘lovlar va ularning to‘liq JSON ma’lumotlari avtomatik yuboriladi.`
+
+    const testRes = await send(token, targetChannel, testPost, { inline_keyboard: [] })
+    if (testRes.ok) {
+      const channelId = String(testRes.result?.chat?.id || targetChannel)
+      await db.update(shops).set({ telegramChannelId: channelId }).where(eq(shops.userId, userIdStr))
+      await stateDelete(chatId)
+
+      await send(
+        token,
+        chatId,
+        `🎉 <b>Tabriklaymiz! Telegram kanal muvaffaqiyatli ulandi!</b>\n\n` +
+        `📣 <b>Kanal ID:</b> <code>${channelId}</code>\n\n` +
+        `Endi har bir muvaffaqiyatli to‘lov haqidagi chek va JSON xabarnoma to‘g‘ridan-to‘g‘ri shu kanalingizga tushadi!`,
+        {
+          inline_keyboard: [
+            [{ text: '📣 Test xabar yuborish', callback_data: 'test_channel_post' }],
+            [{ text: '🗑 Kanalni uzish', callback_data: 'unlink_channel' }],
+          ],
+        }
+      )
+    } else {
+      await send(
+        token,
+        chatId,
+        `⚠️ <b>Kanalga xabar yuborib bo‘lmadi:</b> ${testRes.description || 'Bot kanalda admin emas'}.\n\n` +
+        `Iltimos, avval botni kanalingizga <b>Administrator</b> qilib qo‘shing va qaytadan kanal username/ID sini yuboring:`,
         back
       )
-    } catch (err: any) {
-      await send(token, chatId, `❌ Xatolik yuz berdi: ${err?.message ?? 'Telegram kod yubora olmadi'}.\n\nQaytadan boshlash uchun /userbot bosing.`, menu)
-      await stateDelete(chatId)
-    }
-    return NextResponse.json({ ok: true })
-  }
-
-  // 4. Code verification (with dot stripping: e.g. "2.1.2.3.4")
-  if (flow?.step === 'userbot_code') {
-    const cleanCode = raw.replace(/\D/g, '').trim()
-    if (!cleanCode) {
-      await send(token, chatId, '❗ Kod topilmadi. Kodni nuqtalar bilan ajratib yuboring (masalan: <code>2.1.2.3.4</code>):', back)
-      return NextResponse.json({ ok: true })
-    }
-    await send(token, chatId, '⏳ Kod tekshirilmoqda...')
-    try {
-      const res = await verifyTelegramCode(userIdStr, cleanCode)
-      if (res.needsPassword) {
-        flow.step = 'userbot_2fa'
-        await stateSet(chatId, flow)
-        await send(
-          token,
-          chatId,
-          `🔐 <b>2FA (Ikki bosqichli Cloud Password) talab qilinadi!</b>\n\n` +
-          `Sizning Telegram hisobingizda 2FA paroli yoqilgan.\n` +
-          `Iltimos, <b>2FA parolingizni</b> yuboring:`,
-          back
-        )
-        return NextResponse.json({ ok: true })
-      }
-
-      if (res.sessionString) {
-        // Save to DB
-        const connId = randomUUID()
-        try {
-          const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-          const targetShopId = userShops[0]?.id || flow.shopId || `shop-${userIdStr}`
-
-          await db.insert(userbotConnections).values({
-            id: connId,
-            shopId: targetShopId,
-            userId: userIdStr,
-            sessionString: res.sessionString,
-            status: 'active',
-          })
-          await db.update(shops).set({ userbotSession: res.sessionString }).where(eq(shops.userId, userIdStr))
-        } catch (dbErr) {
-          console.warn('DB save warning:', dbErr)
-        }
-
-        // Start Humocardbot monitoring
-        if (flow.userbot?.apiId && flow.userbot.apiHash) {
-          try {
-            await startHumoUserbot(userIdStr, {
-              apiId: flow.userbot.apiId,
-              apiHash: flow.userbot.apiHash,
-              sessionString: res.sessionString,
-            })
-          } catch (botErr) {
-            console.error('startHumoUserbot error:', botErr)
-          }
-        }
-
-        await stateDelete(chatId)
-        await send(
-          token,
-          chatId,
-          `🎉 <b>Tabriklaymiz! Telegram Userbot muvaffaqiyatli ulandi!</b>\n\n` +
-          `🤖 <b>Humocardbot (@humocardbot) monitoringi faollashtirildi.</b>\n` +
-          `Endi HUMO kartangizga kelgan har bir to‘lov avtomatik aniqlanadi va to‘lov sahifasi hamda webhookingizga real vaqtda yetkaziladi! ⚡️`,
-          menu
-        )
-      }
-    } catch (err: any) {
-      await send(token, chatId, `❌ Kod xatosi: ${err?.message ?? 'Kod noto‘g‘ri yoki muddati o‘tgan'}.\nQaytadan urinib ko‘ring yoki /userbot bosing.`, back)
-    }
-    return NextResponse.json({ ok: true })
-  }
-
-  // 5. 2FA Password input
-  if (flow?.step === 'userbot_2fa') {
-    const password = raw.trim()
-    if (!password) {
-      await send(token, chatId, '❗ 2FA parolini yuboring:', back)
-      return NextResponse.json({ ok: true })
-    }
-    await send(token, chatId, '⏳ 2FA paroli tekshirilmoqda...')
-    try {
-      const res = await submitTelegram2FA(userIdStr, password)
-      if (res.sessionString) {
-        const connId = randomUUID()
-        try {
-          const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-          const targetShopId = userShops[0]?.id || flow.shopId || `shop-${userIdStr}`
-
-          await db.insert(userbotConnections).values({
-            id: connId,
-            shopId: targetShopId,
-            userId: userIdStr,
-            sessionString: res.sessionString,
-            status: 'active',
-          })
-          await db.update(shops).set({ userbotSession: res.sessionString }).where(eq(shops.userId, userIdStr))
-        } catch (dbErr) {
-          console.warn('DB save warning:', dbErr)
-        }
-
-        if (flow.userbot?.apiId && flow.userbot.apiHash) {
-          try {
-            await startHumoUserbot(userIdStr, {
-              apiId: flow.userbot.apiId,
-              apiHash: flow.userbot.apiHash,
-              sessionString: res.sessionString,
-            })
-          } catch (botErr) {
-            console.error('startHumoUserbot error:', botErr)
-          }
-        }
-
-        await stateDelete(chatId)
-        await send(
-          token,
-          chatId,
-          `🎉 <b>Tabriklaymiz! Userbot 2FA orqali muvaffaqiyatli ulandi!</b>\n\n` +
-          `🤖 <b>Humocardbot (@humocardbot) monitoringi ishga tushirildi.</b>\n` +
-          `Barcha HUMO to‘lovlari avtomatik qayta ishlanadi.`,
-          menu
-        )
-      }
-    } catch (err: any) {
-      await send(token, chatId, `❌ 2FA paroli noto‘g‘ri: ${err?.message ?? 'Parol xato'}.\nQaytadan parolni yuboring:`, back)
     }
     return NextResponse.json({ ok: true })
   }
 
   // -------------------------------------------------------------
-  // DO'KON OCHISH OQIMI (Full 16-digit Card number storage)
+  // WEBHOOK SOZLASH & DOKUMENTATSIYA
+  // -------------------------------------------------------------
+  if (text === 'Webhook sozlash' || raw === '/webhook') {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const currentWebhook = userShops[0]?.webhookUrl || 'Mavjud emas'
+
+    await send(
+      token,
+      chatId,
+      `🔗 <b>PayGo Webhook Sozlamalari</b>\n\n` +
+      `To‘lov muvaffaqiyatli tasdiqlanganda serveringizga <code>POST</code> so‘rovi orqali to‘liq JSON ma’lumot yuboriladi.\n\n` +
+      `🌐 <b>Hozirgi Webhook URL:</b> <code>${currentWebhook}</code>\n\n` +
+      `📦 <b>Webhook JSON formati:</b>\n` +
+      `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "eventId": "evt_98f4e21a",\n  "createdAt": "2026-08-30T11:05:00Z",\n  "payment": {\n    "id": "pay_7fa83210",\n    "amount": 50000,\n    "currency": "UZS",\n    "status": "paid",\n    "cardLast4": "3587"\n  },\n  "signature": "sha256_hash"\n}</code></pre>\n\n` +
+      `📄 <b>JSON Schema fayli:</b> <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n` +
+      `🌐 <b>To‘liq API Hujjati:</b> <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>`,
+      {
+        inline_keyboard: [
+          [{ text: '✏️ Webhook URL sozlash', callback_data: 'edit_shop_webhook' }],
+          [{ text: '🌐 Web Panel orqali sozlash', url: `${APP_URL}/panel` }],
+        ],
+      }
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (text === 'API hujjat' || raw === '/docs') {
+    await send(
+      token,
+      chatId,
+      `📚 <b>PayGo API va Webhook Hujjatlari:</b>\n\n` +
+      `🔹 <b>Webhook JSON formati va Schema:</b>\n` +
+      `🔗 <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n\n` +
+      `🔹 <b>To‘liq REST API Documentation:</b>\n` +
+      `🔗 <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>\n\n` +
+      `🔹 <b>Word / DOCX Formati:</b>\n` +
+      `🔗 <a href="${APP_URL}/paybot-api.docx">${APP_URL}/paybot-api.docx</a>\n\n` +
+      `Xavfsizlik: Barcha webhooklar <code>X-PayGo-Signature: sha256=...</code> HMAC imzosi bilan jo‘natiladi.`,
+      menu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // TEST TO'LOV OQIMI (Custom amount & Exactly 5 minutes countdown)
+  // -------------------------------------------------------------
+  if (text === 'Test to‘lov' || raw === '/testpay') {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (!userShops.length) {
+      await send(
+        token,
+        chatId,
+        '⚠️ Test to‘lov yaratishdan oldin do‘kon ochishingiz kerak. Iltimos <b>🛍 Do‘kon ochish</b> tugmasini bosing.',
+        menu
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    await stateSet(chatId, { step: 'test_pay_amount' })
+    await send(
+      token,
+      chatId,
+      `🧪 <b>Test To‘lov Yaratish (1/2)</b>\n\n` +
+      `To‘lov tizimingizni sinash uchun test to‘lov summasini kiriting (masalan: <code>15000</code>) yoki quyidagi variantlardan birini tanlang:\n\n` +
+      `⏱ <i>To‘lov muddati: <b>5 daqiqa (300 soniya)</b></i>\n` +
+      `To‘lov tasdiqlangach Webhook va Kanalingizga to‘liq JSON ma’lumot boradi.`,
+      testAmountsKeyboard
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'test_pay_amount') {
+    const cleanNum = Number(raw.replace(/[^\d]/g, ''))
+    if (!cleanNum || cleanNum < 100) {
+      await send(
+        token,
+        chatId,
+        '❗ Noto‘g‘ri summa. Iltimos raqam ko‘rinishida kiriting (masalan: <code>10000</code>):',
+        testAmountsKeyboard
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const shop = userShops[0]
+    const paymentId = `pay_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // EXACTLY 5 MINUTES
+
+    await db.insert(payments).values({
+      id: paymentId,
+      shopId: shop.id,
+      userId: userIdStr,
+      amount: cleanNum,
+      currency: 'UZS',
+      status: 'pending',
+      expiresAt,
+    })
+
+    await stateDelete(chatId)
+    const payUrl = `${APP_URL}/pay/${paymentId}`
+
+    await send(
+      token,
+      chatId,
+      `🧪 <b>Test To‘lov Muvaffaqiyatli Yaratildi!</b>\n\n` +
+      `💰 <b>Summa:</b> ${cleanNum.toLocaleString('uz-UZ')} UZS\n` +
+      `💳 <b>Karta:</b> <code>${formatCard(shop.cardNumber || '9860350123453587')}</code>\n` +
+      `👤 <b>Karta egasi:</b> ${shop.accountOwner || 'Hisob egasi'}\n` +
+      `⏱ <b>Muddati:</b> 5 daqiqa\n` +
+      `🔗 <b>To‘lov sahifasi:</b>\n<a href="${payUrl}">${payUrl}</a>\n\n` +
+      `💡 <i>To‘lov sahifasida <b>"🧪 Test to‘lovni tasdiqlash"</b> tugmasini bosishingiz mumkin. Shunda Webhook va Telegram kanalingizga JSON xabarnoma darhol boradi!</i>`,
+      {
+        inline_keyboard: [
+          [{ text: '💳 To‘lov sahifasini ochish', url: payUrl }],
+          [{ text: '📣 Kanalga test post yuborish', callback_data: 'test_channel_post' }],
+        ],
+      }
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // MENING DO'KONIM & TAHRIRLASH MENU
+  // -------------------------------------------------------------
+  if (text === 'Mening do‘konim' || text === 'Do‘kon sozlamalari' || raw === '/myshop') {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (!userShops.length || !userShops[0]) {
+      await send(token, chatId, '🏪 Sizda hali do‘kon yo‘q. "🛍 Do‘kon ochish" tugmasini bosing.', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    const s = userShops[0]
+    let isUserbotConnected = Boolean(s.userbotSession)
+    if (!isUserbotConnected) {
+      try {
+        const conns = await db.select().from(userbotConnections).where(eq(userbotConnections.userId, userIdStr))
+        if (conns.some((c) => c.status === 'active')) isUserbotConnected = true
+      } catch {}
+    }
+
+    const formattedCard = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
+    const authUrl = await generateAuthUrl(userIdStr)
+
+    await send(
+      token,
+      chatId,
+      `🏪 <b>Do‘kon Ma’lumotlari va Sozlamalari:</b>\n\n` +
+      `🏷 <b>Nomi:</b> ${s.name}\n` +
+      `💳 <b>Karta:</b> <code>${formattedCard}</code> (${s.cardBank || 'HUMOCARD'})\n` +
+      `👤 <b>Egasi:</b> ${s.accountOwner || 'Kiritilmagan'}\n` +
+      `🖼 <b>Logo:</b> ${s.logoUrl ? '✅ Yuklangan' : '❌ Yo‘q'}\n` +
+      `🔗 <b>Webhook URL:</b> ${s.webhookUrl ? `<code>${s.webhookUrl}</code>` : '❌ O‘rnatilmagan'}\n` +
+      `📣 <b>Telegram Kanal:</b> ${s.telegramChannelId ? `<code>${s.telegramChannelId}</code>` : '❌ Ulanmagan'}\n` +
+      `🤖 <b>Userbot (@humocardbot):</b> ${isUserbotConnected ? '🟢 Faol' : '🔴 Ulanmagan'}\n` +
+      `⚡️ <b>Holat:</b> ${s.approved ? '✅ Tasdiqlangan' : '⏳ Kutilmoqda'}\n` +
+      `🆔 <b>Shop ID:</b> <code>${s.id}</code>\n\n` +
+      `Tahrirlash uchun quyidagi tugmalardan foydalaning:`,
+      {
+        inline_keyboard: [
+          [{ text: '✏️ Nomni o‘zgartirish', callback_data: 'edit_shop_name' }, { text: '💳 Karta & Egasini tahrirlash', callback_data: 'edit_shop_card' }],
+          [{ text: '🔗 Webhook sozlash', callback_data: 'edit_shop_webhook' }, { text: '🖼 Logo yuklash', callback_data: 'edit_shop_logo' }],
+          [{ text: '📣 Kanal ulash / test', callback_data: 'edit_shop_channel' }, { text: '🧪 Test to‘lov', callback_data: 'test_pay' }],
+          [{ text: '🌐 Web Dashboardni ochish', url: authUrl }],
+        ],
+      }
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // SHOP EDIT FLOW STEPS
+  // -------------------------------------------------------------
+  if (flow?.step === 'edit_shop_name') {
+    const newName = raw.trim()
+    if (!newName) {
+      await send(token, chatId, '❗ Iltimos, do‘kon nomini kiriting:', back)
+      return NextResponse.json({ ok: true })
+    }
+    await db.update(shops).set({ name: newName }).where(eq(shops.userId, userIdStr))
+    await stateDelete(chatId)
+    await send(token, chatId, `✅ <b>Do‘kon nomi "${newName}" ga o‘zgartirildi!</b>`, menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'edit_shop_card_num') {
+    const digits = raw.replace(/\D/g, '')
+    if (digits.length < 16) {
+      await send(token, chatId, '❗ Karta raqami to‘liq emas. 16 ta raqam bo‘lishi kerak (masalan: <code>9860 3501 2345 3587</code>):', back)
+      return NextResponse.json({ ok: true })
+    }
+    flow.shop = { ...flow.shop, cardNumber: digits, cardLast4: digits.slice(-4) }
+    flow.step = 'edit_shop_card_owner'
+    await stateSet(chatId, flow)
+    await send(token, chatId, '👤 <b>Karta egasining ism-sharifini kiriting:</b>\n(Masalan: <code>AZIZBEK KARIMOV</code>):', back)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'edit_shop_card_owner') {
+    const ownerName = raw.trim()
+    const cardNum = flow.shop?.cardNumber || '9860350123453587'
+    await db.update(shops).set({
+      cardNumber: cardNum,
+      cardLast4: cardNum.slice(-4),
+      accountOwner: ownerName || 'Hisob egasi',
+    }).where(eq(shops.userId, userIdStr))
+
+    await stateDelete(chatId)
+    await send(
+      token,
+      chatId,
+      `✅ <b>Karta ma’lumotlari yangilandi!</b>\n\n` +
+      `💳 <b>Karta:</b> <code>${formatCard(cardNum)}</code>\n` +
+      `👤 <b>Egasi:</b> ${ownerName}`,
+      menu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'edit_shop_webhook_url') {
+    let url = raw.trim()
+    if (url.toLowerCase() === 'ochirish' || url.toLowerCase() === 'yoq') {
+      await db.update(shops).set({ webhookUrl: null }).where(eq(shops.userId, userIdStr))
+      await stateDelete(chatId)
+      await send(token, chatId, '✅ Webhook URL olib tashlandi.', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      await send(token, chatId, '❗ Noto‘g‘ri havola. URL <code>https://</code> bilan boshlanishi kerak:', back)
+      return NextResponse.json({ ok: true })
+    }
+
+    await db.update(shops).set({ webhookUrl: url }).where(eq(shops.userId, userIdStr))
+    await stateDelete(chatId)
+    await send(token, chatId, `✅ <b>Webhook URL muvaffaqiyatli saqlandi:</b>\n<code>${url}</code>`, menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'edit_shop_logo_url') {
+    let url = raw.trim()
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      await send(token, chatId, '❗ Noto‘g‘ri havola. Rasm havolasi (URL) yoki to‘g‘ridan-to‘g‘ri rasm faylini yuboring:', back)
+      return NextResponse.json({ ok: true })
+    }
+    await db.update(shops).set({ logoUrl: url }).where(eq(shops.userId, userIdStr))
+    await stateDelete(chatId)
+    await send(token, chatId, `✅ <b>Do‘kon logotipi saqlandi!</b>`, menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // MENING KARTAM
+  // -------------------------------------------------------------
+  if (text === 'Mening kartam' || text === 'Kartani tahrirlash') {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (userShops.length && userShops[0]) {
+      const s = userShops[0]
+      const formatted = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
+      await send(
+        token,
+        chatId,
+        `💳 <b>To‘lov qabul qiluvchi HUMO kartangiz:</b>\n\n` +
+        `🔢 <b>To‘liq raqam:</b> <code>${formatted}</code>\n` +
+        `👤 <b>Karta egasi:</b> ${s.accountOwner ?? 'Hisob egasi'}\n` +
+        `🏦 <b>Tizim:</b> ${s.cardBank ?? 'HUMOCARD'}\n\n` +
+        `ℹ️ <i>To‘lov sahifasida xaridorlarga ushbu to‘liq karta raqami ko‘rsatiladi.</i>`,
+        {
+          inline_keyboard: [
+            [{ text: '✏️ Kartani tahrirlash', callback_data: 'edit_shop_card' }],
+          ],
+        }
+      )
+    } else {
+      await send(token, chatId, '💳 Hali karta kiritilmagan. Avval "🛍 Do‘kon ochish" orqali karta kiriting.', menu)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // DO'KON OCHISH OQIMI
   // -------------------------------------------------------------
   if (text === 'Do‘kon ochish') {
     await stateSet(chatId, { step: 'shop_name', shop: {} })
@@ -471,7 +956,7 @@ export async function POST(request: Request) {
       chatId,
       `💳 <b>HUMO Karta raqami (3/4)</b>\n\n` +
       `To‘lovchilarga ko‘rinadigan <b>HUMO karta raqamingizni to‘liq</b> (16 ta raqam) yuboring:\n` +
-      `(Masalan: <code>9860 3501 2345 3587</code> yoki <code>9860350123453587</code>)\n\n` +
+      `(Masalan: <code>9860 3501 2345 3587</code>)\n\n` +
       `⚠️ <i>Mijozlar to‘lov sahifasida ushbu kartani to‘liq ko‘rib pul o‘tkazishadi.</i>`,
       back
     )
@@ -519,21 +1004,10 @@ export async function POST(request: Request) {
         cardLast4: flow.shop?.cardLast4 ?? '3587',
         cardBank: 'HUMOCARD',
         accountOwner: flow.shop?.owner ?? 'Hisob egasi',
-        approved: chatId === Number(ADMIN_ID) || true, // auto approve
+        approved: true,
       })
     } catch (insertErr) {
       console.warn('DB insert fallback:', insertErr)
-      // Fallback without cardNumber if older table
-      await db.insert(shops).values({
-        id: shopId,
-        userId: userIdStr,
-        name: flow.shop?.name ?? 'PayGo shop',
-        slug,
-        description: flow.shop?.description,
-        cardLast4: flow.shop?.cardLast4 ?? '3587',
-        cardBank: 'HUMOCARD',
-        approved: chatId === Number(ADMIN_ID) || true,
-      })
     }
 
     await stateDelete(chatId)
@@ -546,120 +1020,223 @@ export async function POST(request: Request) {
       `💳 <b>Karta:</b> <code>${formattedCardNum}</code> (HUMO)\n` +
       `👤 <b>Karta egasi:</b> ${flow.shop?.owner}\n` +
       `🔗 <b>Do‘kon ID:</b> <code>${shopId}</code>\n\n` +
-      `Endi to‘lovlarni qabul qilish uchun <b>🔐 Userbot ulash</b> tugmasini bosing!`,
+      `Endi to‘lovlarni qabul qilish uchun <b>🔐 Userbot ulash</b> yoki <b>📣 Kanal ulash</b> tugmasini bosing!`,
       menu
     )
     return NextResponse.json({ ok: true })
   }
 
   // -------------------------------------------------------------
-  // MENING DO'KONIM & MENING KARTAM
+  // USERBOT ULASH OQIMI
   // -------------------------------------------------------------
-  if (text === 'Mening do‘konim') {
-    let userShops: any[] = []
-    try {
-      userShops = (await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(5)) || []
-    } catch (dbErr) {
-      console.warn('DB shops select error:', dbErr)
-      userShops = []
-    }
-
-    if (!Array.isArray(userShops) || userShops.length === 0) {
-      await send(token, chatId, '🏪 Sizda hali ochilgan do‘kon mavjud emas. "🛍 Do‘kon ochish" tugmasini bosing.', menu)
-      return NextResponse.json({ ok: true })
-    }
-
-    let activeSession = ''
-    try {
-      const connList = (await db
-        .select()
-        .from(userbotConnections)
-        .where(eq(userbotConnections.userId, userIdStr))) || []
-      if (Array.isArray(connList)) {
-        const found = connList.find((c) => c.status === 'active' && c.sessionString)
-        if (found?.sessionString) activeSession = found.sessionString
-      }
-    } catch (e) {
-      console.warn('Userbot conn lookup:', e)
-    }
-
-    const txt = userShops.map((s) => {
-      const isConnected = Boolean(s.userbotSession || activeSession)
-      // Sync to shop table if missing
-      if (!s.userbotSession && activeSession) {
-        db.update(shops).set({ userbotSession: activeSession }).where(eq(shops.id, s.id)).catch(() => {})
-      }
-      return (
-        `🏪 <b>${s.name}</b>\n` +
-        `💳 <b>Karta:</b> <code>${formatCard(s.cardNumber || s.cardLast4 || '')}</code>\n` +
-        `👤 <b>Egasi:</b> ${s.accountOwner ?? 'Mavjud emas'}\n` +
-        `⚡️ <b>Holat:</b> ${s.approved ? '✅ Faol' : '⏳ Kutilmoqda'}\n` +
-        `🤖 <b>Userbot:</b> ${isConnected ? '🟢 Ulangan (Humocardbot faol)' : '🔴 Ulanmagan'}\n` +
-        `🆔 <b>Shop ID:</b> <code>${s.id}</code>`
-      )
-    }).join('\n\n─────────────\n\n')
-
-    await send(token, chatId, `📋 <b>Sizning do‘konlaringiz:</b>\n\n${txt}`, menu)
+  if (text === 'Userbot ulash' || raw === '/userbot') {
+    beginOnboarding(userIdStr)
+    const newFlow: Flow = { step: 'userbot_api_id', userbot: {} }
+    await stateSet(chatId, newFlow)
+    await send(
+      token,
+      chatId,
+      `🔐 <b>Telegram Userbot ulash (1/4)</b>\n\n` +
+      `Userbot @humocardbot dan kelgan HUMO to‘lov xabarnomalarini avtomatik o‘qib, to‘lovlarni tasdiqlaydi.\n\n` +
+      `1️⃣ Iltimos, <b>Telegram API ID</b> raqamingizni yuboring:\n` +
+      `(Uni <a href="https://my.telegram.org">my.telegram.org</a> saytidan olasiz, masalan: <code>12345678</code>)`,
+      back
+    )
     return NextResponse.json({ ok: true })
   }
 
-  if (text === 'Mening kartam' || text === 'Kartani tahrirlash') {
-    let userShops: any[] = []
-    try {
-      userShops = (await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)) || []
-    } catch (dbErr) {
-      console.warn('DB shops select error:', dbErr)
-      userShops = []
+  if (flow?.step === 'userbot_api_id') {
+    const apiIdNum = Number(raw.replace(/\D/g, ''))
+    if (!apiIdNum || isNaN(apiIdNum) || apiIdNum < 1000) {
+      await send(token, chatId, '❗ Noto‘g‘ri API ID. Iltimos faqat raqamlardan iborat API ID ni yuboring (masalan: <code>12345678</code>):', back)
+      return NextResponse.json({ ok: true })
     }
+    setApiId(userIdStr, apiIdNum)
+    flow.userbot = { ...flow.userbot, apiId: apiIdNum }
+    flow.step = 'userbot_api_hash'
+    await stateSet(chatId, flow)
+    await send(
+      token,
+      chatId,
+      `🔑 <b>Telegram API Hash (2/4)</b>\n\n` +
+      `Endi <b>API Hash</b> kalitini yuboring:\n(Masalan: <code>a1b2c3d4e5f60718293a4b5c6d7e8f90</code>)`,
+      back
+    )
+    return NextResponse.json({ ok: true })
+  }
 
-    if (Array.isArray(userShops) && userShops.length > 0 && userShops[0]) {
-      const s = userShops[0]
-      const formatted = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
+  if (flow?.step === 'userbot_api_hash') {
+    const hash = raw.trim()
+    if (hash.length < 10) {
+      await send(token, chatId, '❗ Noto‘g‘ri API Hash. Iltimos to‘g‘ri API Hash kalitini yuboring:', back)
+      return NextResponse.json({ ok: true })
+    }
+    setApiHash(userIdStr, hash)
+    flow.userbot = { ...flow.userbot, apiHash: hash }
+    flow.step = 'userbot_phone'
+    await stateSet(chatId, flow)
+    await send(
+      token,
+      chatId,
+      `📱 <b>Telefon raqam (3/4)</b>\n\n` +
+      `Telegram hisobingiz telefon raqamini xalqaro formatda yuboring:\n(Masalan: <code>+998901234567</code>)`,
+      back
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'userbot_phone') {
+    const phone = raw.trim().replace(/[^\d+]/g, '')
+    if (phone.length < 9) {
+      await send(token, chatId, '❗ Noto‘g‘ri telefon raqami. Masalan: <code>+998901234567</code>', back)
+      return NextResponse.json({ ok: true })
+    }
+    flow.userbot = { ...flow.userbot, phone }
+    flow.step = 'userbot_waiting_login'
+    await stateSet(chatId, flow)
+
+    await send(token, chatId, `⏳ Telegramga ulanilmoqda va <b>${phone}</b> raqamiga tasdiqlash kodi jo‘natilmoqda...`)
+
+    try {
+      const res = await startTelegramLogin(userIdStr, phone)
+      flow.step = 'userbot_code'
+      await stateSet(chatId, flow)
       await send(
         token,
         chatId,
-        `💳 <b>To‘lov qabul qiluvchi HUMO kartangiz:</b>\n\n` +
-        `🔢 <b>To‘liq raqam:</b> <code>${formatted}</code>\n` +
-        `👤 <b>Karta egasi:</b> ${s.accountOwner ?? 'Hisob egasi'}\n` +
-        `🏦 <b>Tizim:</b> ${s.cardBank ?? 'HUMOCARD'}\n\n` +
-        `ℹ️ <i>To‘lov sahifasida xaridorlarga ushbu to‘liq karta raqami ko‘rsatiladi.</i>\n\n` +
-        `Kartani yangilash uchun <code>/editcard 9860350123453587 AZIZBEK KARIMOV</code> buyrug‘ini yuboring.`,
-        menu
+        `📩 <b>Telegram Tasdiqlash Kodi (4/4)</b>\n\n` +
+        `Telegram ilovangizga kelgan <b>5 xonali tasdiqlash kodi</b>ni yuboring:\n` +
+        `(Masalan: <code>1 2 3 4 5</code> yoki <code>12345</code>)\n\n` +
+        `🔒 <i>Kod Telegram rasmiy chatiga keladi.</i>`,
+        back
       )
-    } else {
-      await send(token, chatId, '💳 Hali karta kiritilmagan. Avval "🛍 Do‘kon ochish" orqali karta kiriting.', menu)
+    } catch (err: any) {
+      flow.step = 'userbot_phone'
+      await stateSet(chatId, flow)
+      await send(token, chatId, `❌ Ulanishda xatolik: ${err?.message ?? 'Noma’lum xatolik'}.\nQaytadan telefon raqamingizni yuboring:`, back)
     }
     return NextResponse.json({ ok: true })
   }
 
-  // Edit card command: /editcard <number> <owner name>
-  if (raw.startsWith('/editcard')) {
-    const parts = raw.replace('/editcard', '').trim().split(' ')
-    const cardNum = parts[0]?.replace(/\D/g, '')
-    const ownerName = parts.slice(1).join(' ').trim()
-
-    if (!cardNum || cardNum.length < 16) {
-      await send(token, chatId, '❗ Iltimos, to‘liq 16 xonali karta raqami va ism-sharifingizni yuboring:\nMasalan: <code>/editcard 9860350123453587 AZIZBEK KARIMOV</code>', menu)
+  if (flow?.step === 'userbot_code') {
+    const code = raw.trim().replace(/\D/g, '')
+    if (code.length < 3) {
+      await send(token, chatId, '❗ Kod noto‘g‘ri. Iltimos Telegramdan kelgan kodni yuboring:', back)
       return NextResponse.json({ ok: true })
     }
 
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    if (userShops.length && userShops[0]) {
-      await db.update(shops).set({
-        cardNumber: cardNum,
-        cardLast4: cardNum.slice(-4),
-        accountOwner: ownerName || userShops[0].accountOwner || 'Hisob egasi',
-      }).where(eq(shops.id, userShops[0].id))
+    try {
+      const res = await verifyTelegramCode(userIdStr, code)
+      if (res.requires2FA) {
+        flow.step = 'userbot_2fa'
+        await stateSet(chatId, flow)
+        await send(
+          token,
+          chatId,
+          `🔐 <b>Ikki bosqichli autentifikatsiya (2FA)</b>\n\n` +
+          `Hisobingizda 2FA yoqilgan. Telegram <b>2FA parolingiz</b>ni yuboring:\n` +
+          `(Masalan: <code>MeningParolim123</code>)`,
+          back
+        )
+        return NextResponse.json({ ok: true })
+      }
 
-      await send(token, chatId, `✅ <b>Karta ma’lumotlari muvaffaqiyatli yangilandi!</b>\n\n💳 <b>Karta:</b> <code>${formatCard(cardNum)}</code>\n👤 <b>Egasi:</b> ${ownerName || 'Hisob egasi'}`, menu)
-    } else {
-      await send(token, chatId, '❗ Sizda hali do‘kon yo‘q. Avval "🛍 Do‘kon ochish" tugmasini bosing.', menu)
+      if (res.sessionString) {
+        const connId = randomUUID()
+        try {
+          const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+          const targetShopId = userShops[0]?.id || `shop-${userIdStr}`
+          await db.insert(userbotConnections).values({
+            id: connId,
+            shopId: targetShopId,
+            userId: userIdStr,
+            sessionString: res.sessionString,
+            status: 'active',
+          })
+          await db.update(shops).set({ userbotSession: res.sessionString }).where(eq(shops.userId, userIdStr))
+        } catch (dbErr) {
+          console.warn('DB save warning:', dbErr)
+        }
+
+        if (flow.userbot?.apiId && flow.userbot.apiHash) {
+          try {
+            await startHumoUserbot(userIdStr, {
+              apiId: flow.userbot.apiId,
+              apiHash: flow.userbot.apiHash,
+              sessionString: res.sessionString,
+            })
+          } catch (botErr) {
+            console.error('startHumoUserbot error:', botErr)
+          }
+        }
+
+        await stateDelete(chatId)
+        await send(
+          token,
+          chatId,
+          `🎉 <b>Tabriklaymiz! Userbot muvaffaqiyatli ulandi!</b>\n\n` +
+          `🤖 <b>Humocardbot (@humocardbot) monitoringi faollashtirildi.</b>\n` +
+          `Barcha HUMO to‘lovlari endi real vaqtda tasdiqlanadi va tizimingizga xabar beriladi!`,
+          menu
+        )
+      }
+    } catch (err: any) {
+      await send(token, chatId, `❌ Kod noto‘g‘ri yoki eskirgan: ${err?.message ?? 'Xato'}.\nQaytadan kodni kiriting:`, back)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'userbot_2fa') {
+    const password = raw.trim()
+    try {
+      const res = await submitTelegram2FA(userIdStr, password)
+      if (res.sessionString) {
+        const connId = randomUUID()
+        try {
+          const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+          const targetShopId = userShops[0]?.id || `shop-${userIdStr}`
+          await db.insert(userbotConnections).values({
+            id: connId,
+            shopId: targetShopId,
+            userId: userIdStr,
+            sessionString: res.sessionString,
+            status: 'active',
+          })
+          await db.update(shops).set({ userbotSession: res.sessionString }).where(eq(shops.userId, userIdStr))
+        } catch (dbErr) {
+          console.warn('DB save warning:', dbErr)
+        }
+
+        if (flow.userbot?.apiId && flow.userbot.apiHash) {
+          try {
+            await startHumoUserbot(userIdStr, {
+              apiId: flow.userbot.apiId,
+              apiHash: flow.userbot.apiHash,
+              sessionString: res.sessionString,
+            })
+          } catch (botErr) {
+            console.error('startHumoUserbot error:', botErr)
+          }
+        }
+
+        await stateDelete(chatId)
+        await send(
+          token,
+          chatId,
+          `🎉 <b>Tabriklaymiz! Userbot 2FA orqali muvaffaqiyatli ulandi!</b>\n\n` +
+          `🤖 <b>Humocardbot (@humocardbot) monitoringi ishga tushirildi.</b>\n` +
+          `Barcha HUMO to‘lovlari avtomatik qayta ishlanadi.`,
+          menu
+        )
+      }
+    } catch (err: any) {
+      await send(token, chatId, `❌ 2FA paroli noto‘g‘ri: ${err?.message ?? 'Parol xato'}.\nQaytadan parolni yuboring:`, back)
     }
     return NextResponse.json({ ok: true })
   }
 
   // -------------------------------------------------------------
-  // TARIFLAR (Maxsus pullik tariflar ro'yxati va sotib olish rekviziti)
+  // TARIFLAR
   // -------------------------------------------------------------
   if (text === 'Tariflar' || text === 'Premium' || raw === '/tariffs') {
     let tariffList: any[] = []
@@ -686,7 +1263,7 @@ export async function POST(request: Request) {
       token,
       chatId,
       `💎 <b>PayGo Maxsus Premium Tariflari:</b>\n\n${tTxt}\n\n` +
-      `ℹ️ <i>Tarifga to‘lov qilish uchun yuqoridagi kartaga o‘tkazma qiling. Userbot orqali to‘lovingiz avtomatik tasdiqlanadi yoki adminga murojaat qiling.</i>\n\n` +
+      `ℹ️ <i>Tarifga to‘lov qilish uchun yuqoridagi kartaga o‘tkazma qiling. Userbot orqali to‘lovingiz avtomatik tasdiqlanadi.</i>\n\n` +
       `🌐 Boshqaruv CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
       menu
     )
@@ -694,9 +1271,9 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------
-  // ADMIN PANEL (/admin va /addadmin)
+  // ADMIN PANEL (/admin & Admin Keyboard)
   // -------------------------------------------------------------
-  if (raw === '/admin' || text === 'Admin' || text === 'Crm') {
+  if (raw === '/admin' || text === 'Admin' || text === 'Crm' || text === 'Admin panel') {
     const isAdmin = await isAdminTelegramId(userIdStr)
     if (!isAdmin) {
       await send(token, chatId, '⛔️ Siz admin emassiz. Boshqaruv faqat tasdiqlangan adminlar uchun.', menu)
@@ -711,42 +1288,95 @@ export async function POST(request: Request) {
 
     let pendingTxt = ''
     if (pendingShops.length > 0) {
-      pendingTxt = `\n\n⚠️ <b>Tasdiqlanmagan do‘konlar:</b>\n` + pendingShops.map((s) => `• <b>${s.name}</b> (ID: <code>${s.id}</code>) — Tasdiqlash: <code>/approve ${s.id}</code>`).join('\n')
+      pendingTxt = `\n\n⚠️ <b>Tasdiqlash kutilayotgan do‘konlar:</b>\n` + pendingShops.map((s) => `• <b>${s.name}</b> (ID: <code>${s.id}</code>)`).join('\n')
     }
 
     await send(
       token,
       chatId,
       `👑 <b>PayGo Admin CRM Boshqaruvi</b>\n\n` +
-      `🏪 <b>Jami do‘konlar:</b> ${allShops.length} ta (Tasdiqlangan: ${allShops.length - pendingShops.length})\n` +
+      `🏪 <b>Jami do‘konlar:</b> ${allShops.length} ta (Faol: ${allShops.length - pendingShops.length})\n` +
       `💰 <b>Jami tushum hajmi:</b> ${totalVolume.toLocaleString()} UZS (${paidPayments.length} ta to‘lov)\n` +
       `🤖 <b>Userbot holati:</b> Faol monitoringda\n` +
       `${pendingTxt}\n\n` +
-      `⚙️ <b>Admin buyruqlari:</b>\n` +
-      `• <code>/approve &lt;shop_id&gt;</code> — Do‘konni tasdiqlash\n` +
-      `• <code>/addadmin &lt;telegram_id&gt;</code> — Yangi admin qo‘shish\n` +
-      `• <code>/removeadmin &lt;telegram_id&gt;</code> — Adminni o‘chirish\n\n` +
-      `🌐 <b>Web CRM Dashboard:</b>\n<a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
-      menu
+      `Quyidagi admin boshqaruv tugmalaridan foydalaning:`,
+      adminMenu
     )
     return NextResponse.json({ ok: true })
   }
 
-  // /approve <shopId>
-  if (raw.startsWith('/approve')) {
+  // Admin sub-menus
+  if (text === 'Do‘konlar boshqaruvi') {
     const isAdmin = await isAdminTelegramId(userIdStr)
-    if (!isAdmin) {
-      await send(token, chatId, '⛔️ Faqat adminlar do‘konni tasdiqlashi mumkin.', menu)
-      return NextResponse.json({ ok: true })
-    }
-    const targetShopId = raw.replace('/approve', '').trim()
-    if (!targetShopId) {
-      await send(token, chatId, '❗ Shop ID kiritilmadi: <code>/approve bcbd46af-...</code>', menu)
-      return NextResponse.json({ ok: true })
-    }
+    if (!isAdmin) return NextResponse.json({ ok: true })
 
-    await db.update(shops).set({ approved: true }).where(eq(shops.id, targetShopId))
-    await send(token, chatId, `✅ <b>Do‘kon muvaffaqiyatli tasdiqlandi!</b> (ID: <code>${targetShopId}</code>)`, menu)
+    const allShops = await db.select().from(shops).orderBy(desc(shops.createdAt)).limit(10)
+    const inlineButtons = allShops.map((s) => [
+      { text: `${s.approved ? '✅' : '⏳'} ${s.name}`, callback_data: `view_shop_${s.id}` },
+      ...(!s.approved ? [{ text: 'Tasdiqlash', callback_data: `approve_shop_${s.id}` }] : []),
+    ])
+
+    await send(
+      token,
+      chatId,
+      `🏪 <b>Barcha Do‘konlar Ro‘yxati (${allShops.length} ta):</b>\n\n` +
+      allShops.map((s) => `• <b>${s.name}</b> | Karta: <code>${formatCard(s.cardNumber || '')}</code> | ${s.approved ? '✅ Faol' : '⏳ Kutilmoqda'}`).join('\n'),
+      { inline_keyboard: inlineButtons.slice(0, 10) }
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (text === 'Tariflar boshqaruvi') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) return NextResponse.json({ ok: true })
+
+    const tariffs = await db.select().from(systemTariffs)
+    await send(
+      token,
+      chatId,
+      `💎 <b>Mavjud Tariflar Boshqaruvi:</b>\n\n` +
+      tariffs.map((t) => `• <b>${t.name}</b>: ${t.price.toLocaleString()} UZS / ${t.period} (Karta: <code>${t.cardNumber}</code> - ${t.cardOwner})`).join('\n\n') +
+      `\n\n🌐 Tariflarni to‘liq tahrirlash uchun Web CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
+      adminMenu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (text === 'Adminlar boshqaruvi') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) return NextResponse.json({ ok: true })
+
+    const roles = await db.select().from(systemRoles)
+    await send(
+      token,
+      chatId,
+      `👥 <b>Tizim Adminlari:</b>\n\n` +
+      roles.map((r) => `• <code>${r.telegramId}</code> (${r.role}) - Qo‘shdi: ${r.addedBy}`).join('\n') +
+      `\n\n⚙️ <i>Yangi admin qo‘shish uchun: <code>/addadmin &lt;telegram_id&gt;</code></i>\n` +
+      `⚙️ <i>Adminni o‘chirish: <code>/removeadmin &lt;telegram_id&gt;</code></i>`,
+      adminMenu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (text === 'Barcha statistika') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) return NextResponse.json({ ok: true })
+
+    const allPayments = await db.select().from(payments)
+    const paid = allPayments.filter((p) => p.status === 'paid')
+    const totalVolume = paid.reduce((s, p) => s + (p.amount || 0), 0)
+
+    await send(
+      token,
+      chatId,
+      `📊 <b>Umumiy Tizim Statistikasi:</b>\n\n` +
+      `💰 <b>Jami tushum:</b> ${totalVolume.toLocaleString()} UZS\n` +
+      `✅ <b>Muvaffaqiyatli to‘lovlar:</b> ${paid.length} ta\n` +
+      `⏳ <b>Kutilayotgan to‘lovlar:</b> ${allPayments.filter((p) => p.status === 'pending').length} ta\n` +
+      `🌐 <b>Web CRM Dashboard:</b> <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
+      adminMenu
+    )
     return NextResponse.json({ ok: true })
   }
 
@@ -776,7 +1406,7 @@ export async function POST(request: Request) {
         set: { role: 'admin' },
       })
 
-    await send(token, chatId, `✅ <b>Foydalanuvchi ${newAdminId} admin etib tayinlandi!</b>\nEndi u ham /admin buyrug‘i va CRM dashboarddan foydalana oladi.`, menu)
+    await send(token, chatId, `✅ <b>Foydalanuvchi ${newAdminId} admin etib tayinlandi!</b>`, adminMenu)
     return NextResponse.json({ ok: true })
   }
 
@@ -794,41 +1424,7 @@ export async function POST(request: Request) {
     }
 
     await db.delete(systemRoles).where(eq(systemRoles.telegramId, remAdminId))
-    await send(token, chatId, `✅ <b>Admin ${remAdminId} o‘chirildi.</b>`, menu)
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // TEST TO'LOV
-  // -------------------------------------------------------------
-  if (text === 'Test to‘lov') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    const shopId = userShops[0]?.id ?? 'default-shop'
-    const paymentId = randomUUID()
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
-    const testAmount = 5000
-
-    await db.insert(payments).values({
-      id: paymentId,
-      shopId,
-      userId: userIdStr,
-      amount: testAmount,
-      currency: 'UZS',
-      status: 'pending',
-      expiresAt,
-    })
-
-    const payUrl = `${APP_URL}/pay/${paymentId}`
-    await send(
-      token,
-      chatId,
-      `🧪 <b>Test to‘lov yaratildi!</b>\n\n` +
-      `💰 <b>Summa:</b> 5 000 UZS\n` +
-      `💳 <b>Karta:</b> <code>${formatCard(userShops[0]?.cardNumber ?? '9860350123453587')}</code>\n` +
-      `🔗 <b>To‘lov sahifasi:</b>\n<a href="${payUrl}">${payUrl}</a>\n\n` +
-      `To‘lovchilar ushbu sahifada to‘liq karta raqamini ko‘rib, to‘lovni amalga oshirishi mumkin!`,
-      menu
-    )
+    await send(token, chatId, `✅ <b>Admin ${remAdminId} o‘chirildi.</b>`, adminMenu)
     return NextResponse.json({ ok: true })
   }
 
@@ -839,28 +1435,13 @@ export async function POST(request: Request) {
     await send(
       token,
       chatId,
-      `📊 <b>To‘lov statistikasi:</b>\n\n` +
-      `💰 <b>Jami muvaffaqiyatli tushum:</b> ${totalSum.toLocaleString()} UZS\n` +
-      `✅ <b>To‘langan to‘lovlar:</b> ${paid.length} ta\n` +
-      `⏳ <b>Kutilayotgan:</b> ${totalPayments.filter((p) => p.status === 'pending').length} ta\n` +
-      `🌐 Boshqaruv paneli: ${APP_URL}/panel`,
+      `📊 <b>Sizning To‘lov Statistikangiz:</b>\n\n` +
+      `💰 <b>Jami tushum:</b> ${totalSum.toLocaleString()} UZS\n` +
+      `✅ <b>Muvaffaqiyatli to‘lovlar:</b> ${paid.length} ta\n` +
+      `⏳ <b>Kutilayotgan:</b> ${totalPayments.filter((p) => p.status === 'pending').length} ta\n\n` +
+      `🌐 <b>Batafsil Veb CRM:</b> ${APP_URL}/panel`,
       menu
     )
-    return NextResponse.json({ ok: true })
-  }
-
-  if (text === 'API hujjat') {
-    await send(token, chatId, `📚 <b>PayGo API Hujjati</b>\n\nTo‘lov tizimini saytingiz yoki botingizga integratsiya qilish uchun:\n🔗 ${APP_URL}/paybot-api.docx`, menu)
-    return NextResponse.json({ ok: true })
-  }
-
-  if (text === 'Webhook sozlash') {
-    await send(token, chatId, `🔗 <b>Webhook sozlamalari</b>\n\nTo‘lovlar muvaffaqiyatli bo‘lganda serveringizga xabar borishi uchun Webhook URL manzilini Web dashboard orqali sozlashingiz mumkin:\n${APP_URL}/panel`, menu)
-    return NextResponse.json({ ok: true })
-  }
-
-  if (text === 'Kanal ulash') {
-    await send(token, chatId, `📣 <b>Telegram kanal ulash</b>\n\nTo‘lov bildirishnomalari tushadigan shaxsiy yoki do‘kon kanalingizni ulash uchun botni kanalingizga admin qiling va kanal ID sini dashboardda kiriting:\n${APP_URL}/panel`, menu)
     return NextResponse.json({ ok: true })
   }
 
