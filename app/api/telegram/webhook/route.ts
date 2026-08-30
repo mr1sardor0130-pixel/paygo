@@ -268,6 +268,66 @@ async function sendDocument(
   }
 }
 
+async function renderUserTariffs(token: string, chatId: number | string, userIdStr: string) {
+  let profile: any = null
+  try {
+    const profs = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, userIdStr)).limit(1)
+    profile = profs[0]
+  } catch {}
+
+  let currentTierInfo = '<b>Oddiy (Bepul)</b> — Limitlar: max 1 do‘kon, kuniga 5 ta test to‘lov.'
+  if (profile?.tier === 'premium') {
+    if (profile.premiumEndsAt && new Date(profile.premiumEndsAt) > new Date()) {
+      const exactEndDate = new Date(profile.premiumEndsAt).toLocaleString('uz-UZ')
+      currentTierInfo = `💎 <b>PREMIUM VIP</b> (Faol)\n⏳ <b>Amal qilish muddati:</b> <code>${exactEndDate}</code> gacha`
+    } else {
+      currentTierInfo = '<b>Oddiy (Birlamchi)</b> — Premium muddati tugagan.'
+    }
+  }
+
+  let tariffs: any[] = []
+  try {
+    tariffs = await db.select().from(systemTariffs).where(eq(systemTariffs.active, true))
+  } catch {}
+
+  if (!tariffs.length) {
+    tariffs = [
+      { id: 'tariff-daily', name: 'Kunlik', price: 1000, period: 'kun', description: '1 kunlik sinov va faol monitoring', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' },
+      { id: 'tariff-weekly', name: 'Haftalik', price: 6500, period: 'hafta', description: '7 kunlik do‘kon integratsiyasi va monitoring', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' },
+      { id: 'tariff-monthly', name: 'Oylik VIP', price: 27858, period: 'oy', description: '30 kunlik cheksiz do‘kon va to‘liq monitoring', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' },
+    ]
+  }
+
+  const text =
+    `💎 <b>PayGo Maxsus Premium Tariflari</b>\n\n` +
+    `👤 <b>Hozirgi maqomingiz:</b>\n${currentTierInfo}\n\n` +
+    `─────────────\n\n` +
+    `📋 <b>Mavjud Tariflar va Imkoniyatlar:</b>\n\n` +
+    tariffs
+      .map(
+        (t) =>
+          `💎 <b>${t.name}</b> — <code>${Number(t.price).toLocaleString('uz-UZ')}</code> UZS / ${t.period}\n` +
+          `📝 <b>Xususiyat:</b> ${t.description || 'Cheksiz to‘lovlar va to‘liq monitoring'}\n` +
+          `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
+          `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})`
+      )
+      .join('\n\n─────────────\n\n') +
+    `\n\nℹ️ <i>To‘lov qilish uchun pastdagi tugmalardan birini tanlang. 5 daqiqalik to‘lov buyurtmasi yaratiladi va Userbot orqali 1 soniyada avtomatik tasdiqlanadi.</i>`
+
+  const inlineKeyboard = tariffs.map((t) => [
+    {
+      text: `💳 ${t.name} (${Number(t.price).toLocaleString('uz-UZ')} UZS) ni sotib olish`,
+      callback_data: `buy_tariff_${t.id}`,
+    },
+  ])
+
+  inlineKeyboard.push([
+    { text: '🌐 CRM Boshqaruv Paneli', url: `${APP_URL}/admin` }
+  ])
+
+  await send(token, chatId, text, { inline_keyboard: inlineKeyboard })
+}
+
 async function activateTariffForUser(
   token: string,
   chatId: number | string,
@@ -292,7 +352,24 @@ async function activateTariffForUser(
   else if (period === 'week' || period === 'hafta') daysToAdd = 7
   else if (period === 'month' || period === 'oy') daysToAdd = 30
 
-  const premiumEndsAt = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000)
+  // Check if user already has an active subscription to accumulate time
+  let baseDate = new Date()
+  try {
+    const existing = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, userIdStr)).limit(1)
+    if (existing.length && existing[0]?.premiumEndsAt && new Date(existing[0].premiumEndsAt) > new Date()) {
+      baseDate = new Date(existing[0].premiumEndsAt)
+    }
+  } catch {}
+
+  const premiumEndsAt = new Date(baseDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000)
+  const formattedExactDate = premiumEndsAt.toLocaleString('uz-UZ', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
 
   // 1. Update user_profiles
   try {
@@ -344,7 +421,7 @@ async function activateTariffForUser(
       chatId,
       `🎉 <b>Tabriklaymiz! To‘lovingiz Muvaffaqiyatli Tasdiqlandi!</b>\n\n` +
       `💎 <b>Aktivlashtirilgan Tarif:</b> ${name}\n` +
-      `⏳ <b>Amal qilish muddati:</b> ${premiumEndsAt.toLocaleDateString('uz-UZ')} gacha\n` +
+      `⏳ <b>Amal qilish muddati (daqiqa va soniyasigacha):</b>\n<code>${formattedExactDate}</code> gacha\n\n` +
       `🚀 <b>Imkoniyatlar:</b> Cheksiz do‘konlar, cheksiz to‘lovlar va to‘liq monitoring faollashtirildi!\n\n` +
       `📄 <i>Quyida rasmiy to‘lov chekingiz PDF shaklida yuborilmoqda.</i>`,
       menu
@@ -364,7 +441,7 @@ async function activateTariffForUser(
       chatId,
       `🎉 <b>Tabriklaymiz! To‘lovingiz Tasdiqlandi va Tarif Faollashtirildi!</b>\n\n` +
       `💎 <b>Aktivlashtirilgan Tarif:</b> ${name}\n` +
-      `⏳ <b>Amal qilish muddati:</b> ${premiumEndsAt.toLocaleDateString('uz-UZ')} gacha`,
+      `⏳ <b>Amal qilish muddati (daqiqa va soniyasigacha):</b>\n<code>${formattedExactDate}</code> gacha`,
       menu
     )
   }
@@ -1576,6 +1653,15 @@ export async function POST(request: Request) {
         ],
       }
     )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // TARIFLAR VA PREMIUM
+  // -------------------------------------------------------------
+  if (isTariffsCmd) {
+    await stateDelete(chatId)
+    await renderUserTariffs(token, chatId, userIdStr)
     return NextResponse.json({ ok: true })
   }
 
