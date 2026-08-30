@@ -331,7 +331,10 @@ async function showShopDetails(token: string, chatId: number, userIdStr: string,
   }
 
   if (s.logoUrl && s.logoUrl.startsWith('http')) {
-    await sendPhoto(token, chatId, s.logoUrl, text, reply_markup)
+    const photoRes = await sendPhoto(token, chatId, s.logoUrl, text, reply_markup)
+    if (!photoRes || !photoRes.ok) {
+      await send(token, chatId, text, reply_markup)
+    }
   } else {
     await send(token, chatId, text, reply_markup)
   }
