@@ -304,10 +304,10 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                     <Printer size={14} /> Chop etish
                   </button>
                   <Link
-                    href="/panel"
+                    href="/"
                     className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                   >
-                    <ArrowLeft size={14} /> Veb-panelga
+                    <ArrowLeft size={14} /> Do‘konga qaytish
                   </Link>
                 </div>
               </div>
@@ -444,6 +444,15 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                   {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
                 </span>
               </div>
+
+              {/* Manual Check Button */}
+              <button
+                onClick={fetchPayment}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#1769e0] bg-white py-3 text-xs font-bold text-[#1769e0] hover:bg-[#f0f7ff] transition active:scale-[0.99]"
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                To‘lov qilinganini tekshirish
+              </button>
 
               {/* Instant Simulation Button for Testing */}
               <div className="mt-5 rounded-2xl border border-dashed border-[#2563eb]/40 bg-[#f0f7ff] p-4">

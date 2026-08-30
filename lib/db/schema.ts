@@ -93,6 +93,8 @@ export const authSessions = pgTable('auth_sessions', {
 export const userProfiles = pgTable('user_profiles', {
   telegramId: text('telegramId').primaryKey(),
   termsAccepted: boolean('termsAccepted').notNull().default(false),
+  tier: text('tier').notNull().default('free'), // free, premium
+  premiumEndsAt: timestamp('premiumEndsAt'),
   acceptedAt: timestamp('acceptedAt'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 })
@@ -133,6 +135,7 @@ export const payments = pgTable(
     currency: text('currency').notNull().default('UZS'),
     multiplier: integer('multiplier').notNull().default(1),
     status: text('status').notNull().default('pending'), // pending, paid, expired, rejected, archived
+    isTest: boolean('isTest').default(false),
     expiresAt: timestamp('expiresAt').notNull(),
     matchedAt: timestamp('matchedAt'),
     sourceMessage: text('sourceMessage'),

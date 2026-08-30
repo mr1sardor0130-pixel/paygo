@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { shops, payments, systemRoles, systemTariffs, userbotConnections } from '@/lib/db/schema'
+import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles } from '@/lib/db/schema'
 import { eq, desc } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
 
@@ -24,6 +24,7 @@ export async function GET(request: Request) {
   await ensureDbSchema()
 
   try {
+    const allUsers = await db.select().from(userProfiles)
     const allShops = await db.select().from(shops).orderBy(desc(shops.createdAt))
     const allPayments = await db.select().from(payments).orderBy(desc(payments.createdAt)).limit(100)
     const allTariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.createdAt))
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true,
       stats: {
+        totalUsers: allUsers.length,
         totalShops: allShops.length,
         approvedShops: allShops.filter((s) => s.approved).length,
         pendingShops: allShops.filter((s) => !s.approved).length,
@@ -50,6 +52,7 @@ export async function GET(request: Request) {
       tariffs: allTariffs,
       roles: allRoles,
       userbots: allConnections,
+      users: allUsers,
     })
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Xatolik yuz berdi' }, { status: 500 })

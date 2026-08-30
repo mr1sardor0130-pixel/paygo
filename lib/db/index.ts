@@ -64,7 +64,9 @@ export async function ensureDbSchema() {
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "telegramChannelId" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "userbotSession" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "tier" text DEFAULT 'free';
-
+      
+      ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "isTest" BOOLEAN DEFAULT false;
+      
       CREATE TABLE IF NOT EXISTS "auth_sessions" (
         "token" text PRIMARY KEY,
         "userId" text NOT NULL,
@@ -78,9 +80,14 @@ export async function ensureDbSchema() {
       CREATE TABLE IF NOT EXISTS "user_profiles" (
         "telegramId" text PRIMARY KEY,
         "termsAccepted" boolean NOT NULL DEFAULT false,
+        "tier" text DEFAULT 'free',
+        "premiumEndsAt" timestamp,
         "acceptedAt" timestamp,
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );
+      
+      ALTER TABLE "user_profiles" ADD COLUMN IF NOT EXISTS "tier" text DEFAULT 'free';
+      ALTER TABLE "user_profiles" ADD COLUMN IF NOT EXISTS "premiumEndsAt" timestamp;
 
       CREATE TABLE IF NOT EXISTS "userbot_connections" (
         "id" text PRIMARY KEY,

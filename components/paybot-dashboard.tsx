@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   UserCheck,
   CreditCard,
+  Users,
   Trash2,
   Edit3,
   RefreshCw,
@@ -1113,6 +1114,19 @@ export function PaybotDashboard() {
 
               <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm">
                 <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#64748b]">Foydalanuvchilar</span>
+                  <div className="grid size-8 place-items-center rounded-xl bg-[#eff6ff] text-[#1769e0]">
+                    <Users size={16} />
+                  </div>
+                </div>
+                <p className="mt-3 text-2xl font-bold text-[#152238]">
+                  {crmData?.stats?.totalUsers || 0} ta
+                </p>
+                <p className="mt-1 text-[11px] text-[#718096]">Botdan foydalanmoqda</p>
+              </div>
+
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm">
+                <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-[#64748b]">Jami Do‘konlar</span>
                   <div className="grid size-8 place-items-center rounded-xl bg-[#eff6ff] text-[#1769e0]">
                     <Store size={16} />
@@ -1152,6 +1166,60 @@ export function PaybotDashboard() {
                 <p className="mt-1 text-[11px] text-[#718096]">Superadmin: 8021115446</p>
               </div>
             </div>
+
+            {/* Recent Payments Table */}
+            <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm overflow-hidden mt-6">
+              <h2 className="text-lg font-bold text-[#152238] mb-4">
+                🔄 So‘nggi tranzaksiyalar
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-[#64748b]">
+                  <thead className="bg-[#f8fafc] text-[#475569] font-bold border-b border-[#e2e8f0]">
+                    <tr>
+                      <th className="p-3">Sana</th>
+                      <th className="p-3">Do‘kon / ID</th>
+                      <th className="p-3">Summa</th>
+                      <th className="p-3">Holat</th>
+                      <th className="p-3">Tur (Real/Test)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f1f5f9]">
+                    {crmData?.payments?.slice(0, 10).map((p: any) => (
+                      <tr key={p.id} className="hover:bg-[#f8fafc]">
+                        <td className="p-3">{new Date(p.createdAt).toLocaleString('uz-UZ')}</td>
+                        <td className="p-3 font-mono text-[#1769e0]">{p.shopId}</td>
+                        <td className="p-3 font-bold text-[#152238]">{Number(p.amount).toLocaleString()} UZS</td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                              p.status === 'paid'
+                                ? 'bg-[#eaf8f1] text-[#16865b]'
+                                : p.status === 'pending'
+                                ? 'bg-[#fff4df] text-[#ae7212]'
+                                : 'bg-[#fee2e2] text-[#dc2626]'
+                            }`}
+                          >
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {p.isTest ? (
+                            <span className="text-[#ae7212] font-semibold bg-[#fff4df] px-2 py-0.5 rounded text-[10px]">Test To‘lov</span>
+                          ) : (
+                            <span className="text-[#16865b] font-semibold bg-[#eaf8f1] px-2 py-0.5 rounded text-[10px]">Real To‘lov</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {!crmData?.payments?.length && (
+                      <tr>
+                        <td colSpan={5} className="p-4 text-center">Hozircha to‘lovlar yo‘q.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1182,7 +1250,12 @@ export function PaybotDashboard() {
                       <td className="p-3 font-bold text-[#152238]">{s.name}</td>
                       <td className="p-3 font-mono text-[#1769e0]">{s.cardNumber || s.cardLast4}</td>
                       <td className="p-3">{s.accountOwner || '—'}</td>
-                      <td className="p-3 font-mono">{s.userId}</td>
+                      <td className="p-3 font-mono">
+                        <a href={`tg://user?id=${s.userId}`} className="text-blue-600 hover:underline flex items-center gap-1" title="Telegramda yozish">
+                          {s.userId}
+                          <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                        </a>
+                      </td>
                       <td className="p-3">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${

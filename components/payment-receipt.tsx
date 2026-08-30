@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -205,14 +206,19 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
           {/* QR Verification Code */}
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 shadow-inner">
-              <svg className="size-16" viewBox="0 0 100 100" fill="currentColor">
-                <path d="M10 10h30v30h-30z M15 15h20v20h-20z M20 20h10v10h-10z M60 10h30v30h-30z M65 15h20v20h-20z M70 20h10v10h-10z M10 60h30v30h-30z M15 65h20v20h-20z M20 70h10v10h-10z M50 15h5v20h-5z M60 60h10v10h-10z M80 60h10v10h-10z M70 70h10v10h-10z M50 50h15v5h-15z M60 80h25v10h-25z M45 75h10v15h-10z" />
-              </svg>
+              <QRCodeSVG 
+                value={typeof window !== 'undefined' ? `${window.location.origin}/pay/${paymentId}/receipt` : `https://paygo.uz/check/${paymentId.slice(-6)}`} 
+                size={64} 
+                level="M" 
+                className="text-slate-800"
+              />
             </div>
             <div className="text-[11px] text-slate-500">
               <p className="font-bold text-slate-800">Onlayn Tekshirish</p>
               <p className="text-[10px] text-slate-400">QR orqali chekning haqiqiyligini tekshiring</p>
-              <p className="font-mono text-[9px] text-blue-600 mt-0.5">paygo.uz/check/{paymentId.slice(-6)}</p>
+              <p className="font-mono text-[9px] text-blue-600 mt-0.5">
+                {typeof window !== 'undefined' ? window.location.host : 'paygo.uz'}/check/{paymentId.slice(-6)}
+              </p>
             </div>
           </div>
 
@@ -316,7 +322,7 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
         {/* Footer Note */}
         <div className="mt-6 pt-4 border-t border-slate-100 text-center text-[10px] text-slate-400">
           <p>Ushbu chek elektron shaklda tuzilgan va HUMO banking xabarnomasi bilan tasdiqlangan.</p>
-          <p className="mt-0.5">Savollar yoki qo‘llab-quvvatlash: @Pay_Gouzbot • https://paygo-pearl.vercel.app</p>
+          <p className="mt-0.5">Savollar yoki qo‘llab-quvvatlash: @Pay_Gouzbot • {typeof window !== 'undefined' ? window.location.origin : 'https://paygo-pearl.vercel.app'}</p>
         </div>
       </div>
     </div>

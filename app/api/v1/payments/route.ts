@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { payments } from '@/lib/db/schema'
+import { payments, storeApiKeys } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+import { checkTransactionLimits } from '@/lib/utils/limits'
 
 const createPaymentSchema = z.object({
   shopId: z.string().min(1),
@@ -15,16 +17,30 @@ export async function POST(request: Request) {
   try {
     const apiKey = request.headers.get('x-api-key')
     if (!apiKey) return NextResponse.json({ error: 'missing_api_key' }, { status: 401 })
+    
+    const keyRecord = await db.select().from(storeApiKeys).where(eq(storeApiKeys.key, apiKey)).limit(1)
+    if (!keyRecord.length || !keyRecord[0].active) {
+      return NextResponse.json({ error: 'invalid_api_key' }, { status: 403 })
+    }
+
+    const userId = keyRecord[0].userId
+    const limitCheck = await checkTransactionLimits(userId)
+    if (!limitCheck.allowed) {
+      return NextResponse.json({ error: 'quota_exceeded', message: limitCheck.reason }, { status: 429 })
+    }
+
     const body = createPaymentSchema.parse(await request.json())
     const paymentId = randomUUID()
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+    
     await db.insert(payments).values({
       id: paymentId,
       shopId: body.shopId,
-      userId: 'api-owner',
+      userId,
       amount: body.amount,
       expiresAt,
     })
+    
     return NextResponse.json({
       id: paymentId,
       orderId: body.orderId,
