@@ -23,7 +23,7 @@ import {
   submitTelegram2FA,
   cancelOnboarding,
 } from '@/lib/userbot-onboarding'
-import { startHumoUserbot } from '@/lib/telegram-userbot'
+import { startHumoUserbot, stopHumoUserbot, isUserbotActive } from '@/lib/telegram-userbot'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 
 export const dynamic = 'force-dynamic'
@@ -117,6 +117,16 @@ const testAmountsKeyboard = {
 
 const clean = (text: string) => text.replace(/^[^\p{L}\p{N}]+/u, '').trim()
 
+function cleanText(str: string): string {
+  if (!str) return ''
+  return str
+    .toLowerCase()
+    .replace(/[‘'’`ʻ]/g, "'")
+    .replace(/[^\p{L}\p{N}\s'/_-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function formatCard(raw: string): string {
   const digits = (raw || '').replace(/\D/g, '')
   if (digits.length >= 16) {
@@ -197,6 +207,122 @@ async function answerCallback(token: string, callbackQueryId: string, text?: str
       }),
     })
   } catch {}
+}
+
+// Check if user has an active userbot connection
+async function isUserbotConnectedForUser(userIdStr: string): Promise<boolean> {
+  try {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (userShops.length && userShops[0]?.userbotSession) {
+      return true
+    }
+    const conns = await db.select().from(userbotConnections).where(eq(userbotConnections.userId, userIdStr))
+    if (conns.some((c) => c.status === 'active' && Boolean(c.sessionString))) {
+      return true
+    }
+  } catch (e) {
+    console.warn('isUserbotConnectedForUser check error:', e)
+  }
+  return isUserbotActive(userIdStr)
+}
+
+// Render and send detailed shop information
+async function showShopDetails(token: string, chatId: number, userIdStr: string) {
+  const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+  if (!userShops.length || !userShops[0]) {
+    await send(
+      token,
+      chatId,
+      '🏪 <b>Sizda hali do‘kon yo‘q.</b>\n\nTo‘lovlarni qabul qilish va boshlash uchun <b>🛍 Do‘kon ochish</b> tugmasini bosing.',
+      menu
+    )
+    return
+  }
+
+  const s = userShops[0]
+  const isConnected = await isUserbotConnectedForUser(userIdStr)
+  const formattedCard = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
+  const authUrl = await generateAuthUrl(userIdStr)
+
+  await send(
+    token,
+    chatId,
+    `🏪 <b>Do‘kon Ma’lumotlari va Sozlamalari:</b>\n\n` +
+    `🏷 <b>Nomi:</b> ${s.name}\n` +
+    `💳 <b>Karta:</b> <code>${formattedCard}</code> (${s.cardBank || 'HUMOCARD'})\n` +
+    `👤 <b>Egasi:</b> ${s.accountOwner || 'Kiritilmagan'}\n` +
+    `🖼 <b>Logo:</b> ${s.logoUrl ? '✅ Yuklangan' : '❌ Yo‘q'}\n` +
+    `🔗 <b>Webhook URL:</b> ${s.webhookUrl ? `<code>${s.webhookUrl}</code>` : '❌ O‘rnatilmagan'}\n` +
+    `📣 <b>Telegram Kanal:</b> ${s.telegramChannelId ? `<code>${s.telegramChannelId}</code>` : '❌ Ulanmagan'}\n` +
+    `🤖 <b>Userbot (@humocardbot):</b> ${isConnected ? '🟢 Ulangan va Faol' : '🔴 Ulanmagan'}\n` +
+    `⚡️ <b>Holat:</b> ${s.approved ? '✅ Tasdiqlangan' : '⏳ Kutilmoqda'}\n` +
+    `🆔 <b>Shop ID:</b> <code>${s.id}</code>\n\n` +
+    `Tahrirlash va boshqarish uchun quyidagi tugmalardan foydalaning:`,
+    {
+      inline_keyboard: [
+        [
+          { text: '✏️ Nomni o‘zgartirish', callback_data: 'edit_shop_name' },
+          { text: '💳 Karta & Egasini tahrirlash', callback_data: 'edit_shop_card' },
+        ],
+        [
+          { text: '🔗 Webhook sozlash', callback_data: 'edit_shop_webhook' },
+          { text: '🖼 Logo yuklash', callback_data: 'edit_shop_logo' },
+        ],
+        [
+          { text: '📣 Kanal ulash / test', callback_data: 'edit_shop_channel' },
+          { text: '🧪 Test to‘lov', callback_data: 'test_pay' },
+        ],
+        [
+          ...(isConnected
+            ? [{ text: '🔴 Userbotni uzish', callback_data: 'userbot_disconnect_step1' }]
+            : [{ text: '🔐 Userbot ulash', callback_data: 'userbot_connect_prompt' }]),
+        ],
+        [{ text: '🌐 Web CRM Dashboardni ochish', url: authUrl }],
+      ],
+    }
+  )
+}
+
+// Render and send Userbot status or onboarding flow
+async function showUserbotStatus(token: string, chatId: number, userIdStr: string) {
+  const isConnected = await isUserbotConnectedForUser(userIdStr)
+
+  if (isConnected) {
+    await send(
+      token,
+      chatId,
+      `🤖 <b>Userbot Holati: 🟢 Ulangan va Faol</b>\n\n` +
+      `✅ Sizning Telegram hisobingiz orqali <b>@humocardbot</b> monitoringi faol ishlamoqda.\n` +
+      `⚡️ HUMO kartangizga pul tushishi bilan to‘lovlar avtomatik tasdiqlanadi va Webhook hamda Telegram kanalingizga yuboriladi.\n\n` +
+      `🆔 <b>Telegram ID:</b> <code>${userIdStr}</code>\n` +
+      `🔔 <b>Monitoring:</b> @humocardbot to‘lov xabarnomalari\n\n` +
+      `⚙️ <i>Agar hisobingizni almashtirmoqchi bo‘lsangiz yoki userbotni to‘xtatmoqchi bo‘lsangiz, quyidagi tugma orqali uzishingiz mumkin (2 bosqichli tasdiq talab qilinadi).</i>`,
+      {
+        inline_keyboard: [
+          [{ text: '🔴 Userbotni uzish', callback_data: 'userbot_disconnect_step1' }],
+          [
+            { text: '🧪 Test to‘lov', callback_data: 'test_pay' },
+            { text: '🏪 Mening do‘konim', callback_data: 'view_my_shop' },
+          ],
+        ],
+      }
+    )
+    return
+  }
+
+  // Not connected yet: start fresh onboarding
+  beginOnboarding(userIdStr)
+  const newFlow: Flow = { step: 'userbot_api_id', userbot: {} }
+  await stateSet(chatId, newFlow)
+  await send(
+    token,
+    chatId,
+    `🔐 <b>Telegram Userbot ulash (1/4)</b>\n\n` +
+    `Userbot @humocardbot dan kelgan HUMO to‘lov xabarnomalarini avtomatik o‘qib, to‘lovlarni tasdiqlaydi.\n\n` +
+    `1️⃣ Iltimos, <b>Telegram API ID</b> raqamingizni yuboring:\n` +
+    `(Uni <a href="https://my.telegram.org">my.telegram.org</a> saytidan olasiz, masalan: <code>12345678</code>)`,
+    back
+  )
 }
 
 // Generate authenticated login URL for user
@@ -330,6 +456,103 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    if (data === 'view_my_shop') {
+      await showShopDetails(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'userbot_connect_prompt') {
+      await showUserbotStatus(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
+    // -----------------------------------------------------------
+    // USERBOT 2-STEP DISCONNECT HANDLERS
+    // -----------------------------------------------------------
+    if (data === 'userbot_disconnect_step1') {
+      await send(
+        token,
+        chatId,
+        `⚠️ <b>1-bosqich: Haqiqatan ham Userbotni uzmoqchimisiz?</b>\n\n` +
+        `Userbot uzilsa:\n` +
+        `• <b>@humocardbot</b> dan keladigan HUMO to‘lov xabarnomalari o‘qilmaydi\n` +
+        `• Do‘koningizdagi to‘lovlar avtomatik tasdiqlanmay qoladi\n\n` +
+        `Davom etish uchun quyidagi <b>"⚠️ Ha, uzishni tasdiqlayman (1/2)"</b> tugmasini bosing:`,
+        {
+          inline_keyboard: [
+            [{ text: '⚠️ Ha, uzishni tasdiqlayman (1/2)', callback_data: 'userbot_disconnect_step2' }],
+            [{ text: '❌ Bekor qilish (qoldirish)', callback_data: 'userbot_disconnect_cancel' }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'userbot_disconnect_step2') {
+      await send(
+        token,
+        chatId,
+        `🚨 <b>2-bosqich (Yakuniy tasdiq): Userbotni butunlay uzishga 100% aminmisiz?</b>\n\n` +
+        `Sizning Telegram sessiyangiz server xotirasidan va ma’lumotlar bazasidan butunlay o‘chiriladi.\n\n` +
+        `Uzishni yakunlash uchun quyidagi tugmani bosing (2/2):`,
+        {
+          inline_keyboard: [
+            [{ text: '🔴 HA, USERBOTNI BUTUNLAY UZISH (2/2)', callback_data: 'userbot_disconnect_final' }],
+            [{ text: '↩️ Bekor qilish (qoldirish)', callback_data: 'userbot_disconnect_cancel' }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'userbot_disconnect_final') {
+      stopHumoUserbot(userIdStr)
+      cancelOnboarding(userIdStr)
+      try {
+        await db.update(shops).set({ userbotSession: null }).where(eq(shops.userId, userIdStr))
+        await db.delete(userbotConnections).where(eq(userbotConnections.userId, userIdStr))
+      } catch (dbErr) {
+        console.warn('Disconnect DB error:', dbErr)
+      }
+      await stateDelete(chatId)
+      await send(
+        token,
+        chatId,
+        `✅ <b>Userbot muvaffaqiyatli uzildi va to‘xtatildi!</b>\n\n` +
+        `Sizning sessiyangiz xavfsiz tarzda o‘chirildi. Endi yangi Telegram hisobini ulash uchun <b>🔐 Userbot ulash</b> tugmasini bosishingiz mumkin.`,
+        menu
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'userbot_disconnect_cancel') {
+      await send(
+        token,
+        chatId,
+        `🟢 <b>Bekor qilindi.</b> Userbot faol holatda qoldirildi va @humocardbot to‘lovlari monitoringi davom etmoqda.`,
+        menu
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'test_pay') {
+      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+      if (!userShops.length) {
+        await send(token, chatId, '⚠️ Test to‘lov yaratishdan oldin do‘kon ochishingiz kerak. Iltimos <b>🛍 Do‘kon ochish</b> tugmasini bosing.', menu)
+        return NextResponse.json({ ok: true })
+      }
+      await stateSet(chatId, { step: 'test_pay_amount' })
+      await send(
+        token,
+        chatId,
+        `🧪 <b>Test To‘lov Yaratish (1/2)</b>\n\n` +
+        `To‘lov tizimingizni sinash uchun test to‘lov summasini kiriting (masalan: <code>15000</code>) yoki quyidagi variantlardan birini tanlang:\n\n` +
+        `⏱ <i>To‘lov muddati: <b>5 daqiqa (300 soniya)</b></i>`,
+        testAmountsKeyboard
+      )
+      return NextResponse.json({ ok: true })
+    }
+
     if (data === 'unlink_channel') {
       await db.update(shops).set({ telegramChannelId: null }).where(eq(shops.userId, userIdStr))
       await send(token, chatId, '✅ Telegram kanal muvaffaqiyatli uzildi.', menu)
@@ -356,7 +579,104 @@ export async function POST(request: Request) {
   const userIdStr = String(chatId)
   const raw = (message.text ?? '').trim()
   const text = clean(raw)
+  const norm = cleanText(raw)
   let flow = await stateGet(chatId)
+
+  // Top-level menu matchers for robust button and text detection
+  const isMyShopCmd =
+    norm.includes('mening do') ||
+    norm.includes('mening dukon') ||
+    norm.includes('mening do kon') ||
+    norm.includes('dukon sozlamalari') ||
+    norm.includes('do kon sozlamalari') ||
+    norm.includes("do'kon sozlamalari") ||
+    raw === '/myshop' ||
+    raw === '/shop' ||
+    text === 'Mening do‘konim' ||
+    text === "Mening do'konim" ||
+    text === 'Mening dukonim'
+
+  const isUserbotCmd =
+    norm.includes('userbot') ||
+    raw === '/userbot' ||
+    text === 'Userbot ulash' ||
+    text === 'Userbot holati' ||
+    text === 'Userbot'
+
+  const isNewShopCmd =
+    norm.includes("do'kon ochish") ||
+    norm.includes('dukon ochish') ||
+    norm.includes('do kon ochish') ||
+    text === 'Do‘kon ochish' ||
+    text === "Do'kon ochish" ||
+    text === 'Dukon ochish' ||
+    raw === '/newshop'
+
+  const isMyCardCmd =
+    norm.includes('mening kartam') ||
+    norm.includes('kartani tahrirlash') ||
+    text === 'Mening kartam' ||
+    text === 'Kartani tahrirlash' ||
+    raw === '/card'
+
+  const isChannelCmd =
+    norm.includes('kanal ulash') ||
+    norm.includes('telegram kanal') ||
+    text === 'Kanal ulash' ||
+    text === 'Telegram kanal ulash' ||
+    raw === '/channel'
+
+  const isWebhookCmd =
+    norm.includes('webhook sozlash') ||
+    norm.includes('webhook') ||
+    text === 'Webhook sozlash' ||
+    raw === '/webhook'
+
+  const isDocsCmd =
+    norm.includes('api hujjat') ||
+    norm.includes('hujjat') ||
+    text === 'API hujjat' ||
+    raw === '/docs'
+
+  const isTestPayCmd =
+    norm.includes('test to') ||
+    norm.includes('test tolov') ||
+    text === 'Test to‘lov' ||
+    text === "Test to'lov" ||
+    raw === '/testpay'
+
+  const isTariffsCmd =
+    norm.includes('tariflar') ||
+    norm.includes('premium') ||
+    text === 'Tariflar' ||
+    text === 'Premium' ||
+    raw === '/tariffs'
+
+  const isPanelCmd =
+    norm.includes('veb-panel') ||
+    norm.includes('veb panel') ||
+    norm.includes('panel') ||
+    text === 'Veb-panelga kirish' ||
+    raw === '/panel'
+
+  const isAdminCmd =
+    raw === '/admin' ||
+    text === 'Admin' ||
+    text === 'Crm' ||
+    text === 'Admin panel' ||
+    norm === 'admin' ||
+    norm === 'crm' ||
+    norm === 'admin panel' ||
+    norm === 'admin paneli'
+
+  const isCancelCmd =
+    norm.includes('orqaga') ||
+    norm.includes('bekor qilish') ||
+    norm.includes('asosiy menyu') ||
+    text === 'Orqaga' ||
+    text === 'Bekor qilish' ||
+    raw === '/cancel' ||
+    raw === '/back'
 
   // -------------------------------------------------------------
   // PHOTO UPLOAD (e.g. for Logo)
@@ -499,10 +819,191 @@ export async function POST(request: Request) {
   }
 
   // Cancel / Back
-  if (text === 'Orqaga' || text === 'Bekor qilish' || raw === '/cancel' || text === 'Asosiy menyuga qaytish') {
+  if (isCancelCmd) {
     await stateDelete(chatId)
     cancelOnboarding(userIdStr)
     await send(token, chatId, '🏠 Asosiy menyudasiz.', menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // MENING DO'KONIM (Immediate trigger with full details & status)
+  // -------------------------------------------------------------
+  if (isMyShopCmd) {
+    await stateDelete(chatId)
+    await showShopDetails(token, chatId, userIdStr)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // USERBOT STATUS / ONBOARDING (Checks active status first!)
+  // -------------------------------------------------------------
+  if (isUserbotCmd) {
+    await stateDelete(chatId)
+    await showUserbotStatus(token, chatId, userIdStr)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // 1-CLICK WEB PANEL AUTH LINK
+  // -------------------------------------------------------------
+  if (isPanelCmd) {
+    await stateDelete(chatId)
+    const authUrl = await generateAuthUrl(userIdStr)
+    await send(
+      token,
+      chatId,
+      `🌐 <b>PayGo Veb Boshqaruv Paneli (CRM)</b>\n\n` +
+      `Saytga avtomatik kirish va barcha do‘kon, to‘lovlar, webhook va karta sozlamalarini boshqarish uchun quyidagi havola orqali kiring:\n\n` +
+      `🔗 <a href="${authUrl}"><b>Veb-panelni ochish (1-klikda kirish)</b></a>\n\n` +
+      `<i>Eslatma: Ushbu havola sizning shaxsiy xavfsiz kalitingiz bilan yaratilgan.</i>`,
+      menu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // KANAL ULASH OQIMI
+  // -------------------------------------------------------------
+  if (isChannelCmd) {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (!userShops.length) {
+      await send(
+        token,
+        chatId,
+        '⚠️ Kanal ulashdan oldin do‘kon yaratishingiz kerak. Iltimos, avval <b>🛍 Do‘kon ochish</b> tugmasini bosing.',
+        menu
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    const shop = userShops[0]
+    await stateSet(chatId, { step: 'channel_connect', targetShopId: shop.id })
+
+    let currentChannelInfo = ''
+    if (shop.telegramChannelId) {
+      currentChannelInfo = `\n📌 <i>Hozir ulangan kanal:</i> <code>${shop.telegramChannelId}</code>\n`
+    }
+
+    await send(
+      token,
+      chatId,
+      `📣 <b>Telegram Kanal Ulash</b>${currentChannelInfo}\n` +
+      `To‘lovlar amalga oshirilganda barcha cheklar va to‘liq <b>JSON ma’lumotlar</b> to‘g‘ridan-to‘g‘ri kanalingizga post qilib tashlanadi!\n\n` +
+      `<b>Qanday ulanadi:</b>\n` +
+      `1️⃣ Avval botimizni kanalingizga <b>Administrator</b> qilib qo‘shing (xabar yozish huquqi bilan).\n` +
+      `2️⃣ So‘ngra kanalingiz username (<code>@mening_kanalim</code>) yoki ID (<code>-1001234567890</code>) sini shu yerga yozing, yoki kanaldan ixtiyoriy bitta xabarni shu yerga <b>Forward (Uzatish)</b> qiling:\n`,
+      back
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // WEBHOOK SOZLASH & DOKUMENTATSIYA
+  // -------------------------------------------------------------
+  if (isWebhookCmd) {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const currentWebhook = userShops[0]?.webhookUrl || 'Mavjud emas'
+
+    await send(
+      token,
+      chatId,
+      `🔗 <b>PayGo Webhook Sozlamalari</b>\n\n` +
+      `To‘lov muvaffaqiyatli tasdiqlanganda serveringizga <code>POST</code> so‘rovi orqali to‘liq JSON ma’lumot yuboriladi.\n\n` +
+      `🌐 <b>Hozirgi Webhook URL:</b> <code>${currentWebhook}</code>\n\n` +
+      `📦 <b>Webhook JSON formati:</b>\n` +
+      `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "eventId": "evt_98f4e21a",\n  "createdAt": "2026-08-30T11:05:00Z",\n  "payment": {\n    "id": "pay_7fa83210",\n    "amount": 50000,\n    "currency": "UZS",\n    "status": "paid",\n    "cardLast4": "3587"\n  },\n  "signature": "sha256_hash"\n}</code></pre>\n\n` +
+      `📄 <b>JSON Schema fayli:</b> <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n` +
+      `🌐 <b>To‘liq API Hujjati:</b> <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>`,
+      {
+        inline_keyboard: [
+          [{ text: '✏️ Webhook URL sozlash', callback_data: 'edit_shop_webhook' }],
+          [{ text: '🌐 Web Panel orqali sozlash', url: `${APP_URL}/panel` }],
+        ],
+      }
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (isDocsCmd) {
+    await send(
+      token,
+      chatId,
+      `📚 <b>PayGo API va Webhook Hujjatlari:</b>\n\n` +
+      `🔹 <b>Webhook JSON formati va Schema:</b>\n` +
+      `🔗 <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n\n` +
+      `🔹 <b>To‘liq REST API Documentation:</b>\n` +
+      `🔗 <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>\n\n` +
+      `🔹 <b>Word / DOCX Formati:</b>\n` +
+      `🔗 <a href="${APP_URL}/paybot-api.docx">${APP_URL}/paybot-api.docx</a>\n\n` +
+      `Xavfsizlik: Barcha webhooklar <code>X-PayGo-Signature: sha256=...</code> HMAC imzosi bilan jo‘natiladi.`,
+      menu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // TEST TO'LOV OQIMI
+  // -------------------------------------------------------------
+  if (isTestPayCmd) {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (!userShops.length) {
+      await send(
+        token,
+        chatId,
+        '⚠️ Test to‘lov yaratishdan oldin do‘kon ochishingiz kerak. Iltimos <b>🛍 Do‘kon ochish</b> tugmasini bosing.',
+        menu
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    await stateSet(chatId, { step: 'test_pay_amount' })
+    await send(
+      token,
+      chatId,
+      `🧪 <b>Test To‘lov Yaratish (1/2)</b>\n\n` +
+      `To‘lov tizimingizni sinash uchun test to‘lov summasini kiriting (masalan: <code>15000</code>) yoki quyidagi variantlardan birini tanlang:\n\n` +
+      `⏱ <i>To‘lov muddati: <b>5 daqiqa (300 soniya)</b></i>\n` +
+      `To‘lov tasdiqlangach Webhook va Kanalingizga to‘liq JSON ma’lumot boradi.`,
+      testAmountsKeyboard
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // MENING KARTAM
+  // -------------------------------------------------------------
+  if (isMyCardCmd) {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (userShops.length && userShops[0]) {
+      const s = userShops[0]
+      const formatted = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
+      await send(
+        token,
+        chatId,
+        `💳 <b>To‘lov qabul qiluvchi HUMO kartangiz:</b>\n\n` +
+        `🔢 <b>To‘liq raqam:</b> <code>${formatted}</code>\n` +
+        `👤 <b>Karta egasi:</b> ${s.accountOwner ?? 'Hisob egasi'}\n` +
+        `🏦 <b>Tizim:</b> ${s.cardBank ?? 'HUMOCARD'}\n\n` +
+        `ℹ️ <i>To‘lov sahifasida xaridorlarga ushbu to‘liq karta raqami ko‘rsatiladi.</i>`,
+        {
+          inline_keyboard: [
+            [{ text: '✏️ Kartani tahrirlash', callback_data: 'edit_shop_card' }],
+          ],
+        }
+      )
+    } else {
+      await send(token, chatId, '💳 Hali karta kiritilmagan. Avval "🛍 Do‘kon ochish" orqali karta kiriting.', menu)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // DO'KON OCHISH OQIMI
+  // -------------------------------------------------------------
+  if (isNewShopCmd) {
+    await stateSet(chatId, { step: 'shop_name', shop: {} })
+    await send(token, chatId, '🛍 <b>Do‘kon ochish (1/4)</b>\n\nDo‘koningiz nomini yuboring (masalan: <i>Online Supermarket</i>):', back)
     return NextResponse.json({ ok: true })
   }
 
@@ -556,59 +1057,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  // -------------------------------------------------------------
-  // 1-CLICK WEB PANEL AUTH LINK
-  // -------------------------------------------------------------
-  if (text === 'Veb-panelga kirish' || raw === '/panel' || text === 'Panel') {
-    const authUrl = await generateAuthUrl(userIdStr)
-    await send(
-      token,
-      chatId,
-      `🌐 <b>PayGo Veb Boshqaruv Paneli (CRM)</b>\n\n` +
-      `Saytga avtomatik kirish va barcha do‘kon, to‘lovlar, webhook va karta sozlamalarini boshqarish uchun quyidagi havola orqali kiring:\n\n` +
-      `🔗 <a href="${authUrl}"><b>Veb-panelni ochish (1-klikda kirish)</b></a>\n\n` +
-      `<i>Eslatma: Ushbu havola sizning shaxsiy xavfsiz kalitingiz bilan yaratilgan.</i>`,
-      menu
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // KANAL ULASH OQIMI (Interactive Channel Link directly in bot)
-  // -------------------------------------------------------------
-  if (text === 'Kanal ulash' || raw === '/channel' || text === 'Telegram kanal ulash') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    if (!userShops.length) {
-      await send(
-        token,
-        chatId,
-        '⚠️ Kanal ulashdan oldin do‘kon yaratishingiz kerak. Iltimos, avval <b>🛍 Do‘kon ochish</b> tugmasini bosing.',
-        menu
-      )
-      return NextResponse.json({ ok: true })
-    }
-
-    const shop = userShops[0]
-    await stateSet(chatId, { step: 'channel_connect', targetShopId: shop.id })
-
-    let currentChannelInfo = ''
-    if (shop.telegramChannelId) {
-      currentChannelInfo = `\n📌 <i>Hozir ulangan kanal:</i> <code>${shop.telegramChannelId}</code>\n`
-    }
-
-    await send(
-      token,
-      chatId,
-      `📣 <b>Telegram Kanal Ulash</b>${currentChannelInfo}\n` +
-      `To‘lovlar amalga oshirilganda barcha cheklar va to‘liq <b>JSON ma’lumotlar</b> to‘g‘ridan-to‘g‘ri kanalingizga post qilib tashlanadi!\n\n` +
-      `<b>Qanday ulanadi:</b>\n` +
-      `1️⃣ Avval botimizni kanalingizga <b>Administrator</b> qilib qo‘shing (xabar yozish huquqi bilan).\n` +
-      `2️⃣ So‘ngra kanalingiz username (<code>@mening_kanalim</code>) yoki ID (<code>-1001234567890</code>) sini shu yerga yozing, yoki kanaldan ixtiyoriy bitta xabarni shu yerga <b>Forward (Uzatish)</b> qiling:\n`,
-      back
-    )
-    return NextResponse.json({ ok: true })
-  }
-
   // Channel ID / Username text input
   if (flow?.step === 'channel_connect') {
     let targetChannel = raw.trim()
@@ -652,293 +1100,8 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------
-  // WEBHOOK SOZLASH & DOKUMENTATSIYA
+  // SHOP CREATION FLOW STEPS
   // -------------------------------------------------------------
-  if (text === 'Webhook sozlash' || raw === '/webhook') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    const currentWebhook = userShops[0]?.webhookUrl || 'Mavjud emas'
-
-    await send(
-      token,
-      chatId,
-      `🔗 <b>PayGo Webhook Sozlamalari</b>\n\n` +
-      `To‘lov muvaffaqiyatli tasdiqlanganda serveringizga <code>POST</code> so‘rovi orqali to‘liq JSON ma’lumot yuboriladi.\n\n` +
-      `🌐 <b>Hozirgi Webhook URL:</b> <code>${currentWebhook}</code>\n\n` +
-      `📦 <b>Webhook JSON formati:</b>\n` +
-      `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "eventId": "evt_98f4e21a",\n  "createdAt": "2026-08-30T11:05:00Z",\n  "payment": {\n    "id": "pay_7fa83210",\n    "amount": 50000,\n    "currency": "UZS",\n    "status": "paid",\n    "cardLast4": "3587"\n  },\n  "signature": "sha256_hash"\n}</code></pre>\n\n` +
-      `📄 <b>JSON Schema fayli:</b> <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n` +
-      `🌐 <b>To‘liq API Hujjati:</b> <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>`,
-      {
-        inline_keyboard: [
-          [{ text: '✏️ Webhook URL sozlash', callback_data: 'edit_shop_webhook' }],
-          [{ text: '🌐 Web Panel orqali sozlash', url: `${APP_URL}/panel` }],
-        ],
-      }
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  if (text === 'API hujjat' || raw === '/docs') {
-    await send(
-      token,
-      chatId,
-      `📚 <b>PayGo API va Webhook Hujjatlari:</b>\n\n` +
-      `🔹 <b>Webhook JSON formati va Schema:</b>\n` +
-      `🔗 <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n\n` +
-      `🔹 <b>To‘liq REST API Documentation:</b>\n` +
-      `🔗 <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>\n\n` +
-      `🔹 <b>Word / DOCX Formati:</b>\n` +
-      `🔗 <a href="${APP_URL}/paybot-api.docx">${APP_URL}/paybot-api.docx</a>\n\n` +
-      `Xavfsizlik: Barcha webhooklar <code>X-PayGo-Signature: sha256=...</code> HMAC imzosi bilan jo‘natiladi.`,
-      menu
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // TEST TO'LOV OQIMI (Custom amount & Exactly 5 minutes countdown)
-  // -------------------------------------------------------------
-  if (text === 'Test to‘lov' || raw === '/testpay') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    if (!userShops.length) {
-      await send(
-        token,
-        chatId,
-        '⚠️ Test to‘lov yaratishdan oldin do‘kon ochishingiz kerak. Iltimos <b>🛍 Do‘kon ochish</b> tugmasini bosing.',
-        menu
-      )
-      return NextResponse.json({ ok: true })
-    }
-
-    await stateSet(chatId, { step: 'test_pay_amount' })
-    await send(
-      token,
-      chatId,
-      `🧪 <b>Test To‘lov Yaratish (1/2)</b>\n\n` +
-      `To‘lov tizimingizni sinash uchun test to‘lov summasini kiriting (masalan: <code>15000</code>) yoki quyidagi variantlardan birini tanlang:\n\n` +
-      `⏱ <i>To‘lov muddati: <b>5 daqiqa (300 soniya)</b></i>\n` +
-      `To‘lov tasdiqlangach Webhook va Kanalingizga to‘liq JSON ma’lumot boradi.`,
-      testAmountsKeyboard
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  if (flow?.step === 'test_pay_amount') {
-    const cleanNum = Number(raw.replace(/[^\d]/g, ''))
-    if (!cleanNum || cleanNum < 100) {
-      await send(
-        token,
-        chatId,
-        '❗ Noto‘g‘ri summa. Iltimos raqam ko‘rinishida kiriting (masalan: <code>10000</code>):',
-        testAmountsKeyboard
-      )
-      return NextResponse.json({ ok: true })
-    }
-
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    const shop = userShops[0]
-    const paymentId = `pay_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // EXACTLY 5 MINUTES
-
-    await db.insert(payments).values({
-      id: paymentId,
-      shopId: shop.id,
-      userId: userIdStr,
-      amount: cleanNum,
-      currency: 'UZS',
-      status: 'pending',
-      expiresAt,
-    })
-
-    await stateDelete(chatId)
-    const payUrl = `${APP_URL}/pay/${paymentId}`
-
-    await send(
-      token,
-      chatId,
-      `🧪 <b>Test To‘lov Muvaffaqiyatli Yaratildi!</b>\n\n` +
-      `💰 <b>Summa:</b> ${cleanNum.toLocaleString('uz-UZ')} UZS\n` +
-      `💳 <b>Karta:</b> <code>${formatCard(shop.cardNumber || '9860350123453587')}</code>\n` +
-      `👤 <b>Karta egasi:</b> ${shop.accountOwner || 'Hisob egasi'}\n` +
-      `⏱ <b>Muddati:</b> 5 daqiqa\n` +
-      `🔗 <b>To‘lov sahifasi:</b>\n<a href="${payUrl}">${payUrl}</a>\n\n` +
-      `💡 <i>To‘lov sahifasida <b>"🧪 Test to‘lovni tasdiqlash"</b> tugmasini bosishingiz mumkin. Shunda Webhook va Telegram kanalingizga JSON xabarnoma darhol boradi!</i>`,
-      {
-        inline_keyboard: [
-          [{ text: '💳 To‘lov sahifasini ochish', url: payUrl }],
-          [{ text: '📣 Kanalga test post yuborish', callback_data: 'test_channel_post' }],
-        ],
-      }
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // MENING DO'KONIM & TAHRIRLASH MENU
-  // -------------------------------------------------------------
-  if (text === 'Mening do‘konim' || text === 'Do‘kon sozlamalari' || raw === '/myshop') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    if (!userShops.length || !userShops[0]) {
-      await send(token, chatId, '🏪 Sizda hali do‘kon yo‘q. "🛍 Do‘kon ochish" tugmasini bosing.', menu)
-      return NextResponse.json({ ok: true })
-    }
-
-    const s = userShops[0]
-    let isUserbotConnected = Boolean(s.userbotSession)
-    if (!isUserbotConnected) {
-      try {
-        const conns = await db.select().from(userbotConnections).where(eq(userbotConnections.userId, userIdStr))
-        if (conns.some((c) => c.status === 'active')) isUserbotConnected = true
-      } catch {}
-    }
-
-    const formattedCard = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
-    const authUrl = await generateAuthUrl(userIdStr)
-
-    await send(
-      token,
-      chatId,
-      `🏪 <b>Do‘kon Ma’lumotlari va Sozlamalari:</b>\n\n` +
-      `🏷 <b>Nomi:</b> ${s.name}\n` +
-      `💳 <b>Karta:</b> <code>${formattedCard}</code> (${s.cardBank || 'HUMOCARD'})\n` +
-      `👤 <b>Egasi:</b> ${s.accountOwner || 'Kiritilmagan'}\n` +
-      `🖼 <b>Logo:</b> ${s.logoUrl ? '✅ Yuklangan' : '❌ Yo‘q'}\n` +
-      `🔗 <b>Webhook URL:</b> ${s.webhookUrl ? `<code>${s.webhookUrl}</code>` : '❌ O‘rnatilmagan'}\n` +
-      `📣 <b>Telegram Kanal:</b> ${s.telegramChannelId ? `<code>${s.telegramChannelId}</code>` : '❌ Ulanmagan'}\n` +
-      `🤖 <b>Userbot (@humocardbot):</b> ${isUserbotConnected ? '🟢 Faol' : '🔴 Ulanmagan'}\n` +
-      `⚡️ <b>Holat:</b> ${s.approved ? '✅ Tasdiqlangan' : '⏳ Kutilmoqda'}\n` +
-      `🆔 <b>Shop ID:</b> <code>${s.id}</code>\n\n` +
-      `Tahrirlash uchun quyidagi tugmalardan foydalaning:`,
-      {
-        inline_keyboard: [
-          [{ text: '✏️ Nomni o‘zgartirish', callback_data: 'edit_shop_name' }, { text: '💳 Karta & Egasini tahrirlash', callback_data: 'edit_shop_card' }],
-          [{ text: '🔗 Webhook sozlash', callback_data: 'edit_shop_webhook' }, { text: '🖼 Logo yuklash', callback_data: 'edit_shop_logo' }],
-          [{ text: '📣 Kanal ulash / test', callback_data: 'edit_shop_channel' }, { text: '🧪 Test to‘lov', callback_data: 'test_pay' }],
-          [{ text: '🌐 Web Dashboardni ochish', url: authUrl }],
-        ],
-      }
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // SHOP EDIT FLOW STEPS
-  // -------------------------------------------------------------
-  if (flow?.step === 'edit_shop_name') {
-    const newName = raw.trim()
-    if (!newName) {
-      await send(token, chatId, '❗ Iltimos, do‘kon nomini kiriting:', back)
-      return NextResponse.json({ ok: true })
-    }
-    await db.update(shops).set({ name: newName }).where(eq(shops.userId, userIdStr))
-    await stateDelete(chatId)
-    await send(token, chatId, `✅ <b>Do‘kon nomi "${newName}" ga o‘zgartirildi!</b>`, menu)
-    return NextResponse.json({ ok: true })
-  }
-
-  if (flow?.step === 'edit_shop_card_num') {
-    const digits = raw.replace(/\D/g, '')
-    if (digits.length < 16) {
-      await send(token, chatId, '❗ Karta raqami to‘liq emas. 16 ta raqam bo‘lishi kerak (masalan: <code>9860 3501 2345 3587</code>):', back)
-      return NextResponse.json({ ok: true })
-    }
-    flow.shop = { ...flow.shop, cardNumber: digits, cardLast4: digits.slice(-4) }
-    flow.step = 'edit_shop_card_owner'
-    await stateSet(chatId, flow)
-    await send(token, chatId, '👤 <b>Karta egasining ism-sharifini kiriting:</b>\n(Masalan: <code>AZIZBEK KARIMOV</code>):', back)
-    return NextResponse.json({ ok: true })
-  }
-
-  if (flow?.step === 'edit_shop_card_owner') {
-    const ownerName = raw.trim()
-    const cardNum = flow.shop?.cardNumber || '9860350123453587'
-    await db.update(shops).set({
-      cardNumber: cardNum,
-      cardLast4: cardNum.slice(-4),
-      accountOwner: ownerName || 'Hisob egasi',
-    }).where(eq(shops.userId, userIdStr))
-
-    await stateDelete(chatId)
-    await send(
-      token,
-      chatId,
-      `✅ <b>Karta ma’lumotlari yangilandi!</b>\n\n` +
-      `💳 <b>Karta:</b> <code>${formatCard(cardNum)}</code>\n` +
-      `👤 <b>Egasi:</b> ${ownerName}`,
-      menu
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  if (flow?.step === 'edit_shop_webhook_url') {
-    let url = raw.trim()
-    if (url.toLowerCase() === 'ochirish' || url.toLowerCase() === 'yoq') {
-      await db.update(shops).set({ webhookUrl: null }).where(eq(shops.userId, userIdStr))
-      await stateDelete(chatId)
-      await send(token, chatId, '✅ Webhook URL olib tashlandi.', menu)
-      return NextResponse.json({ ok: true })
-    }
-
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      await send(token, chatId, '❗ Noto‘g‘ri havola. URL <code>https://</code> bilan boshlanishi kerak:', back)
-      return NextResponse.json({ ok: true })
-    }
-
-    await db.update(shops).set({ webhookUrl: url }).where(eq(shops.userId, userIdStr))
-    await stateDelete(chatId)
-    await send(token, chatId, `✅ <b>Webhook URL muvaffaqiyatli saqlandi:</b>\n<code>${url}</code>`, menu)
-    return NextResponse.json({ ok: true })
-  }
-
-  if (flow?.step === 'edit_shop_logo_url') {
-    let url = raw.trim()
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      await send(token, chatId, '❗ Noto‘g‘ri havola. Rasm havolasi (URL) yoki to‘g‘ridan-to‘g‘ri rasm faylini yuboring:', back)
-      return NextResponse.json({ ok: true })
-    }
-    await db.update(shops).set({ logoUrl: url }).where(eq(shops.userId, userIdStr))
-    await stateDelete(chatId)
-    await send(token, chatId, `✅ <b>Do‘kon logotipi saqlandi!</b>`, menu)
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // MENING KARTAM
-  // -------------------------------------------------------------
-  if (text === 'Mening kartam' || text === 'Kartani tahrirlash') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    if (userShops.length && userShops[0]) {
-      const s = userShops[0]
-      const formatted = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
-      await send(
-        token,
-        chatId,
-        `💳 <b>To‘lov qabul qiluvchi HUMO kartangiz:</b>\n\n` +
-        `🔢 <b>To‘liq raqam:</b> <code>${formatted}</code>\n` +
-        `👤 <b>Karta egasi:</b> ${s.accountOwner ?? 'Hisob egasi'}\n` +
-        `🏦 <b>Tizim:</b> ${s.cardBank ?? 'HUMOCARD'}\n\n` +
-        `ℹ️ <i>To‘lov sahifasida xaridorlarga ushbu to‘liq karta raqami ko‘rsatiladi.</i>`,
-        {
-          inline_keyboard: [
-            [{ text: '✏️ Kartani tahrirlash', callback_data: 'edit_shop_card' }],
-          ],
-        }
-      )
-    } else {
-      await send(token, chatId, '💳 Hali karta kiritilmagan. Avval "🛍 Do‘kon ochish" orqali karta kiriting.', menu)
-    }
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
-  // DO'KON OCHISH OQIMI
-  // -------------------------------------------------------------
-  if (text === 'Do‘kon ochish') {
-    await stateSet(chatId, { step: 'shop_name', shop: {} })
-    await send(token, chatId, '🛍 <b>Do‘kon ochish (1/4)</b>\n\nDo‘koningiz nomini yuboring (masalan: <i>Online Supermarket</i>):', back)
-    return NextResponse.json({ ok: true })
-  }
-
   if (flow?.step === 'shop_name') {
     flow.shop = { ...flow.shop, name: raw.trim() }
     flow.step = 'shop_description'
