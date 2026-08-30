@@ -14,6 +14,48 @@ export async function ensureDbSchema() {
   if (columnsEnsured || !process.env.DATABASE_URL) return
   try {
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS "shops" (
+        "id" text PRIMARY KEY,
+        "userId" text NOT NULL,
+        "name" text NOT NULL,
+        "description" text,
+        "logoUrl" text,
+        "approved" boolean NOT NULL DEFAULT true,
+        "slug" text NOT NULL UNIQUE,
+        "cardLast4" text NOT NULL DEFAULT '3587',
+        "cardNumber" text NOT NULL DEFAULT '9860350123453587',
+        "cardBank" text DEFAULT 'HUMOCARD',
+        "accountOwner" text DEFAULT 'Hisob egasi',
+        "webhookUrl" text,
+        "telegramChannelId" text,
+        "userbotSession" text,
+        "tier" text NOT NULL DEFAULT 'free',
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "payments" (
+        "id" text PRIMARY KEY,
+        "shopId" text NOT NULL,
+        "userId" text NOT NULL,
+        "amount" integer NOT NULL,
+        "currency" text NOT NULL DEFAULT 'UZS',
+        "multiplier" integer NOT NULL DEFAULT 1,
+        "status" text NOT NULL DEFAULT 'pending',
+        "expiresAt" timestamp NOT NULL,
+        "matchedAt" timestamp,
+        "sourceMessage" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "delivery_logs" (
+        "id" text PRIMARY KEY,
+        "paymentId" text NOT NULL,
+        "target" text NOT NULL,
+        "status" text NOT NULL,
+        "response" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "cardNumber" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "cardBank" text DEFAULT 'HUMOCARD';
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "accountOwner" text;

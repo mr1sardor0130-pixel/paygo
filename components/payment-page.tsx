@@ -48,6 +48,7 @@ function formatAmount(amount: number): string {
 export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [data, setData] = useState<PaymentData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [seconds, setSeconds] = useState(300)
   const [copiedCard, setCopiedCard] = useState(false)
   const [copiedAmount, setCopiedAmount] = useState(false)
@@ -61,6 +62,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
       if (res.ok) {
         const json: PaymentData = await res.json()
         setData(json)
+        setFetchError(null)
         if (json.expiresAt) {
           const diff = Math.max(
             0,
@@ -68,9 +70,17 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
           )
           setSeconds(diff)
         }
+      } else {
+        const errJson = await res.json().catch(() => ({}))
+        if (!data) {
+          setFetchError(errJson.error === 'payment_not_found' ? 'To‘lov topilmadi' : (errJson.error || 'Yuklab bo‘lmadi'))
+        }
       }
     } catch (err) {
       console.warn('Payment fetch error:', err)
+      if (!data) {
+        setFetchError('Server bilan aloqa uzildi')
+      }
     } finally {
       setLoading(false)
     }
@@ -132,11 +142,55 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
     }
   }
 
+  if (loading && !data) {
+    return (
+      <main className="min-h-screen bg-[#f5f7fb] flex flex-col items-center justify-center px-4 text-[#152238]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-10 border-3 border-[#1769e0] border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-[#64748b]">To‘lov rekvizitlari yuklanmoqda...</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (fetchError && !data) {
+    return (
+      <main className="min-h-screen bg-[#f5f7fb] flex flex-col items-center justify-center px-4 text-[#152238]">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-[#e2e8f0] shadow-sm text-center">
+          <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-[#fee2e2] text-[#dc2626]">
+            <AlertCircle size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-[#152238]">To‘lov topilmadi</h2>
+          <p className="mt-2 text-xs text-[#64748b]">
+            Ushbu to‘lov identifikatori ({paymentId}) bazada mavjud emas yoki muddati tugab o‘chirilgan.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={() => {
+                setLoading(true)
+                fetchPayment()
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1769e0] px-5 py-3 text-xs font-bold text-white hover:bg-[#1254b7] transition"
+            >
+              <RefreshCw size={14} /> Qayta tekshirish
+            </button>
+            <Link
+              href="/panel"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-5 py-2.5 text-xs font-semibold text-[#64748b] hover:bg-[#f8fafc] transition"
+            >
+              <ArrowLeft size={14} /> Veb-panelga qaytish
+            </Link>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   const cardNumber = data?.shop?.cardNumber || '9860350123453587'
   const formattedCard = formatCardNumber(cardNumber)
   const cardOwner = data?.shop?.accountOwner || 'HUMO hisob egasi'
   const shopName = data?.shop?.name || 'HUMO to‘lov xizmati'
-  const amountNumber = data?.amount || 10000
+  const amountNumber = data?.amount ?? 1000
   const isPaid = data?.status === 'paid'
   const isExpired = data?.status === 'expired' || seconds <= 0
 

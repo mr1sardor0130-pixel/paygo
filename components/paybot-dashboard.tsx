@@ -105,15 +105,30 @@ export function PaybotDashboard() {
       let queryUserId = ''
 
       if (typeof window !== 'undefined') {
+        const tg = (window as any).Telegram?.WebApp
+        if (tg) {
+          try {
+            tg.ready?.()
+            tg.expand?.()
+            const tgUser = tg.initDataUnsafe?.user
+            if (tgUser?.id) {
+              queryUserId = String(tgUser.id)
+            }
+          } catch (tgErr) {
+            console.warn('Telegram WebApp init warning:', tgErr)
+          }
+        }
+
         storedToken = localStorage.getItem('paygo_token') || ''
         const urlParams = new URLSearchParams(window.location.search)
-        queryToken = urlParams.get('auth_token') || ''
-        queryUserId = urlParams.get('userId') || ''
+        queryToken = urlParams.get('auth_token') || urlParams.get('token') || ''
+        if (!queryUserId) {
+          queryUserId = urlParams.get('userId') || urlParams.get('tgWebAppStartParam') || ''
+        }
 
         if (queryToken) {
           storedToken = queryToken
           localStorage.setItem('paygo_token', queryToken)
-          // Clean URL
           window.history.replaceState({}, document.title, window.location.pathname)
         }
       }
@@ -238,16 +253,18 @@ export function PaybotDashboard() {
   const handleSaveShop = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingShop(true)
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
     try {
       const res = await fetch('/api/shop/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'x-telegram-user-id': currentUser?.telegramId || '',
+          'x-telegram-user-id': effectiveUserId,
         },
         body: JSON.stringify({
           action: 'update_shop',
+          userId: effectiveUserId,
           ...shopForm,
         }),
       })
@@ -272,16 +289,18 @@ export function PaybotDashboard() {
       return
     }
     setTestingWebhook(true)
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
     try {
       const res = await fetch('/api/shop/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'x-telegram-user-id': currentUser?.telegramId || '',
+          'x-telegram-user-id': effectiveUserId,
         },
         body: JSON.stringify({
           action: 'test_webhook',
+          userId: effectiveUserId,
           webhookUrl: shopForm.webhookUrl,
         }),
       })
@@ -305,24 +324,26 @@ export function PaybotDashboard() {
       return
     }
     setTestingChannel(true)
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
     try {
       const res = await fetch('/api/shop/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'x-telegram-user-id': currentUser?.telegramId || '',
+          'x-telegram-user-id': effectiveUserId,
         },
         body: JSON.stringify({
           action: 'test_channel',
+          userId: effectiveUserId,
           telegramChannelId: shopForm.telegramChannelId,
         }),
       })
       const data = await res.json()
       if (data.ok) {
-        showToast('Kanalga test xabarnoma va JSON yuborildi!')
+        showToast('Kanalga test xabar muvaffaqiyatli yuborildi!')
       } else {
-        showToast(data.error || 'Kanalga xabar yuborib bo‘lmadi', 'error')
+        showToast(data.error || 'Kanalga yuborishda xatolik', 'error')
       }
     } catch {
       showToast('Server xatosi', 'error')
@@ -337,24 +358,33 @@ export function PaybotDashboard() {
     setCreatedPayment(null)
     try {
       const amt = Number(testAmount.replace(/\D/g, '')) || 15000
-      const paymentId = `pay_${Math.random().toString(36).substring(2, 12)}`
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+      const res = await fetch('/api/pay/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': currentUser?.telegramId || '',
+        },
+        body: JSON.stringify({
+          amount: amt,
+          userId: currentUser?.telegramId,
+        }),
+      })
 
-      // We can insert or simulate
-      const res = await fetch(`/api/pay/${paymentId}`, {
-        method: 'GET',
-      })
-      // If payment not found, create it via bot test api or mock display
-      const payUrl = `${window.location.origin}/pay/${paymentId}`
-      setCreatedPayment({
-        id: paymentId,
-        amount: amt,
-        payUrl,
-        expiresAt: expiresAt.toISOString(),
-      })
-      showToast('5 daqiqalik test to‘lov havolasi yaratildi!')
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        setCreatedPayment({
+          id: data.id,
+          amount: data.amount,
+          payUrl: data.payUrl || `${window.location.origin}/pay/${data.id}`,
+          expiresAt: data.expiresAt,
+        })
+        showToast('5 daqiqalik test to‘lov havolasi Neon bazaga yozildi!')
+      } else {
+        showToast(data.error || 'Test to‘lov yaratishda xatolik', 'error')
+      }
     } catch {
-      showToast('Test to‘lov yaratishda xatolik', 'error')
+      showToast('Server bilan aloqa uzildi', 'error')
     } finally {
       setCreatingPayment(false)
     }

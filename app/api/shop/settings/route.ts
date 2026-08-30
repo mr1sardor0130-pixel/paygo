@@ -7,7 +7,7 @@ import { deliverWebhook, signPayload } from '@/lib/webhook'
 
 export const dynamic = 'force-dynamic'
 
-async function resolveUser(request: Request) {
+async function resolveUser(request: Request, bodyUserId?: string) {
   await ensureDbSchema()
   const token = request.headers.get('authorization')?.replace('Bearer ', '').trim() || ''
   const telegramHeader = request.headers.get('x-telegram-user-id') || ''
@@ -21,6 +21,10 @@ async function resolveUser(request: Request) {
 
   if (telegramHeader) {
     return { userId: telegramHeader, telegramId: telegramHeader }
+  }
+
+  if (bodyUserId) {
+    return { userId: bodyUserId, telegramId: bodyUserId }
   }
 
   return null
@@ -46,12 +50,16 @@ export async function GET(request: Request) {
 
 // POST: Update shop info or test webhook / channel
 export async function POST(request: Request) {
-  const user = await resolveUser(request)
+  let body: any = {}
+  try {
+    body = await request.json()
+  } catch {}
+
+  const user = await resolveUser(request, body.userId)
   if (!user) {
     return NextResponse.json({ error: 'Avtorizatsiyadan o‘tilmagan' }, { status: 401 })
   }
 
-  const body = await request.json()
   const { action } = body
 
   try {
