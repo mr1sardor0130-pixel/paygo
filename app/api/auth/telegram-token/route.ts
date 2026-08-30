@@ -21,7 +21,7 @@ export async function POST() {
     return NextResponse.json({ error: err?.message }, { status: 500 })
   }
 
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'humo_paybot'
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Pay_Gouzbot'
   const botLink = `https://t.me/${botUsername.replace('@', '')}?start=${token}`
 
   return NextResponse.json({

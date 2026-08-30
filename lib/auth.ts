@@ -9,12 +9,16 @@ export const auth = betterAuth({
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : process.env.V0_RUNTIME_URL),
+        : process.env.APP_URL ?? 'https://paygo-pearl.vercel.app'),
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
   },
   trustedOrigins: [
+    'https://paygo-pearl.vercel.app',
+    'https://t.me',
+    ...(process.env.APP_URL ? [process.env.APP_URL] : []),
+    ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
     ...(process.env.NODE_ENV === 'development'
       ? [
           'http://localhost:3000',
@@ -26,6 +30,7 @@ export const auth = betterAuth({
       : []),
     ...(process.env.NODE_ENV === 'production'
       ? [
+          'https://paygo-pearl.vercel.app',
           ...(process.env.VERCEL_URL
             ? [`https://${process.env.VERCEL_URL}`]
             : []),

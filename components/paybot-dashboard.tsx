@@ -395,16 +395,14 @@ export function PaybotDashboard() {
           </div>
 
           {/* Primary Login Button (1-Click Telegram Deep Link) */}
-          {loginBotLink && (
-            <a
-              href={loginBotLink}
-              target="_blank"
-              rel="noreferrer"
-              className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-[#1769e0] py-3.5 text-sm font-bold text-white shadow-md hover:bg-[#1254b7] transition active:scale-[0.99]"
-            >
-              <Send size={16} /> ✈️ Telegram orqali kirish (1-klikda)
-            </a>
-          )}
+          <a
+            href={loginBotLink || 'https://t.me/Pay_Gouzbot'}
+            target="_blank"
+            rel="noreferrer"
+            className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-[#1769e0] py-3.5 text-sm font-bold text-white shadow-md hover:bg-[#1254b7] transition active:scale-[0.99]"
+          >
+            <Send size={16} /> ✈️ @Pay_Gouzbot orqali kirish (1-klikda)
+          </a>
 
           <div className="relative my-6 text-center">
             <div className="absolute inset-0 flex items-center">
@@ -440,9 +438,14 @@ export function PaybotDashboard() {
           )}
 
           {/* Footer note */}
-          <p className="mt-6 text-center text-[11px] text-[#94a3b8]">
-            PayGo • HUMO To‘lov Avtomatlashtirish Platformasi
-          </p>
+          <div className="mt-6 flex flex-col items-center gap-1 text-[11px] text-[#94a3b8]">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-[#1769e0]">@Pay_Gouzbot</span>
+              <span>•</span>
+              <span className="font-mono text-[#64748b]">paygo-pearl.vercel.app</span>
+            </div>
+            <p>PayGo • HUMO To‘lov Avtomatlashtirish Platformasi</p>
+          </div>
         </div>
       </main>
     )
