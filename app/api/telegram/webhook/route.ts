@@ -83,6 +83,8 @@ type Flow = {
     amount?: number
   }
   targetShopId?: string
+  editTariffId?: string
+  editTariffField?: string
 }
 
 const menu = {
@@ -561,6 +563,97 @@ async function notifyAdminNewShop(token: string, shop: any) {
   }
 }
 
+async function renderAdminTariffManagement(token: string, chatId: number | string) {
+  let tariffs: any[] = []
+  try {
+    tariffs = await db.select().from(systemTariffs)
+  } catch {}
+
+  if (!tariffs.length) {
+    try {
+      await db.insert(systemTariffs).values([
+        { id: 'tariff-daily', name: 'Kunlik', description: '1 kunlik sinov va faol monitoring', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD', active: true },
+        { id: 'tariff-weekly', name: 'Haftalik', description: '7 kunlik do‘kon integratsiyasi', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD', active: true },
+        { id: 'tariff-monthly', name: 'Oylik VIP', description: '30 kunlik to‘liq cheksiz imkoniyat', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD', active: true },
+      ]).onConflictDoNothing()
+      tariffs = await db.select().from(systemTariffs)
+    } catch {}
+  }
+
+  const listText = tariffs
+    .map((t, idx) =>
+      `<b>${idx + 1}️⃣ ${t.name}</b> (ID: <code>${t.id}</code>)\n` +
+      `💰 <b>Narxi:</b> <code>${Number(t.price).toLocaleString('uz-UZ')}</code> UZS / ${t.period}\n` +
+      `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
+      `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})\n` +
+      `📝 <b>Tavsif:</b> ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}`
+    )
+    .join('\n\n─────────────\n\n')
+
+  const inlineButtons: any[] = tariffs.map((t) => [
+    { text: `✏️ ${t.name} ni tahrirlash`, callback_data: `adm_ed_tar_${t.id}` }
+  ])
+
+  inlineButtons.push([
+    { text: `💳 Barcha kartalarni o‘zgartirish`, callback_data: `adm_tar_card_all` }
+  ])
+
+  await send(
+    token,
+    chatId,
+    `💎 <b>PayGo Tizim Tariflari va Karta Boshqaruvi</b>\n\n` +
+    `${listText}\n\n` +
+    `👇 <i>Tahrirlamoqchi bo‘lgan tarifingizni tanlang yoki barcha kartalarni o‘zgartiring:</i>\n\n` +
+    `🌐 Web CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
+    { inline_keyboard: inlineButtons }
+  )
+}
+
+async function renderAdminTariffDetail(token: string, chatId: number | string, tariffId: string) {
+  let tariff: any = null
+  try {
+    const list = await db.select().from(systemTariffs).where(eq(systemTariffs.id, tariffId)).limit(1)
+    tariff = list[0]
+  } catch {}
+
+  if (!tariff) {
+    await send(token, chatId, '⚠️ Tarif topilmadi.')
+    return
+  }
+
+  const text =
+    `⚙️ <b>Tarif Tahrirlash: ${tariff.name}</b>\n\n` +
+    `🆔 <b>ID:</b> <code>${tariff.id}</code>\n` +
+    `📝 <b>Nomi:</b> ${tariff.name}\n` +
+    `💰 <b>Narxi:</b> <code>${Number(tariff.price).toLocaleString('uz-UZ')}</code> UZS\n` +
+    `⏱ <b>Muddati:</b> ${tariff.period}\n` +
+    `💳 <b>Karta:</b> <code>${formatCard(tariff.cardNumber || '')}</code>\n` +
+    `👤 <b>Egasi:</b> ${tariff.cardOwner || ''}\n` +
+    `🏦 <b>Bank:</b> ${tariff.cardBank || 'HUMOCARD'}\n` +
+    `📄 <b>Tavsif:</b> ${tariff.description || '-'}\n\n` +
+    `Quyidagi tugmalardan birini tanlab, kerakli maydonni o‘zgartiring:`
+
+  const buttons = [
+    [
+      { text: '💳 Karta raqami', callback_data: `adm_tf_field_${tariff.id}_cardNumber` },
+      { text: '👤 Karta egasi', callback_data: `adm_tf_field_${tariff.id}_cardOwner` },
+    ],
+    [
+      { text: '🏦 Bank nomi', callback_data: `adm_tf_field_${tariff.id}_cardBank` },
+      { text: '💰 Narxi', callback_data: `adm_tf_field_${tariff.id}_price` },
+    ],
+    [
+      { text: '📝 Nomi', callback_data: `adm_tf_field_${tariff.id}_name` },
+      { text: '📄 Tavsif', callback_data: `adm_tf_field_${tariff.id}_description` },
+    ],
+    [
+      { text: '🔙 Tariflar ro‘yxatiga qaytish', callback_data: 'adm_tar_list' }
+    ]
+  ]
+
+  await send(token, chatId, text, { inline_keyboard: buttons })
+}
+
 export async function GET() {
   return NextResponse.json({ ok: true, service: 'paygo-telegram-webhook', time: new Date().toISOString() })
 }
@@ -968,6 +1061,89 @@ export async function POST(request: Request) {
       const paymentId = data.replace('cancel_tariff_pay_', '')
       await db.update(payments).set({ status: 'rejected' }).where(eq(payments.id, paymentId))
       await send(token, chatId, '❌ <b>To‘lov buyurtmasi bekor qilindi.</b>', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    // -------------------------------------------------------------
+    // ADMIN TARIFF MANAGEMENT CALLBACKS
+    // -------------------------------------------------------------
+    if (data === 'adm_tar_list') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await renderAdminTariffManagement(token, chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('adm_ed_tar_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      const tariffId = data.replace('adm_ed_tar_', '')
+      await renderAdminTariffDetail(token, chatId, tariffId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('adm_tf_field_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+
+      const rest = data.replace('adm_tf_field_', '')
+      const parts = rest.split('_')
+      const fieldName = parts.pop() || ''
+      const tariffId = parts.join('_')
+
+      await stateSet(chatId, {
+        step: 'admin_edit_tariff_value',
+        editTariffId: tariffId,
+        editTariffField: fieldName,
+      })
+
+      let label = fieldName
+      let example = ''
+      if (fieldName === 'cardNumber') {
+        label = 'Karta raqami (14-16 xonali raqam)'
+        example = '9860 3501 2345 3587'
+      } else if (fieldName === 'cardOwner') {
+        label = 'Karta egasining ism-sharifi'
+        example = 'AZIZBEK ISMOILOV'
+      } else if (fieldName === 'cardBank') {
+        label = 'Bank nomi'
+        example = 'HUMOCARD'
+      } else if (fieldName === 'price') {
+        label = 'Tarif narxi (UZS summasi)'
+        example = '15000'
+      } else if (fieldName === 'name') {
+        label = 'Tarif nomi'
+        example = 'Kunlik Premium'
+      } else if (fieldName === 'description') {
+        label = 'Tarif tavsifi'
+        example = '30 kunlik to‘liq cheksiz imkoniyat'
+      }
+
+      await send(
+        token,
+        chatId,
+        `✏️ <b>Tarifning ${label}ni kiriting:</b>\n\n` +
+        `Misol: <code>${example}</code>\n\n` +
+        `<i>Yangi qiymatni Telegram orqali yuboring:</i>`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'adm_tar_card_all') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+
+      await stateSet(chatId, { step: 'admin_bulk_card' })
+      await send(
+        token,
+        chatId,
+        `💳 <b>Barcha Tariflar uchun Karta Sozlash</b>\n\n` +
+        `Karta raqami, karta egasi va bank nomini ajratuvchi (<code>|</code>) bilan yuboring:\n\n` +
+        `<code>KARTA_RAQAMI | ISM_FAMILYASI | BANK_NOMI</code>\n\n` +
+        `Masalan:\n<code>9860 3501 2345 3587 | AZIZBEK ISMOILOV | HUMOCARD</code>`,
+        back
+      )
       return NextResponse.json({ ok: true })
     }
 
@@ -1851,6 +2027,126 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------
+  // ADMIN TARIFF EDIT STEP HANDLERS
+  // -------------------------------------------------------------
+  if (flow?.step === 'admin_edit_tariff_value') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await stateDelete(chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    const tariffId = flow.editTariffId
+    const field = flow.editTariffField
+    let val = raw.trim()
+
+    if (!tariffId || !field) {
+      await stateDelete(chatId)
+      await send(token, chatId, '⚠️ Tahrirlash ma’lumotlari topilmadi.', adminMenu)
+      return NextResponse.json({ ok: true })
+    }
+
+    const updateData: any = { updatedAt: new Date() }
+
+    if (field === 'cardNumber') {
+      const cleanCard = val.replace(/\s+/g, '')
+      if (cleanCard.length < 14 || !/^\d+$/.test(cleanCard)) {
+        await send(token, chatId, '❌ Noto‘g‘ri karta raqami. Iltimos kamida 14-16 xonali raqam yuboring:', back)
+        return NextResponse.json({ ok: true })
+      }
+      updateData.cardNumber = cleanCard
+    } else if (field === 'price') {
+      const num = parseInt(val.replace(/\D/g, ''), 10)
+      if (isNaN(num) || num <= 0) {
+        await send(token, chatId, '❌ Noto‘g‘ri narx. Iltimos musbat raqam kiriting (masalan: 15000):', back)
+        return NextResponse.json({ ok: true })
+      }
+      updateData.price = num
+    } else if (field === 'cardOwner') {
+      updateData.cardOwner = val
+    } else if (field === 'cardBank') {
+      updateData.cardBank = val
+    } else if (field === 'name') {
+      updateData.name = val
+    } else if (field === 'description') {
+      updateData.description = val
+    }
+
+    try {
+      await db.update(systemTariffs).set(updateData).where(eq(systemTariffs.id, tariffId))
+    } catch (dbErr) {
+      console.error('Tariff update err:', dbErr)
+    }
+
+    await stateDelete(chatId)
+
+    await send(
+      token,
+      chatId,
+      `✅ <b>Tarif ma’lumoti muvaffaqiyatli yangilandi!</b>\n\n` +
+      `📌 <b>Maydon:</b> <code>${field}</code>\n` +
+      `✨ <b>Yangi qiymat:</b> <code>${val}</code>`,
+      adminMenu
+    )
+
+    await renderAdminTariffManagement(token, chatId)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'admin_bulk_card') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await stateDelete(chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    const parts = raw.split('|').map((s) => s.trim())
+    if (parts.length < 2) {
+      await send(
+        token,
+        chatId,
+        `❌ Noto‘g‘ri format.\nIltimos quyidagicha yuboring:\n<code>KARTA_RAQAMI | ISM FAMILYASI | BANK_NOMI</code>`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    const rawCard = parts[0].replace(/\s+/g, '')
+    const cardOwner = parts[1]
+    const cardBank = parts[2] || 'HUMOCARD'
+
+    if (rawCard.length < 14 || !/^\d+$/.test(rawCard)) {
+      await send(token, chatId, '❌ Noto‘g‘ri karta raqami. Minimum 14-16 xonali raqam bo‘lishi kerak.', back)
+      return NextResponse.json({ ok: true })
+    }
+
+    try {
+      await db.update(systemTariffs).set({
+        cardNumber: rawCard,
+        cardOwner: cardOwner,
+        cardBank: cardBank,
+        updatedAt: new Date(),
+      })
+    } catch (dbErr) {
+      console.error('Bulk card update err:', dbErr)
+    }
+
+    await stateDelete(chatId)
+    await send(
+      token,
+      chatId,
+      `🎉 <b>Barcha tariflar uchun karta ma’lumotlari muvaffaqiyatli yangilandi!</b>\n\n` +
+      `💳 <b>Karta:</b> <code>${formatCard(rawCard)}</code>\n` +
+      `👤 <b>Egasi:</b> ${cardOwner}\n` +
+      `🏦 <b>Bank:</b> ${cardBank}`,
+      adminMenu
+    )
+
+    await renderAdminTariffManagement(token, chatId)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
   // USERBOT ULASH OQIMI
   // -------------------------------------------------------------
   if (text === 'Userbot ulash' || raw === '/userbot') {
@@ -2157,16 +2453,7 @@ export async function POST(request: Request) {
   if (text === 'Tariflar boshqaruvi') {
     const isAdmin = await isAdminTelegramId(userIdStr)
     if (!isAdmin) return NextResponse.json({ ok: true })
-
-    const tariffs = await db.select().from(systemTariffs)
-    await send(
-      token,
-      chatId,
-      `💎 <b>Mavjud Tariflar Boshqaruvi:</b>\n\n` +
-      tariffs.map((t) => `• <b>${t.name}</b>: ${t.price.toLocaleString()} UZS / ${t.period} (Karta: <code>${t.cardNumber}</code> - ${t.cardOwner})`).join('\n\n') +
-      `\n\n🌐 Tariflarni to‘liq tahrirlash uchun Web CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
-      adminMenu
-    )
+    await renderAdminTariffManagement(token, chatId)
     return NextResponse.json({ ok: true })
   }
 
