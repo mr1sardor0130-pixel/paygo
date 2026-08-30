@@ -14,6 +14,9 @@ import {
   RefreshCw,
   Sparkles,
   ArrowLeft,
+  FileText,
+  Printer,
+  Download,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -240,42 +243,73 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               <p className="mt-2 text-sm text-[#718096]">
                 HUMO xabarnomasi orqali to‘lov avtomatik tasdiqlandi.
               </p>
-              <div className="mt-6 rounded-2xl bg-[#f8fafc] p-4 text-left border border-[#e2e8f0] space-y-2">
-                <div className="flex justify-between text-xs text-[#718096]">
-                  <span>To‘lov summasi:</span>
-                  <b className="text-sm font-bold text-[#152238]">
-                    {formatAmount(amountNumber)} UZS
-                  </b>
+
+              {/* Receipt info card */}
+              <div className="mt-6 rounded-2xl bg-[#f8fafc] p-5 text-left border border-[#e2e8f0] relative overflow-hidden">
+                {/* Embedded Mini Stamp */}
+                <div className="absolute right-3 top-3 opacity-80 pointer-events-none transform rotate-[-8deg]">
+                  <div className="size-20 rounded-full border-2 border-dashed border-blue-600 flex flex-col items-center justify-center p-1 text-center bg-blue-50/50">
+                    <span className="text-[7px] font-black text-blue-700 tracking-wider">PAYGO</span>
+                    <span className="text-[9px] font-extrabold text-blue-800 uppercase">MUHR</span>
+                    <span className="text-[6.5px] font-bold text-blue-600">TASDIQLANDI</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs text-[#718096]">
-                  <span>Karta:</span>
-                  <span className="font-mono font-semibold text-[#152238]">
-                    {formattedCard}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-[#718096]">
-                  <span>Karta egasi:</span>
-                  <span className="font-medium text-[#152238]">{cardOwner}</span>
-                </div>
-                <div className="flex justify-between text-xs text-[#718096]">
-                  <span>Holati:</span>
-                  <span className="font-bold text-[#16865b]">Muvaffaqiyatli ✅</span>
-                </div>
-                <div className="flex justify-between text-xs text-[#718096]">
-                  <span>To‘lov ID:</span>
-                  <span className="font-mono text-[11px] text-[#8995a7]">
-                    {paymentId}
-                  </span>
+
+                <div className="space-y-2 pr-16">
+                  <div className="flex justify-between text-xs text-[#718096]">
+                    <span>To‘lov summasi:</span>
+                    <b className="text-sm font-bold text-[#152238]">
+                      {formatAmount(amountNumber)} UZS
+                    </b>
+                  </div>
+                  <div className="flex justify-between text-xs text-[#718096]">
+                    <span>Karta:</span>
+                    <span className="font-mono font-semibold text-[#152238]">
+                      {formattedCard}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-[#718096]">
+                    <span>Karta egasi:</span>
+                    <span className="font-medium text-[#152238]">{cardOwner}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-[#718096]">
+                    <span>Holati:</span>
+                    <span className="font-bold text-[#16865b]">Muvaffaqiyatli ✅</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-[#718096]">
+                    <span>To‘lov ID:</span>
+                    <span className="font-mono text-[11px] text-[#8995a7]">
+                      {paymentId}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-col gap-2">
+              {/* Action Buttons: PDF Chek & Navigation */}
+              <div className="mt-6 flex flex-col gap-2.5">
                 <Link
-                  href="/panel"
-                  className="flex items-center justify-center gap-2 rounded-xl bg-[#1769e0] py-3 text-xs font-bold text-white hover:bg-[#1254b7] transition"
+                  href={`/pay/${paymentId}/receipt`}
+                  target="_blank"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 transition"
                 >
-                  <ArrowLeft size={15} /> Veb-panelga qaytish
+                  <FileText size={16} />
+                  <span>📥 Rasmiy Chekni Yuklab Olish (PDF)</span>
                 </Link>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => window.open(`/pay/${paymentId}/receipt`, '_blank')}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    <Printer size={14} /> Chop etish
+                  </button>
+                  <Link
+                    href="/panel"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    <ArrowLeft size={14} /> Veb-panelga
+                  </Link>
+                </div>
               </div>
             </div>
           ) : isExpired ? (

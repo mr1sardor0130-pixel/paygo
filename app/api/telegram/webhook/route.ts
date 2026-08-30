@@ -202,6 +202,26 @@ async function send(token: string, chatId: number | string, text: string, reply_
   }
 }
 
+async function sendPhoto(token: string, chatId: number | string, photo: string, caption: string, reply_markup: any = menu) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo,
+        caption,
+        reply_markup,
+        parse_mode: 'HTML',
+      }),
+    })
+    return await res.json()
+  } catch (e) {
+    console.error('sendPhoto error:', e)
+    return { ok: false }
+  }
+}
+
 async function answerCallback(token: string, callbackQueryId: string, text?: string) {
   try {
     await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
@@ -233,9 +253,10 @@ async function isUserbotConnectedForUser(userIdStr: string): Promise<boolean> {
 }
 
 // Render and send detailed shop information
-async function showShopDetails(token: string, chatId: number, userIdStr: string) {
-  const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-  if (!userShops.length || !userShops[0]) {
+async function showShopDetails(token: string, chatId: number, userIdStr: string, shopId?: string) {
+  let userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+  
+  if (!userShops.length) {
     await send(
       token,
       chatId,
@@ -245,15 +266,33 @@ async function showShopDetails(token: string, chatId: number, userIdStr: string)
     return
   }
 
-  const s = userShops[0]
+  // If there are multiple shops and no specific shopId was requested, show a list
+  if (userShops.length > 1 && !shopId) {
+    const inline_keyboard = userShops.map(shop => [
+      { text: `🏪 ${shop.name} (${shop.id})`, callback_data: `view_my_shop_${shop.id}` }
+    ])
+    
+    await send(
+      token,
+      chatId,
+      '🏪 <b>Sizda bir nechta do‘kon mavjud.</b>\n\nBoshqarish uchun do‘konni tanlang:',
+      { inline_keyboard }
+    )
+    return
+  }
+
+  // Find the selected shop or default to the first one
+  let s = userShops[0]
+  if (shopId) {
+    const found = userShops.find(shop => shop.id === shopId)
+    if (found) s = found
+  }
+
   const isConnected = await isUserbotConnectedForUser(userIdStr)
   const formattedCard = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
   const authUrl = await generateAuthUrl(userIdStr)
 
-  await send(
-    token,
-    chatId,
-    `🏪 <b>Do‘kon Ma’lumotlari va Sozlamalari:</b>\n\n` +
+  const text = `🏪 <b>Do‘kon Ma’lumotlari va Sozlamalari:</b>\n\n` +
     `🏷 <b>Nomi:</b> ${s.name}\n` +
     `💳 <b>Karta:</b> <code>${formattedCard}</code> (${s.cardBank || 'HUMOCARD'})\n` +
     `👤 <b>Egasi:</b> ${s.accountOwner || 'Kiritilmagan'}\n` +
@@ -263,33 +302,39 @@ async function showShopDetails(token: string, chatId: number, userIdStr: string)
     `🤖 <b>Userbot (@humocardbot):</b> ${isConnected ? '🟢 Ulangan va Faol' : '🔴 Ulanmagan'}\n` +
     `⚡️ <b>Holat:</b> ${s.approved ? '✅ Tasdiqlangan' : '⏳ Kutilmoqda'}\n` +
     `🆔 <b>Shop ID:</b> <code>${s.id}</code>\n\n` +
-    `Tahrirlash va boshqarish uchun quyidagi tugmalardan foydalaning:`,
-    {
-      inline_keyboard: [
-        [
-          { text: '✏️ Nomni o‘zgartirish', callback_data: 'edit_shop_name' },
-          { text: '💳 Karta & Egasini tahrirlash', callback_data: 'edit_shop_card' },
-        ],
-        [
-          { text: '🔗 Webhook sozlash', callback_data: 'edit_shop_webhook' },
-          { text: '🖼 Logo yuklash', callback_data: 'edit_shop_logo' },
-        ],
-        [
-          { text: '📣 Kanal ulash / test', callback_data: 'edit_shop_channel' },
-          { text: '🧪 Test to‘lov', callback_data: 'test_pay' },
-        ],
-        [
-          ...(isConnected
-            ? [{ text: '🔴 Userbotni uzish', callback_data: 'userbot_disconnect_step1' }]
-            : [{ text: '🔐 Userbot ulash', callback_data: 'userbot_connect_prompt' }]),
-        ],
-        [
-          { text: '📱 Do‘kon Veb CRM (Mini App)', web_app: { url: authUrl } },
-          { text: '🌐 Brauzerda ochish', url: authUrl },
-        ],
+    `Tahrirlash va boshqarish uchun quyidagi tugmalardan foydalaning:`
+
+  const reply_markup = {
+    inline_keyboard: [
+      [
+        { text: '✏️ Nomni o‘zgartirish', callback_data: `edit_shop_name_${s.id}` },
+        { text: '💳 Karta & Egasini tahrirlash', callback_data: `edit_shop_card_${s.id}` },
       ],
-    }
-  )
+      [
+        { text: '🔗 Webhook sozlash', callback_data: `edit_shop_webhook_${s.id}` },
+        { text: '🖼 Logo yuklash', callback_data: `edit_shop_logo_${s.id}` },
+      ],
+      [
+        { text: '📣 Kanal ulash / test', callback_data: `edit_shop_channel_${s.id}` },
+        { text: '🧪 Test to‘lov', callback_data: `test_pay_${s.id}` },
+      ],
+      [
+        ...(isConnected
+          ? [{ text: '🔴 Userbotni uzish', callback_data: `userbot_disconnect_step1` }]
+          : [{ text: '🔐 Userbot ulash', callback_data: `userbot_connect_prompt` }]),
+      ],
+      [
+        { text: '📱 Do‘kon Veb CRM (Mini App)', web_app: { url: authUrl } },
+        { text: '🌐 Brauzerda ochish', url: authUrl },
+      ],
+    ],
+  }
+
+  if (s.logoUrl && s.logoUrl.startsWith('http')) {
+    await sendPhoto(token, chatId, s.logoUrl, text, reply_markup)
+  } else {
+    await send(token, chatId, text, reply_markup)
+  }
 }
 
 // Render and send Userbot status or onboarding flow
@@ -409,14 +454,16 @@ export async function POST(request: Request) {
     await answerCallback(token, cb.id)
 
     // Shop settings inline actions
-    if (data === 'edit_shop_name') {
-      await stateSet(chatId, { step: 'edit_shop_name' })
+    if (data.startsWith('edit_shop_name_')) {
+      const shopId = data.replace('edit_shop_name_', '')
+      await stateSet(chatId, { step: 'edit_shop_name', targetShopId: shopId })
       await send(token, chatId, '✏️ <b>Do‘kon nomini o‘zgartirish:</b>\n\nYangi nomni kiriting (masalan: <i>PayGo Super Market</i>):', back)
       return NextResponse.json({ ok: true })
     }
 
-    if (data === 'edit_shop_card') {
-      await stateSet(chatId, { step: 'edit_shop_card_num' })
+    if (data.startsWith('edit_shop_card_')) {
+      const shopId = data.replace('edit_shop_card_', '')
+      await stateSet(chatId, { step: 'edit_shop_card_num', targetShopId: shopId })
       await send(
         token,
         chatId,
@@ -427,8 +474,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    if (data === 'edit_shop_webhook') {
-      await stateSet(chatId, { step: 'edit_shop_webhook_url' })
+    if (data.startsWith('edit_shop_webhook_')) {
+      const shopId = data.replace('edit_shop_webhook_', '')
+      await stateSet(chatId, { step: 'edit_shop_webhook_url', targetShopId: shopId })
       await send(
         token,
         chatId,
@@ -441,8 +489,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    if (data === 'edit_shop_channel') {
-      await stateSet(chatId, { step: 'channel_connect' })
+    if (data.startsWith('edit_shop_channel_')) {
+      const shopId = data.replace('edit_shop_channel_', '')
+      await stateSet(chatId, { step: 'channel_connect', targetShopId: shopId })
       await send(
         token,
         chatId,
@@ -454,8 +503,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    if (data === 'edit_shop_logo') {
-      await stateSet(chatId, { step: 'edit_shop_logo_url' })
+    if (data.startsWith('edit_shop_logo_')) {
+      const shopId = data.replace('edit_shop_logo_', '')
+      await stateSet(chatId, { step: 'edit_shop_logo_url', targetShopId: shopId })
       await send(
         token,
         chatId,
@@ -467,8 +517,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    if (data === 'test_channel_post') {
-      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (data.startsWith('test_channel_post_')) {
+      const shopId = data.replace('test_channel_post_', '')
+      const userShops = await db.select().from(shops).where(eq(shops.id, shopId)).limit(1)
       const shop = userShops[0]
       if (!shop?.telegramChannelId) {
         await send(token, chatId, '⚠️ Sizda kanal ulanmagan. Avval "📣 Kanal ulash" orqali kanal ulang.', menu)
@@ -486,14 +537,20 @@ export async function POST(request: Request) {
         `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "amount": 5000,\n  "currency": "UZS",\n  "shop_id": "${shop.id}",\n  "status": "paid"\n}</code></pre>`
 
       const channelRes = await send(token, shop.telegramChannelId, testPost, { inline_keyboard: [] })
-      if (channelRes.ok) {
+      if (channelRes?.ok) {
         await send(token, chatId, `✅ <b>Kanalga test xabar va JSON ma’lumot muvaffaqiyatli yuborildi!</b>\nKanalingizni tekshiring.`, menu)
       } else {
-        await send(token, chatId, `❌ <b>Kanalga xabar yuborishda xatolik:</b> ${channelRes.description || 'Bot kanalda admin emas'}.\nIltimos botni kanalga admin qiling.`, menu)
+        await send(token, chatId, `❌ <b>Kanalga xabar yuborishda xatolik:</b> ${channelRes?.description || 'Bot kanalda admin emas'}.\nIltimos botni kanalga admin qiling.`, menu)
       }
       return NextResponse.json({ ok: true })
     }
 
+    if (data.startsWith('view_my_shop_')) {
+      const shopId = data.replace('view_my_shop_', '')
+      await showShopDetails(token, chatId, userIdStr, shopId)
+      return NextResponse.json({ ok: true })
+    }
+    
     if (data === 'view_my_shop') {
       await showShopDetails(token, chatId, userIdStr)
       return NextResponse.json({ ok: true })
@@ -573,13 +630,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    if (data === 'test_pay') {
-      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (data.startsWith('test_pay_')) {
+      const shopId = data.replace('test_pay_', '')
+      const userShops = await db.select().from(shops).where(eq(shops.id, shopId)).limit(1)
       if (!userShops.length) {
         await send(token, chatId, '⚠️ Test to‘lov yaratishdan oldin do‘kon ochishingiz kerak. Iltimos <b>🛍 Do‘kon ochish</b> tugmasini bosing.', menu)
         return NextResponse.json({ ok: true })
       }
-      await stateSet(chatId, { step: 'test_pay_amount' })
+      await stateSet(chatId, { step: 'test_pay_amount', targetShopId: shopId })
       await send(
         token,
         chatId,
@@ -588,6 +646,35 @@ export async function POST(request: Request) {
         `⏱ <i>To‘lov muddati: <b>5 daqiqa (300 soniya)</b></i>`,
         testAmountsKeyboard
       )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'test_pay') {
+      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+      if (!userShops.length) {
+        await send(token, chatId, '⚠️ Test to‘lov yaratishdan oldin do‘kon ochishingiz kerak. Iltimos <b>🛍 Do‘kon ochish</b> tugmasini bosing.', menu)
+        return NextResponse.json({ ok: true })
+      }
+      await stateSet(chatId, { step: 'test_pay_amount', targetShopId: userShops[0].id })
+      await send(
+        token,
+        chatId,
+        `🧪 <b>Test To‘lov Yaratish (1/2)</b>\n\n` +
+        `To‘lov tizimingizni sinash uchun test to‘lov summasini kiriting (masalan: <code>15000</code>) yoki quyidagi variantlardan birini tanlang:\n\n` +
+        `⏱ <i>To‘lov muddati: <b>5 daqiqa (300 soniya)</b></i>`,
+        testAmountsKeyboard
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('unlink_channel_')) {
+      const shopId = data.replace('unlink_channel_', '')
+      if (shopId) {
+        await db.update(shops).set({ telegramChannelId: null }).where(and(eq(shops.userId, userIdStr), eq(shops.id, shopId)))
+      } else {
+        await db.update(shops).set({ telegramChannelId: null }).where(eq(shops.userId, userIdStr))
+      }
+      await send(token, chatId, '✅ Telegram kanal muvaffaqiyatli uzildi.', menu)
       return NextResponse.json({ ok: true })
     }
 
@@ -795,8 +882,13 @@ export async function POST(request: Request) {
       `⚡️ Ushbu kanalga qabul qilingan barcha to‘lovlar va ularning to‘liq JSON ma’lumotlari avtomatik joylanadi.`
 
     const testRes = await send(token, channelId, testPost, { inline_keyboard: [] })
-    if (testRes.ok) {
-      await db.update(shops).set({ telegramChannelId: channelId }).where(eq(shops.userId, userIdStr))
+    if (testRes?.ok) {
+      const targetShopId = flow.targetShopId
+      const shopCondition = targetShopId 
+        ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+        : eq(shops.userId, userIdStr)
+
+      await db.update(shops).set({ telegramChannelId: channelId }).where(shopCondition)
       await stateDelete(chatId)
       await send(
         token,
@@ -806,8 +898,8 @@ export async function POST(request: Request) {
         `Endi har bir muvaffaqiyatli to‘lov haqidagi chek va JSON xabarnoma to‘g‘ridan-to‘g‘ri shu kanalingizga tushadi!`,
         {
           inline_keyboard: [
-            [{ text: '📣 Test xabar yuborish', callback_data: 'test_channel_post' }],
-            [{ text: '🗑 Kanalni uzish', callback_data: 'unlink_channel' }],
+            [{ text: '📣 Test xabar yuborish', callback_data: `test_channel_post_${targetShopId || ''}` }],
+            [{ text: '🗑 Kanalni uzish', callback_data: `unlink_channel_${targetShopId || ''}` }],
           ],
         }
       )
@@ -1162,7 +1254,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const targetShopId = flow.targetShopId
+    const shopCondition = targetShopId 
+      ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+      : eq(shops.userId, userIdStr)
+
+    const userShops = await db.select().from(shops).where(shopCondition).limit(1)
     const shop = userShops[0]
     if (!shop) {
       await stateDelete(chatId)
@@ -1224,9 +1321,14 @@ export async function POST(request: Request) {
       `⚡️ Ushbu kanalga qabul qilingan barcha to‘lovlar va ularning to‘liq JSON ma’lumotlari avtomatik yuboriladi.`
 
     const testRes = await send(token, targetChannel, testPost, { inline_keyboard: [] })
-    if (testRes.ok) {
+    if (testRes?.ok) {
+      const targetShopId = flow.targetShopId
+      const shopCondition = targetShopId 
+        ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+        : eq(shops.userId, userIdStr)
+
       const channelId = String(testRes.result?.chat?.id || targetChannel)
-      await db.update(shops).set({ telegramChannelId: channelId }).where(eq(shops.userId, userIdStr))
+      await db.update(shops).set({ telegramChannelId: channelId }).where(shopCondition)
       await stateDelete(chatId)
 
       await send(
@@ -1237,8 +1339,8 @@ export async function POST(request: Request) {
         `Endi har bir muvaffaqiyatli to‘lov haqidagi chek va JSON xabarnoma to‘g‘ridan-to‘g‘ri shu kanalingizga tushadi!`,
         {
           inline_keyboard: [
-            [{ text: '📣 Test xabar yuborish', callback_data: 'test_channel_post' }],
-            [{ text: '🗑 Kanalni uzish', callback_data: 'unlink_channel' }],
+            [{ text: '📣 Test xabar yuborish', callback_data: `test_channel_post_${targetShopId || ''}` }],
+            [{ text: '🗑 Kanalni uzish', callback_data: `unlink_channel_${targetShopId || ''}` }],
           ],
         }
       )
@@ -1246,7 +1348,7 @@ export async function POST(request: Request) {
       await send(
         token,
         chatId,
-        `⚠️ <b>Kanalga xabar yuborib bo‘lmadi:</b> ${testRes.description || 'Bot kanalda admin emas'}.\n\n` +
+        `⚠️ <b>Kanalga xabar yuborib bo‘lmadi:</b> ${testRes?.description || 'Bot kanalda admin emas'}.\n\n` +
         `Iltimos, avval botni kanalingizga <b>Administrator</b> qilib qo‘shing va qaytadan kanal username/ID sini yuboring:`,
         back
       )
@@ -1364,12 +1466,17 @@ export async function POST(request: Request) {
       await send(token, chatId, '❗ Iltimos, do‘kon nomini kiriting:', back)
       return NextResponse.json({ ok: true })
     }
-    await db.update(shops).set({ name: newName }).where(eq(shops.userId, userIdStr))
+    const targetShopId = flow.targetShopId
+    const shopCondition = targetShopId 
+      ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+      : eq(shops.userId, userIdStr)
+      
+    await db.update(shops).set({ name: newName }).where(shopCondition)
     await stateDelete(chatId)
     await send(token, chatId, `✅ <b>Do‘kon nomi muvaffaqiyatli o‘zgartirildi:</b> <i>${newName}</i>`, menu)
-    const updated = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const updated = await db.select().from(shops).where(shopCondition).limit(1)
     if (updated[0]) notifyAdminNewShop(token, updated[0])
-    await showShopDetails(token, chatId, userIdStr)
+    await showShopDetails(token, chatId, userIdStr, targetShopId)
     return NextResponse.json({ ok: true })
   }
 
@@ -1385,15 +1492,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    const targetShopId = flow.targetShopId
+    const shopCondition = targetShopId 
+      ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+      : eq(shops.userId, userIdStr)
+
     await db
       .update(shops)
       .set({
         cardNumber: digits,
         cardLast4: digits.slice(-4),
       })
-      .where(eq(shops.userId, userIdStr))
+      .where(shopCondition)
 
-    await stateSet(chatId, { step: 'edit_shop_card_owner', tempCard: digits })
+    await stateSet(chatId, { step: 'edit_shop_card_owner', tempCard: digits, targetShopId })
     await send(
       token,
       chatId,
@@ -1407,14 +1519,19 @@ export async function POST(request: Request) {
 
   if (flow?.step === 'edit_shop_card_owner') {
     const ownerName = raw.trim()
+    const targetShopId = flow.targetShopId
+    const shopCondition = targetShopId 
+      ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+      : eq(shops.userId, userIdStr)
+
     if (ownerName !== '0' && ownerName.length > 1) {
-      await db.update(shops).set({ accountOwner: ownerName }).where(eq(shops.userId, userIdStr))
+      await db.update(shops).set({ accountOwner: ownerName }).where(shopCondition)
     }
     await stateDelete(chatId)
     await send(token, chatId, '✅ <b>Karta va hisob egasi ma’lumotlari muvaffaqiyatli saqlandi!</b>', menu)
-    const updated = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const updated = await db.select().from(shops).where(shopCondition).limit(1)
     if (updated[0]) notifyAdminNewShop(token, updated[0])
-    await showShopDetails(token, chatId, userIdStr)
+    await showShopDetails(token, chatId, userIdStr, targetShopId)
     return NextResponse.json({ ok: true })
   }
 
@@ -1427,7 +1544,12 @@ export async function POST(request: Request) {
       newUrl = `https://${val}`
     }
 
-    await db.update(shops).set({ webhookUrl: newUrl }).where(eq(shops.userId, userIdStr))
+    const targetShopId = flow.targetShopId
+    const shopCondition = targetShopId 
+      ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+      : eq(shops.userId, userIdStr)
+
+    await db.update(shops).set({ webhookUrl: newUrl }).where(shopCondition)
     await stateDelete(chatId)
     await send(
       token,
@@ -1437,9 +1559,9 @@ export async function POST(request: Request) {
         : `✅ <b>Webhook URL o‘chirildi.</b>`,
       menu
     )
-    const updated = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const updated = await db.select().from(shops).where(shopCondition).limit(1)
     if (updated[0]) notifyAdminNewShop(token, updated[0])
-    await showShopDetails(token, chatId, userIdStr)
+    await showShopDetails(token, chatId, userIdStr, targetShopId)
     return NextResponse.json({ ok: true })
   }
 
@@ -1456,18 +1578,23 @@ export async function POST(request: Request) {
       } catch {}
     }
 
+    const targetShopId = flow.targetShopId
+    const shopCondition = targetShopId 
+      ? and(eq(shops.userId, userIdStr), eq(shops.id, targetShopId))
+      : eq(shops.userId, userIdStr)
+
     if (logoUrl.toLowerCase() === 'ochirish' || logoUrl === '0') {
-      await db.update(shops).set({ logoUrl: null }).where(eq(shops.userId, userIdStr))
+      await db.update(shops).set({ logoUrl: null }).where(shopCondition)
       await send(token, chatId, '✅ Logotip o‘chirildi.', menu)
     } else {
-      await db.update(shops).set({ logoUrl }).where(eq(shops.userId, userIdStr))
+      await db.update(shops).set({ logoUrl }).where(shopCondition)
       await send(token, chatId, '✅ Logotip muvaffaqiyatli yangilandi!', menu)
     }
 
     await stateDelete(chatId)
-    const updated = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    const updated = await db.select().from(shops).where(shopCondition).limit(1)
     if (updated[0]) notifyAdminNewShop(token, updated[0])
-    await showShopDetails(token, chatId, userIdStr)
+    await showShopDetails(token, chatId, userIdStr, targetShopId)
     return NextResponse.json({ ok: true })
   }
 

@@ -33,6 +33,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  FileText,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -810,8 +811,20 @@ export function PaybotDashboard() {
             <div className="space-y-6">
               <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#64748b] mb-4">
-                  To‘lov Kartasi Jonli Ko‘rinishi
+                  Do‘kon & Karta Ko‘rinishi
                 </h3>
+
+                {shopForm.logoUrl && (
+                  <div className="mb-4 flex flex-col items-center justify-center p-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-2xl">
+                    <img 
+                      src={shopForm.logoUrl} 
+                      alt="Shop Logo" 
+                      className="w-20 h-20 object-contain rounded-xl bg-white shadow-sm"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                    <p className="mt-2 text-xs font-bold text-[#1e293b]">{shopForm.name || 'Do‘kon Nomi'}</p>
+                  </div>
+                )}
 
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#10223d] via-[#162a4a] to-[#0d1b32] p-5 text-white shadow-lg">
                   <div className="flex items-center justify-between opacity-80 mb-4">
@@ -946,14 +959,22 @@ export function PaybotDashboard() {
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
                     <a
                       href={createdPayment.payUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-[#1d4ed8]"
+                      className="w-full sm:flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-[#1d4ed8]"
                     >
                       <ExternalLink size={14} /> To‘lov Sahifasini Ochish
+                    </a>
+                    <a
+                      href={`/pay/${createdPayment.id}/receipt`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full sm:flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#059669] py-2.5 text-xs font-bold text-white hover:bg-[#047857]"
+                    >
+                      <FileText size={14} /> 🧾 Rasmiy Chek (PDF / Muhrli)
                     </a>
                   </div>
                 </div>
