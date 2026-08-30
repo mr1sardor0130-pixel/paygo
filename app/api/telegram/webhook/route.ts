@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { db, ensureDbSchema } from '@/lib/db'
 import { payments, shops, userbotConnections } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import {
@@ -491,18 +491,34 @@ export async function POST(request: Request) {
     const slug = `${(flow.shop?.name ?? 'shop').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${String(chatId).slice(-6)}`
     const shopId = randomUUID()
 
-    await db.insert(shops).values({
-      id: shopId,
-      userId: userIdStr,
-      name: flow.shop?.name ?? 'PayGo shop',
-      slug,
-      description: flow.shop?.description,
-      cardNumber: flow.shop?.cardNumber ?? '9860350123453587',
-      cardLast4: flow.shop?.cardLast4 ?? '3587',
-      cardBank: 'HUMOCARD',
-      accountOwner: flow.shop?.owner ?? 'Hisob egasi',
-      approved: chatId === Number(ADMIN_ID) || true, // auto approve
-    })
+    await ensureDbSchema()
+    try {
+      await db.insert(shops).values({
+        id: shopId,
+        userId: userIdStr,
+        name: flow.shop?.name ?? 'PayGo shop',
+        slug,
+        description: flow.shop?.description,
+        cardNumber: flow.shop?.cardNumber ?? '9860350123453587',
+        cardLast4: flow.shop?.cardLast4 ?? '3587',
+        cardBank: 'HUMOCARD',
+        accountOwner: flow.shop?.owner ?? 'Hisob egasi',
+        approved: chatId === Number(ADMIN_ID) || true, // auto approve
+      })
+    } catch (insertErr) {
+      console.warn('DB insert fallback:', insertErr)
+      // Fallback without cardNumber if older table
+      await db.insert(shops).values({
+        id: shopId,
+        userId: userIdStr,
+        name: flow.shop?.name ?? 'PayGo shop',
+        slug,
+        description: flow.shop?.description,
+        cardLast4: flow.shop?.cardLast4 ?? '3587',
+        cardBank: 'HUMOCARD',
+        approved: chatId === Number(ADMIN_ID) || true,
+      })
+    }
 
     await stateDelete(chatId)
     const formattedCardNum = formatCard(flow.shop?.cardNumber ?? '9860350123453587')

@@ -146,7 +146,11 @@ export async function verifyTelegramCode(
         return { needsPassword: true }
       }
       try {
-        await state.client.checkPassword(password)
+        const { computeCheck } = await import('telegram/Password')
+        const { Api } = await import('telegram/tl')
+        const passwordSrpResult = await state.client.invoke(new Api.account.GetPassword())
+        const passwordSrpCheck = await computeCheck(passwordSrpResult, password)
+        await state.client.invoke(new Api.auth.CheckPassword({ password: passwordSrpCheck }))
       } catch (pwdErr: any) {
         throw new Error(pwdErr?.errorMessage ?? pwdErr?.message ?? '2FA paroli noto‘g‘ri')
       }
@@ -166,12 +170,20 @@ export async function submitTelegram2FA(
 ): Promise<{ sessionString: string }> {
   const state = getOnboarding(userId)
   if (!state?.client) {
-    throw new Error('Login sessiyasi topilmadi. Qaytadan boshlang.')
+    throw new Error('Login sessiyasi topilmadi. Qaytadan /userbot orqali boshlang.')
   }
 
   try {
-    await state.client.checkPassword(password)
+    const { computeCheck } = await import('telegram/Password')
+    const { Api } = await import('telegram/tl')
+    const passwordSrpResult = await state.client.invoke(new Api.account.GetPassword())
+    const passwordSrpCheck = await computeCheck(passwordSrpResult, password)
+    await state.client.invoke(new Api.auth.CheckPassword({ password: passwordSrpCheck }))
   } catch (error: any) {
+    const msg = String(error?.errorMessage ?? error?.message ?? '')
+    if (msg.includes('PASSWORD_HASH_INVALID') || msg.includes('PASSWORD_EMPTY')) {
+      throw new Error('2FA paroli noto‘g‘ri. Qaytadan parolni yuboring:')
+    }
     throw new Error(error?.errorMessage ?? error?.message ?? '2FA paroli noto‘g‘ri.')
   }
 
