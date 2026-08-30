@@ -15,11 +15,62 @@ export async function ensureDbSchema() {
   try {
     await pool.query(`
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "cardNumber" text;
+      ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "cardBank" text DEFAULT 'HUMOCARD';
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "accountOwner" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "userbotSession" text;
+      ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "tier" text DEFAULT 'free';
+
+      CREATE TABLE IF NOT EXISTS "userbot_connections" (
+        "id" text PRIMARY KEY,
+        "shopId" text NOT NULL,
+        "userId" text NOT NULL,
+        "sessionString" text NOT NULL,
+        "chatId" text,
+        "status" text NOT NULL DEFAULT 'active',
+        "lastEventAt" timestamp,
+        "error" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW(),
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "system_roles" (
+        "id" text PRIMARY KEY,
+        "telegramId" text NOT NULL UNIQUE,
+        "role" text NOT NULL DEFAULT 'admin',
+        "addedBy" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "system_tariffs" (
+        "id" text PRIMARY KEY,
+        "name" text NOT NULL,
+        "description" text,
+        "price" integer NOT NULL,
+        "period" text NOT NULL DEFAULT 'month',
+        "cardNumber" text NOT NULL DEFAULT '9860350123453587',
+        "cardOwner" text NOT NULL DEFAULT 'AZizbek I',
+        "cardBank" text DEFAULT 'HUMOCARD',
+        "active" boolean NOT NULL DEFAULT true,
+        "createdAt" timestamp NOT NULL DEFAULT NOW(),
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      -- Ensure default superadmin 8021115446 exists
+      INSERT INTO "system_roles" ("id", "telegramId", "role", "addedBy")
+      VALUES ('superadmin-8021115446', '8021115446', 'superadmin', 'system')
+      ON CONFLICT ("telegramId") DO NOTHING;
+
+      -- Seed default tariffs if table empty
+      INSERT INTO "system_tariffs" ("id", "name", "description", "price", "period", "cardNumber", "cardOwner", "cardBank", "active")
+      VALUES 
+        ('tariff-daily', 'Kunlik', '1 kunlik sinov va faol monitoring', 1000, 'day', '9860350123453587', 'AZizbek I', 'HUMOCARD', true),
+        ('tariff-weekly', 'Haftalik', '7 kunlik do‘kon integratsiyasi', 6500, 'week', '9860350123453587', 'AZizbek I', 'HUMOCARD', true),
+        ('tariff-monthly', 'Oylik VIP', '30 kunlik to‘liq cheksiz imkoniyat', 27858, 'month', '9860350123453587', 'AZizbek I', 'HUMOCARD', true)
+      ON CONFLICT ("id") DO NOTHING;
     `)
     columnsEnsured = true
   } catch (err) {
     console.warn('Auto schema migration warning:', err)
   }
 }
+

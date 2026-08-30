@@ -50,6 +50,35 @@ export const verification = pgTable('verification', {
   updatedAt: timestamp('updatedAt'),
 })
 
+export const systemRoles = pgTable(
+  'system_roles',
+  {
+    id: text('id').primaryKey(),
+    telegramId: text('telegramId').notNull().unique(),
+    role: text('role').notNull().default('admin'), // superadmin, admin
+    addedBy: text('addedBy'),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+  },
+  (table) => [index('system_roles_telegramId_idx').on(table.telegramId)]
+)
+
+export const systemTariffs = pgTable(
+  'system_tariffs',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description'),
+    price: integer('price').notNull(), // UZS
+    period: text('period').notNull().default('month'), // day, week, month, year
+    cardNumber: text('cardNumber').notNull().default('9860350123453587'),
+    cardOwner: text('cardOwner').notNull().default('AZizbek I'),
+    cardBank: text('cardBank').default('HUMOCARD'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  }
+)
+
 // App-specific tables
 export const shops = pgTable(
   'shops',

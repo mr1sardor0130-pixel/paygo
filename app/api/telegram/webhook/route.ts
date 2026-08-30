@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, ensureDbSchema } from '@/lib/db'
-import { payments, shops, userbotConnections } from '@/lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { payments, shops, userbotConnections, systemRoles, systemTariffs } from '@/lib/db/schema'
+import { eq, and, desc } from 'drizzle-orm'
+import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
 import {
   beginOnboarding,
   getOnboarding,
@@ -42,6 +43,13 @@ type Flow = {
     apiHash?: string
     phone?: string
   }
+  tariff?: {
+    name?: string
+    price?: number
+    cardNumber?: string
+    cardOwner?: string
+    period?: string
+  }
   shopId?: string
 }
 
@@ -49,9 +57,9 @@ const menu = {
   keyboard: [
     [{ text: '🛍 Do‘kon ochish' }, { text: '🏪 Mening do‘konim' }],
     [{ text: '💳 Mening kartam' }, { text: '🔐 Userbot ulash' }],
-    [{ text: '📊 Statistika' }, { text: '🧪 Test to‘lov' }],
-    [{ text: '🔗 Webhook sozlash' }, { text: '📣 Kanal ulash' }],
-    [{ text: '📚 API hujjat' }, { text: '📄 Shartlar' }],
+    [{ text: '💎 Tariflar' }, { text: '🧪 Test to‘lov' }],
+    [{ text: '📊 Statistika' }, { text: '🔗 Webhook sozlash' }],
+    [{ text: '📣 Kanal ulash' }, { text: '📚 API hujjat' }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -134,6 +142,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token) return NextResponse.json({ ok: true })
+
+  await ensureDbSchema()
 
   const update = (await request.json()) as Update
   const message = update.message
@@ -335,9 +345,12 @@ export async function POST(request: Request) {
         // Save to DB
         const connId = randomUUID()
         try {
+          const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+          const targetShopId = userShops[0]?.id || flow.shopId || `shop-${userIdStr}`
+
           await db.insert(userbotConnections).values({
             id: connId,
-            shopId: flow.shopId || 'default-shop',
+            shopId: targetShopId,
             userId: userIdStr,
             sessionString: res.sessionString,
             status: 'active',
@@ -389,9 +402,12 @@ export async function POST(request: Request) {
       if (res.sessionString) {
         const connId = randomUUID()
         try {
+          const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+          const targetShopId = userShops[0]?.id || flow.shopId || `shop-${userIdStr}`
+
           await db.insert(userbotConnections).values({
             id: connId,
-            shopId: flow.shopId || 'default-shop',
+            shopId: targetShopId,
             userId: userIdStr,
             sessionString: res.sessionString,
             status: 'active',
@@ -540,29 +556,65 @@ export async function POST(request: Request) {
   // MENING DO'KONIM & MENING KARTAM
   // -------------------------------------------------------------
   if (text === 'Mening do‘konim') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(5)
-    if (!userShops.length) {
+    let userShops: any[] = []
+    try {
+      userShops = (await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(5)) || []
+    } catch (dbErr) {
+      console.warn('DB shops select error:', dbErr)
+      userShops = []
+    }
+
+    if (!Array.isArray(userShops) || userShops.length === 0) {
       await send(token, chatId, '🏪 Sizda hali ochilgan do‘kon mavjud emas. "🛍 Do‘kon ochish" tugmasini bosing.', menu)
       return NextResponse.json({ ok: true })
     }
-    const txt = userShops.map((s) =>
-      `🏪 <b>${s.name}</b>\n` +
-      `💳 <b>Karta:</b> <code>${formatCard(s.cardNumber || s.cardLast4)}</code>\n` +
-      `👤 <b>Egasi:</b> ${s.accountOwner ?? 'Mavjud emas'}\n` +
-      `⚡️ <b>Holat:</b> ${s.approved ? '✅ Faol' : '⏳ Kutilmoqda'}\n` +
-      `🤖 <b>Userbot:</b> ${s.userbotSession ? '🟢 Ulangan (Humocardbot faol)' : '🔴 Ulanmagan'}\n` +
-      `🆔 <b>Shop ID:</b> <code>${s.id}</code>`
-    ).join('\n\n─────────────\n\n')
+
+    let activeSession = ''
+    try {
+      const connList = (await db
+        .select()
+        .from(userbotConnections)
+        .where(eq(userbotConnections.userId, userIdStr))) || []
+      if (Array.isArray(connList)) {
+        const found = connList.find((c) => c.status === 'active' && c.sessionString)
+        if (found?.sessionString) activeSession = found.sessionString
+      }
+    } catch (e) {
+      console.warn('Userbot conn lookup:', e)
+    }
+
+    const txt = userShops.map((s) => {
+      const isConnected = Boolean(s.userbotSession || activeSession)
+      // Sync to shop table if missing
+      if (!s.userbotSession && activeSession) {
+        db.update(shops).set({ userbotSession: activeSession }).where(eq(shops.id, s.id)).catch(() => {})
+      }
+      return (
+        `🏪 <b>${s.name}</b>\n` +
+        `💳 <b>Karta:</b> <code>${formatCard(s.cardNumber || s.cardLast4 || '')}</code>\n` +
+        `👤 <b>Egasi:</b> ${s.accountOwner ?? 'Mavjud emas'}\n` +
+        `⚡️ <b>Holat:</b> ${s.approved ? '✅ Faol' : '⏳ Kutilmoqda'}\n` +
+        `🤖 <b>Userbot:</b> ${isConnected ? '🟢 Ulangan (Humocardbot faol)' : '🔴 Ulanmagan'}\n` +
+        `🆔 <b>Shop ID:</b> <code>${s.id}</code>`
+      )
+    }).join('\n\n─────────────\n\n')
 
     await send(token, chatId, `📋 <b>Sizning do‘konlaringiz:</b>\n\n${txt}`, menu)
     return NextResponse.json({ ok: true })
   }
 
-  if (text === 'Mening kartam') {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    if (userShops.length && userShops[0]) {
+  if (text === 'Mening kartam' || text === 'Kartani tahrirlash') {
+    let userShops: any[] = []
+    try {
+      userShops = (await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)) || []
+    } catch (dbErr) {
+      console.warn('DB shops select error:', dbErr)
+      userShops = []
+    }
+
+    if (Array.isArray(userShops) && userShops.length > 0 && userShops[0]) {
       const s = userShops[0]
-      const formatted = formatCard(s.cardNumber || '9860350123453587')
+      const formatted = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
       await send(
         token,
         chatId,
@@ -570,12 +622,179 @@ export async function POST(request: Request) {
         `🔢 <b>To‘liq raqam:</b> <code>${formatted}</code>\n` +
         `👤 <b>Karta egasi:</b> ${s.accountOwner ?? 'Hisob egasi'}\n` +
         `🏦 <b>Tizim:</b> ${s.cardBank ?? 'HUMOCARD'}\n\n` +
-        `ℹ️ <i>To‘lov sahifasida xaridorlarga ushbu to‘liq karta raqami ko‘rsatiladi.</i>`,
+        `ℹ️ <i>To‘lov sahifasida xaridorlarga ushbu to‘liq karta raqami ko‘rsatiladi.</i>\n\n` +
+        `Kartani yangilash uchun <code>/editcard 9860350123453587 AZIZBEK KARIMOV</code> buyrug‘ini yuboring.`,
         menu
       )
     } else {
       await send(token, chatId, '💳 Hali karta kiritilmagan. Avval "🛍 Do‘kon ochish" orqali karta kiriting.', menu)
     }
+    return NextResponse.json({ ok: true })
+  }
+
+  // Edit card command: /editcard <number> <owner name>
+  if (raw.startsWith('/editcard')) {
+    const parts = raw.replace('/editcard', '').trim().split(' ')
+    const cardNum = parts[0]?.replace(/\D/g, '')
+    const ownerName = parts.slice(1).join(' ').trim()
+
+    if (!cardNum || cardNum.length < 16) {
+      await send(token, chatId, '❗ Iltimos, to‘liq 16 xonali karta raqami va ism-sharifingizni yuboring:\nMasalan: <code>/editcard 9860350123453587 AZIZBEK KARIMOV</code>', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+    if (userShops.length && userShops[0]) {
+      await db.update(shops).set({
+        cardNumber: cardNum,
+        cardLast4: cardNum.slice(-4),
+        accountOwner: ownerName || userShops[0].accountOwner || 'Hisob egasi',
+      }).where(eq(shops.id, userShops[0].id))
+
+      await send(token, chatId, `✅ <b>Karta ma’lumotlari muvaffaqiyatli yangilandi!</b>\n\n💳 <b>Karta:</b> <code>${formatCard(cardNum)}</code>\n👤 <b>Egasi:</b> ${ownerName || 'Hisob egasi'}`, menu)
+    } else {
+      await send(token, chatId, '❗ Sizda hali do‘kon yo‘q. Avval "🛍 Do‘kon ochish" tugmasini bosing.', menu)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // TARIFLAR (Maxsus pullik tariflar ro'yxati va sotib olish rekviziti)
+  // -------------------------------------------------------------
+  if (text === 'Tariflar' || text === 'Premium' || raw === '/tariffs') {
+    let tariffList: any[] = []
+    try {
+      tariffList = await db.select().from(systemTariffs).where(eq(systemTariffs.active, true))
+    } catch {}
+
+    if (!tariffList.length) {
+      tariffList = [
+        { name: 'Kunlik', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I' },
+        { name: 'Haftalik', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I' },
+        { name: 'Oylik VIP', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I' },
+      ]
+    }
+
+    const tTxt = tariffList.map((t) =>
+      `💎 <b>${t.name}</b> — <b>${Number(t.price).toLocaleString()} UZS</b> / ${t.period}\n` +
+      `📝 ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}\n` +
+      `💳 <b>To‘lov kartasi:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
+      `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'}`
+    ).join('\n\n─────────────\n\n')
+
+    await send(
+      token,
+      chatId,
+      `💎 <b>PayGo Maxsus Premium Tariflari:</b>\n\n${tTxt}\n\n` +
+      `ℹ️ <i>Tarifga to‘lov qilish uchun yuqoridagi kartaga o‘tkazma qiling. Userbot orqali to‘lovingiz avtomatik tasdiqlanadi yoki adminga murojaat qiling.</i>\n\n` +
+      `🌐 Boshqaruv CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
+      menu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // ADMIN PANEL (/admin va /addadmin)
+  // -------------------------------------------------------------
+  if (raw === '/admin' || text === 'Admin' || text === 'Crm') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await send(token, chatId, '⛔️ Siz admin emassiz. Boshqaruv faqat tasdiqlangan adminlar uchun.', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    const allShops = await db.select().from(shops)
+    const pendingShops = allShops.filter((s) => !s.approved)
+    const allPayments = await db.select().from(payments)
+    const paidPayments = allPayments.filter((p) => p.status === 'paid')
+    const totalVolume = paidPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
+
+    let pendingTxt = ''
+    if (pendingShops.length > 0) {
+      pendingTxt = `\n\n⚠️ <b>Tasdiqlanmagan do‘konlar:</b>\n` + pendingShops.map((s) => `• <b>${s.name}</b> (ID: <code>${s.id}</code>) — Tasdiqlash: <code>/approve ${s.id}</code>`).join('\n')
+    }
+
+    await send(
+      token,
+      chatId,
+      `👑 <b>PayGo Admin CRM Boshqaruvi</b>\n\n` +
+      `🏪 <b>Jami do‘konlar:</b> ${allShops.length} ta (Tasdiqlangan: ${allShops.length - pendingShops.length})\n` +
+      `💰 <b>Jami tushum hajmi:</b> ${totalVolume.toLocaleString()} UZS (${paidPayments.length} ta to‘lov)\n` +
+      `🤖 <b>Userbot holati:</b> Faol monitoringda\n` +
+      `${pendingTxt}\n\n` +
+      `⚙️ <b>Admin buyruqlari:</b>\n` +
+      `• <code>/approve &lt;shop_id&gt;</code> — Do‘konni tasdiqlash\n` +
+      `• <code>/addadmin &lt;telegram_id&gt;</code> — Yangi admin qo‘shish\n` +
+      `• <code>/removeadmin &lt;telegram_id&gt;</code> — Adminni o‘chirish\n\n` +
+      `🌐 <b>Web CRM Dashboard:</b>\n<a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
+      menu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // /approve <shopId>
+  if (raw.startsWith('/approve')) {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await send(token, chatId, '⛔️ Faqat adminlar do‘konni tasdiqlashi mumkin.', menu)
+      return NextResponse.json({ ok: true })
+    }
+    const targetShopId = raw.replace('/approve', '').trim()
+    if (!targetShopId) {
+      await send(token, chatId, '❗ Shop ID kiritilmadi: <code>/approve bcbd46af-...</code>', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    await db.update(shops).set({ approved: true }).where(eq(shops.id, targetShopId))
+    await send(token, chatId, `✅ <b>Do‘kon muvaffaqiyatli tasdiqlandi!</b> (ID: <code>${targetShopId}</code>)`, menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  // /addadmin <telegramId>
+  if (raw.startsWith('/addadmin')) {
+    const isSuper = await isSuperAdminTelegramId(userIdStr)
+    if (!isSuper) {
+      await send(token, chatId, '⛔️ Yangi adminni faqat Bosh Superadmin (8021115446) qo‘sha oladi.', menu)
+      return NextResponse.json({ ok: true })
+    }
+    const newAdminId = raw.replace('/addadmin', '').trim()
+    if (!newAdminId) {
+      await send(token, chatId, '❗ Telegram ID kiritilmadi: <code>/addadmin 123456789</code>', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    await db
+      .insert(systemRoles)
+      .values({
+        id: randomUUID(),
+        telegramId: newAdminId,
+        role: 'admin',
+        addedBy: userIdStr,
+      })
+      .onConflictDoUpdate({
+        target: systemRoles.telegramId,
+        set: { role: 'admin' },
+      })
+
+    await send(token, chatId, `✅ <b>Foydalanuvchi ${newAdminId} admin etib tayinlandi!</b>\nEndi u ham /admin buyrug‘i va CRM dashboarddan foydalana oladi.`, menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  // /removeadmin <telegramId>
+  if (raw.startsWith('/removeadmin')) {
+    const isSuper = await isSuperAdminTelegramId(userIdStr)
+    if (!isSuper) {
+      await send(token, chatId, '⛔️ Adminni faqat Bosh Superadmin o‘chira oladi.', menu)
+      return NextResponse.json({ ok: true })
+    }
+    const remAdminId = raw.replace('/removeadmin', '').trim()
+    if (remAdminId === '8021115446') {
+      await send(token, chatId, '⛔️ Asosiy superadminni o‘chirib bo‘lmaydi.', menu)
+      return NextResponse.json({ ok: true })
+    }
+
+    await db.delete(systemRoles).where(eq(systemRoles.telegramId, remAdminId))
+    await send(token, chatId, `✅ <b>Admin ${remAdminId} o‘chirildi.</b>`, menu)
     return NextResponse.json({ ok: true })
   }
 
