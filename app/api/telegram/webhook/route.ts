@@ -349,17 +349,17 @@ async function renderReferralInfo(token: string, chatId: number | string, userId
     `👤 <b>Hozirgi maqomingiz:</b>\n${currentTierInfo}\n\n` +
     `🔗 <b>Sizning Shaxsiy Taklif Havolangiz:</b>\n` +
     `<code>${refLink}</code>\n\n` +
-    `👥 <b>Siz taklif qilgan do‘stlar soni:</b> <code>${refCount} ta</code>\n\n` +
+    `👥 <b>Siz taklif qilgan do‘stlar soni:</b> <code>${refCount} ta</code>\n` +
+    `🎁 <b>Yig‘ilgan (hali ishlatilmagan) do‘stlar:</b> <code>${(profile?.referralCount || 0) - (profile?.rewardedDays || 0) * 3} ta</code>\n\n` +
     `─────────────\n\n` +
     `🎁 <b>Maxsus Sovg‘alar va Mukofotlar:</b>\n\n` +
-    `• 👥 <b>2 ta do‘st taklif qilsangiz</b> ➔ <b>1 KUNLIK (24 soat) Premium VIP</b> sovg‘a! 🎁\n` +
-    `• 👥 <b>3 ta do‘st taklif qilsangiz</b> ➔ <b>1 HAFTALIK (7 kun) Premium VIP</b> sovg‘a! 🎁\n` +
-    `• 🚀 <b>Har keyingi 3 ta do‘st uchun</b> ➔ <b>+7 KUNLIK Premium VIP</b> uzaytirish!\n\n` +
-    `ℹ️ <i>Ushbu havolangizni do‘stlaringizga yuboring. Ular botimizga kirib /start tugmasini bosishi bilan sovg‘angiz avtomatik hisoblanadi!</i>`
+    `• 👥 <b>3 ta do‘st</b> ➔ <b>+7 KUNLIK Premium VIP</b> uzaytirish!\n\n` +
+    `ℹ️ <i>Ushbu havolangizni do‘stlaringizga yuboring. Ular botimizga kirib /start tugmasini bosishi bilan bazada hisoblanadi. Yeterli do‘st yig‘ilgach "Ayirboshlash" tugmasini bosing!</i>`
 
   await send(token, chatId, text, {
     inline_keyboard: [
       [{ text: '📢 Havolani do‘stlarga ulashish', url: `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent('🔥 PayGo - HUMO to‘lovlarini avtomatlashtirish va telegram botlar integratsiyasi botiga taklif qilaman!')}` }],
+      [{ text: '💎 Premiumga ayirboshlash (3 ta do‘st = 7 kun)', callback_data: 'referral_exchange' }],
       [{ text: '💎 Tariflar bo‘limiga o‘tish', callback_data: 'tariffs_page' }],
     ],
   })
@@ -1098,6 +1098,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    if (data === 'referral_exchange') {
+      const profs = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, userIdStr)).limit(1)
+      const profile = profs[0]
+      const refCount = profile?.referralCount || 0
+      const rewardedDays = profile?.rewardedDays || 0
+      const redeemedSets = Math.floor(rewardedDays / 7)
+      const usedRefs = redeemedSets * 3
+      const availableRefs = refCount - usedRefs
+
+      if (availableRefs < 3) {
+        await send(token, chatId, `❌ <b>Ayirboshlash uchun kamida 3 ta do‘st taklif qilingan bo‘lishi kerak!</b>\n\nSizda hozir <b>${availableRefs} ta</b> ishlatilmagan taklif bor.`, {
+          inline_keyboard: [[{ text: '↩️ Orqaga', callback_data: 'referral_page' }]],
+        })
+        return NextResponse.json({ ok: true })
+      }
+
+      // Perform exchange
+      const newRewardedDays = rewardedDays + 7
+      let newEndsAt = profile?.premiumEndsAt && new Date(profile.premiumEndsAt) > new Date()
+        ? new Date(profile.premiumEndsAt)
+        : new Date()
+      
+      newEndsAt = new Date(newEndsAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+      await db.update(userProfiles).set({
+        tier: 'premium',
+        premiumEndsAt: newEndsAt,
+        rewardedDays: newRewardedDays
+      }).where(eq(userProfiles.telegramId, userIdStr))
+
+      // Also update shops to premium
+      await db.update(shops).set({ tier: 'premium' }).where(eq(shops.userId, userIdStr))
+
+      await send(token, chatId, `🎉 <b>Muvaffaqiyatli ayirboshlandi!</b>\n\n3 ta do‘stingiz evaziga sizga <b>+7 KUNLIK Premium VIP</b> taqdim etildi!\n\n⏳ <b>Yangi muddat:</b> <code>${newEndsAt.toLocaleString('uz-UZ')}</code> gacha`, {
+        inline_keyboard: [[{ text: '✅ Tushunarli', callback_data: 'referral_page' }]],
+      })
+      return NextResponse.json({ ok: true })
+    }
+
     if (data.startsWith('buy_tariff_')) {
       const tariffId = data.replace('buy_tariff_', '')
 
@@ -1399,11 +1438,11 @@ export async function POST(request: Request) {
     raw === '/testpay'
 
   const isTariffsCmd =
-    norm.includes('tariflar') ||
-    norm.includes('premium') ||
-    text === 'Tariflar' ||
-    text === 'Premium' ||
-    raw === '/tariffs'
+    (norm.includes('tariflar') || (norm.includes('premium') && !norm.includes('tekin'))) &&
+    text !== '🤝 Referal (Tekin Premium)' &&
+    text !== 'Referal' &&
+    raw !== '/ref' &&
+    raw !== '/referral'
 
   const isReferralCmd =
     norm.includes('referal') ||
@@ -1566,39 +1605,13 @@ export async function POST(request: Request) {
             const refProf = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, referrerId)).limit(1)
             if (refProf.length) {
               const newRefCount = (refProf[0].referralCount || 0) + 1
-              let bonusDays = 0
-              let rewardMsg = ''
-
-              if (newRefCount === 2) {
-                bonusDays = 1
-                rewardMsg = '🎉 <b>Tabriklaymiz! 2 ta do‘st taklif qilganingiz uchun sizga 1 KUNLIK Premium VIP taqdim etildi!</b>'
-              } else if (newRefCount === 3) {
-                bonusDays = 7
-                rewardMsg = '🎉 <b>Ajoyib! 3 ta do‘st taklif qilganingiz uchun sizga 1 HAFTALIK (7 KUN) Premium VIP taqdim etildi!</b>'
-              } else if (newRefCount > 3 && (newRefCount - 3) % 3 === 0) {
-                bonusDays = 7
-                rewardMsg = `🎉 <b>Ajoyib! ${newRefCount} ta do‘st taklif qilganingiz uchun sizga yana +7 KUNLIK Premium VIP qo‘shib berildi!</b>`
-              }
-
-              let newEndsAt = refProf[0].premiumEndsAt && new Date(refProf[0].premiumEndsAt) > new Date()
-                ? new Date(refProf[0].premiumEndsAt)
-                : new Date()
-
-              if (bonusDays > 0) {
-                newEndsAt = new Date(newEndsAt.getTime() + bonusDays * 24 * 60 * 60 * 1000)
-              }
-
+              
               await db
                 .update(userProfiles)
                 .set({
                   referralCount: newRefCount,
-                  ...(bonusDays > 0 ? { tier: 'premium', premiumEndsAt: newEndsAt } : {}),
                 })
                 .where(eq(userProfiles.telegramId, referrerId))
-
-              if (bonusDays > 0) {
-                await db.update(shops).set({ tier: 'premium' }).where(eq(shops.userId, referrerId))
-              }
 
               await send(
                 token,
@@ -1606,7 +1619,7 @@ export async function POST(request: Request) {
                 `👥 <b>Yangi do‘st taklif qilindi!</b>\n\n` +
                 `Sizning taklif havolangiz orqali yangi foydalanuvchi botga qo‘shildi!\n` +
                 `Jami taklif qilgan do‘stlaringiz: <b>${newRefCount} ta</b>\n\n` +
-                (rewardMsg ? `${rewardMsg}\n⏳ <b>Yangi Premium muddati:</b> <code>${newEndsAt.toLocaleString('uz-UZ')}</code> gacha` : '<i>Mavjud sovg‘alarga erishish uchun do‘stlarni taklif qilishda davom eting!</i>'),
+                `💎 To‘plangan do‘stlarni Premium VIP muddatiga almashtirish uchun <b>🤝 Referal</b> bo‘limiga o‘ting.`,
                 {
                   inline_keyboard: [[{ text: '🤝 Referal bo‘limiga o‘tish', callback_data: 'referral_page' }]],
                 }
@@ -1798,20 +1811,20 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------
-  // TARIFLAR VA PREMIUM
-  // -------------------------------------------------------------
-  if (isTariffsCmd) {
-    await stateDelete(chatId)
-    await renderUserTariffs(token, chatId, userIdStr)
-    return NextResponse.json({ ok: true })
-  }
-
-  // -------------------------------------------------------------
   // REFERAL VA TEKIN PREMIUM
   // -------------------------------------------------------------
   if (isReferralCmd) {
     await stateDelete(chatId)
     await renderReferralInfo(token, chatId, userIdStr)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // TARIFLAR VA PREMIUM
+  // -------------------------------------------------------------
+  if (isTariffsCmd) {
+    await stateDelete(chatId)
+    await renderUserTariffs(token, chatId, userIdStr)
     return NextResponse.json({ ok: true })
   }
 
