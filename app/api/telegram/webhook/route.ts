@@ -321,8 +321,9 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
     },
   ])
 
+  const crmAuthUrl = await generateAuthUrl(userIdStr, '/admin')
   inlineKeyboard.push([
-    { text: '🌐 CRM Boshqaruv Paneli', url: `${APP_URL}/admin` }
+    { text: '🌐 CRM Boshqaruv Paneli', url: crmAuthUrl }
   ])
 
   await send(token, chatId, text, { inline_keyboard: inlineKeyboard })
@@ -631,7 +632,7 @@ async function showUserbotStatus(token: string, chatId: number, userIdStr: strin
 }
 
 // Generate authenticated login URL for user
-async function generateAuthUrl(userIdStr: string): Promise<string> {
+async function generateAuthUrl(userIdStr: string, path: string = '/panel'): Promise<string> {
   const token = `auth_${randomUUID().replace(/-/g, '').slice(0, 24)}`
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
   try {
@@ -644,7 +645,7 @@ async function generateAuthUrl(userIdStr: string): Promise<string> {
   } catch (e) {
     console.warn('Auth token insert warning:', e)
   }
-  return `${APP_URL}/panel?auth_token=${token}&userId=${userIdStr}`
+  return `${APP_URL}${path}?auth_token=${token}&userId=${userIdStr}`
 }
 
 // Notify Super Admin on new or updated shop with 1-click inline buttons
@@ -662,13 +663,14 @@ async function notifyAdminNewShop(token: string, shop: any) {
     `Do‘konni boshqarish uchun quyidagi tugmalardan foydalaning:`
 
   try {
+    const adminAuthUrl = await generateAuthUrl(adminId, '/admin')
     await send(token, adminId, text, {
       inline_keyboard: [
         [
           { text: '✅ Tasdiqlash', callback_data: `approve_shop_${shop.id}` },
           { text: '🚫 To‘xtatish', callback_data: `reject_shop_${shop.id}` },
         ],
-        [{ text: '🌐 Admin CRM da ko‘rish', url: `${APP_URL}/admin` }],
+        [{ text: '🌐 Admin CRM da ko‘rish', url: adminAuthUrl }],
       ],
     })
   } catch (e) {
@@ -816,8 +818,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    if (data.startsWith('edit_shop_webhook_')) {
-      const shopId = data.replace('edit_shop_webhook_', '')
+    if (data === 'edit_shop_webhook' || data.startsWith('edit_shop_webhook_')) {
+      let shopId = data.startsWith('edit_shop_webhook_') ? data.replace('edit_shop_webhook_', '') : ''
+      if (!shopId) {
+        const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
+        if (!userShops.length) {
+          await send(token, chatId, '⚠️ <b>Xatolik:</b> Sizda hali do‘kon mavjud emas. Avval <b>🛍 Do‘kon ochish</b> tugmasi orqali do‘kon yarating.', menu)
+          return NextResponse.json({ ok: true })
+        }
+        shopId = userShops[0].id
+      }
+
       await stateSet(chatId, { step: 'edit_shop_webhook_url', targetShopId: shopId })
       await send(
         token,
@@ -1534,6 +1545,80 @@ export async function POST(request: Request) {
       }
     }
 
+    // Check if this is a referral link: /start ref_123456789
+    if (startPayload.startsWith('ref_')) {
+      const referrerId = startPayload.replace('ref_', '').trim()
+      if (referrerId && referrerId !== userIdStr) {
+        try {
+          const existingProf = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, userIdStr)).limit(1)
+          if (!existingProf.length || !existingProf[0]?.referredBy) {
+            await db
+              .insert(userProfiles)
+              .values({
+                telegramId: userIdStr,
+                referredBy: referrerId,
+              })
+              .onConflictDoUpdate({
+                target: userProfiles.telegramId,
+                set: { referredBy: referrerId },
+              })
+
+            const refProf = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, referrerId)).limit(1)
+            if (refProf.length) {
+              const newRefCount = (refProf[0].referralCount || 0) + 1
+              let bonusDays = 0
+              let rewardMsg = ''
+
+              if (newRefCount === 2) {
+                bonusDays = 1
+                rewardMsg = '🎉 <b>Tabriklaymiz! 2 ta do‘st taklif qilganingiz uchun sizga 1 KUNLIK Premium VIP taqdim etildi!</b>'
+              } else if (newRefCount === 3) {
+                bonusDays = 7
+                rewardMsg = '🎉 <b>Ajoyib! 3 ta do‘st taklif qilganingiz uchun sizga 1 HAFTALIK (7 KUN) Premium VIP taqdim etildi!</b>'
+              } else if (newRefCount > 3 && (newRefCount - 3) % 3 === 0) {
+                bonusDays = 7
+                rewardMsg = `🎉 <b>Ajoyib! ${newRefCount} ta do‘st taklif qilganingiz uchun sizga yana +7 KUNLIK Premium VIP qo‘shib berildi!</b>`
+              }
+
+              let newEndsAt = refProf[0].premiumEndsAt && new Date(refProf[0].premiumEndsAt) > new Date()
+                ? new Date(refProf[0].premiumEndsAt)
+                : new Date()
+
+              if (bonusDays > 0) {
+                newEndsAt = new Date(newEndsAt.getTime() + bonusDays * 24 * 60 * 60 * 1000)
+              }
+
+              await db
+                .update(userProfiles)
+                .set({
+                  referralCount: newRefCount,
+                  ...(bonusDays > 0 ? { tier: 'premium', premiumEndsAt: newEndsAt } : {}),
+                })
+                .where(eq(userProfiles.telegramId, referrerId))
+
+              if (bonusDays > 0) {
+                await db.update(shops).set({ tier: 'premium' }).where(eq(shops.userId, referrerId))
+              }
+
+              await send(
+                token,
+                referrerId,
+                `👥 <b>Yangi do‘st taklif qilindi!</b>\n\n` +
+                `Sizning taklif havolangiz orqali yangi foydalanuvchi botga qo‘shildi!\n` +
+                `Jami taklif qilgan do‘stlaringiz: <b>${newRefCount} ta</b>\n\n` +
+                (rewardMsg ? `${rewardMsg}\n⏳ <b>Yangi Premium muddati:</b> <code>${newEndsAt.toLocaleString('uz-UZ')}</code> gacha` : '<i>Mavjud sovg‘alarga erishish uchun do‘stlarni taklif qilishda davom eting!</i>'),
+                {
+                  inline_keyboard: [[{ text: '🤝 Referal bo‘limiga o‘tish', callback_data: 'referral_page' }]],
+                }
+              )
+            }
+          }
+        } catch (refErr) {
+          console.warn('Referral processing error:', refErr)
+        }
+      }
+    }
+
     // Check if terms are already accepted by user
     let accepted = false
     try {
@@ -1665,6 +1750,8 @@ export async function POST(request: Request) {
   if (isWebhookCmd) {
     const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
     const currentWebhook = userShops[0]?.webhookUrl || 'Mavjud emas'
+    const shopId = userShops[0]?.id || ''
+    const authUrl = await generateAuthUrl(userIdStr, '/panel')
 
     await send(
       token,
@@ -1678,8 +1765,8 @@ export async function POST(request: Request) {
       `🌐 <b>To‘liq API Hujjati:</b> <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>`,
       {
         inline_keyboard: [
-          [{ text: '✏️ Webhook URL sozlash', callback_data: 'edit_shop_webhook' }],
-          [{ text: '🌐 Web Panel orqali sozlash', url: `${APP_URL}/panel` }],
+          [{ text: '✏️ Webhook URL sozlash', callback_data: shopId ? `edit_shop_webhook_${shopId}` : 'edit_shop_webhook' }],
+          [{ text: '🌐 Web Panel orqali sozlash', url: authUrl }],
         ],
       }
     )
