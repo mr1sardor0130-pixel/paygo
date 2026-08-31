@@ -96,9 +96,11 @@ const menu = {
     [{ text: '🔗 Webhook sozlash' }, { text: '🌐 Veb-panelga kirish' }],
     [{ text: '📊 Statistika' }, { text: '📜 Tarix' }],
     [{ text: '⚖️ Qoidalar' }, { text: '📚 API hujjat' }],
+    [{ text: '❌ Menyuni yopish' }],
   ],
   resize_keyboard: true,
-  is_persistent: true,
+  one_time_keyboard: true,
+  is_persistent: false,
 }
 
 const adminMenu = {
@@ -106,15 +108,17 @@ const adminMenu = {
     [{ text: '🏪 Do‘konlar boshqaruvi' }, { text: '💎 Tariflar boshqaruvi' }],
     [{ text: '👥 Adminlar boshqaruvi' }, { text: '📊 Barcha statistika' }],
     [{ text: '🤖 Userbotlar holati' }, { text: '🌐 Web CRM Dashboard' }],
-    [{ text: '🏠 Asosiy menyuga qaytish' }],
+    [{ text: '🏠 Asosiy menyuga qaytish' }, { text: '❌ Admin panelni yopish' }],
   ],
   resize_keyboard: true,
-  is_persistent: true,
+  one_time_keyboard: true,
+  is_persistent: false,
 }
 
 const back = {
   keyboard: [[{ text: '↩️ Orqaga' }, { text: '❌ Bekor qilish' }]],
   resize_keyboard: true,
+  one_time_keyboard: true,
 }
 
 const testAmountsKeyboard = {
@@ -124,6 +128,7 @@ const testAmountsKeyboard = {
     [{ text: '↩️ Orqaga' }, { text: '❌ Bekor qilish' }],
   ],
   resize_keyboard: true,
+  one_time_keyboard: true,
 }
 
 const clean = (text: string) => text.replace(/^[^\p{L}\p{N}]+/u, '').trim()
@@ -337,7 +342,7 @@ async function renderReferralInfo(token: string, chatId: number | string, userId
   } catch {}
 
   const refCount = profile?.referralCount || 0
-  const refLink = `https://t.me/PayGoBot?start=ref_${userIdStr}`
+  const refLink = `https://t.me/${BOT_USERNAME}?start=ref_${userIdStr}`
 
   let currentTierInfo = '<b>Oddiy (Birlamchi Bepul)</b>'
   if (profile?.tier === 'premium' && profile?.premiumEndsAt && new Date(profile.premiumEndsAt) > new Date()) {
@@ -1441,6 +1446,7 @@ export async function POST(request: Request) {
     (norm.includes('tariflar') || (norm.includes('premium') && !norm.includes('tekin'))) &&
     text !== '🤝 Referal (Tekin Premium)' &&
     text !== 'Referal' &&
+    text !== '💎 Tariflar boshqaruvi' &&
     raw !== '/ref' &&
     raw !== '/referral'
 
@@ -1468,6 +1474,14 @@ export async function POST(request: Request) {
     norm === 'crm' ||
     norm === 'admin panel' ||
     norm === 'admin paneli'
+
+  const isCloseCmd =
+    text === '❌ Menyuni yopish' ||
+    text === '❌ Admin panelni yopish' ||
+    raw === '/close' ||
+    raw === '/hide' ||
+    norm.includes('yopish') ||
+    norm.includes('keyboardni yopish')
 
   const isCancelCmd =
     norm.includes('orqaga') ||
@@ -1676,6 +1690,15 @@ export async function POST(request: Request) {
     await stateDelete(chatId)
     cancelOnboarding(userIdStr)
     await send(token, chatId, '🏠 Asosiy menyudasiz.', menu)
+    return NextResponse.json({ ok: true })
+  }
+
+  // Close Keyboard
+  if (isCloseCmd) {
+    await stateDelete(chatId)
+    await send(token, chatId, '⌨️ <b>Menyu tugmalari yopildi.</b>\n\nTugmalarni qayta chiqarish uchun /start deb yozing.', {
+      remove_keyboard: true,
+    })
     return NextResponse.json({ ok: true })
   }
 
