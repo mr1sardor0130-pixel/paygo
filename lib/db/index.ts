@@ -83,11 +83,17 @@ export async function ensureDbSchema() {
         "tier" text DEFAULT 'free',
         "premiumEndsAt" timestamp,
         "acceptedAt" timestamp,
+        "referredBy" text,
+        "referralCount" integer DEFAULT 0,
+        "rewardedDays" integer DEFAULT 0,
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );
       
       ALTER TABLE "user_profiles" ADD COLUMN IF NOT EXISTS "tier" text DEFAULT 'free';
       ALTER TABLE "user_profiles" ADD COLUMN IF NOT EXISTS "premiumEndsAt" timestamp;
+      ALTER TABLE "user_profiles" ADD COLUMN IF NOT EXISTS "referredBy" text;
+      ALTER TABLE "user_profiles" ADD COLUMN IF NOT EXISTS "referralCount" integer DEFAULT 0;
+      ALTER TABLE "user_profiles" ADD COLUMN IF NOT EXISTS "rewardedDays" integer DEFAULT 0;
 
       CREATE TABLE IF NOT EXISTS "userbot_connections" (
         "id" text PRIMARY KEY,
