@@ -96,6 +96,9 @@ export const userProfiles = pgTable('user_profiles', {
   tier: text('tier').notNull().default('free'), // free, premium
   premiumEndsAt: timestamp('premiumEndsAt'),
   acceptedAt: timestamp('acceptedAt'),
+  referredBy: text('referredBy'),
+  referralCount: integer('referralCount').notNull().default(0),
+  rewardedDays: integer('rewardedDays').notNull().default(0),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 })
 

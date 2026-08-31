@@ -38,7 +38,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-type TabType = 'overview' | 'shop_settings' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments'
+type TabType = 'overview' | 'shop_settings' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast'
 
 export function PaybotDashboard() {
   // Auth state
@@ -92,6 +92,14 @@ export function PaybotDashboard() {
   })
   const [adminModalOpen, setAdminModalOpen] = useState(false)
   const [newAdminTelegramId, setNewAdminTelegramId] = useState('')
+
+  // Broadcast & Users management state
+  const [broadcastText, setBroadcastText] = useState('')
+  const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'premium' | 'free'>('all')
+  const [broadcastBtnText, setBroadcastBtnText] = useState('')
+  const [broadcastBtnUrl, setBroadcastBtnUrl] = useState('')
+  const [sendingBroadcast, setSendingBroadcast] = useState(false)
+  const [userSearchQuery, setUserSearchQuery] = useState('')
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMsg({ text, type })
@@ -625,6 +633,28 @@ export function PaybotDashboard() {
               </button>
 
               <button
+                onClick={() => setActiveTab('users')}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                  activeTab === 'users'
+                    ? 'bg-[#1769e0] text-white shadow-sm'
+                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
+                }`}
+              >
+                <Users size={15} /> 👥 Foydalanuvchilar ({crmData?.users?.length || 0})
+              </button>
+
+              <button
+                onClick={() => setActiveTab('broadcast')}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                  activeTab === 'broadcast'
+                    ? 'bg-[#1769e0] text-white shadow-sm'
+                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
+                }`}
+              >
+                <Send size={15} /> 📢 E'lon Yuborish
+              </button>
+
+              <button
                 onClick={() => setActiveTab('admins')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'admins'
@@ -632,7 +662,7 @@ export function PaybotDashboard() {
                     : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
                 }`}
               >
-                <UserCheck size={15} /> 👥 Adminlar
+                <UserCheck size={15} /> 🛠 Adminlar
               </button>
             </>
           )}
@@ -1415,6 +1445,339 @@ export function PaybotDashboard() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: USERS MANAGEMENT */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'users' && currentUser?.isAdmin && crmData && (
+          <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-[#152238]">
+                  👥 Foydalanuvchilar Boshqaruvi ({crmData?.users?.length || 0} ta)
+                </h2>
+                <p className="text-xs text-[#718096]">
+                  Telegram foydalanuvchilar ro‘yxati, referallar, status va shaxsiy chat havola tugmalari
+                </p>
+              </div>
+
+              <div className="w-full sm:w-64">
+                <input
+                  type="text"
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  placeholder="ID bo‘yicha qidirish..."
+                  className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2 text-xs outline-none focus:border-[#1769e0]"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-[#64748b]">
+                <thead className="bg-[#f8fafc] text-[#475569] font-bold border-b border-[#e2e8f0]">
+                  <tr>
+                    <th className="p-3">Telegram ID & Chat</th>
+                    <th className="p-3">Maqom (Tarif)</th>
+                    <th className="p-3">Amal Muddati</th>
+                    <th className="p-3">Referallar</th>
+                    <th className="p-3 text-right">Premium Boshqaruv</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f1f5f9]">
+                  {crmData?.users
+                    ?.filter((u: any) => !userSearchQuery || u.telegramId?.includes(userSearchQuery))
+                    ?.map((u: any) => {
+                      const isPrem = u.tier === 'premium' && u.premiumEndsAt && new Date(u.premiumEndsAt) > new Date()
+                      return (
+                        <tr key={u.telegramId} className="hover:bg-[#f8fafc]">
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-[#152238]">{u.telegramId}</span>
+                              <a
+                                href={`tg://user?id=${u.telegramId}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded-lg bg-[#eff6ff] px-2 py-1 text-[11px] font-bold text-[#1769e0] hover:bg-[#dbeafe] transition"
+                              >
+                                💬 Shaxsiy Chat
+                              </a>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                isPrem ? 'bg-[#eaf8f1] text-[#16865b]' : 'bg-[#f1f5f9] text-[#64748b]'
+                              }`}
+                            >
+                              {isPrem ? '💎 Premium VIP' : 'Oddiy (Bepul)'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-[11px]">
+                            {u.premiumEndsAt && new Date(u.premiumEndsAt) > new Date()
+                              ? new Date(u.premiumEndsAt).toLocaleString('uz-UZ')
+                              : '—'}
+                          </td>
+                          <td className="p-3 font-bold text-[#1769e0]">
+                            👥 {u.referralCount || 0} ta do‘st
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={async () => {
+                                  const res = await fetch('/api/admin/crm', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                    },
+                                    body: JSON.stringify({
+                                      action: 'grant_premium',
+                                      telegramId: u.telegramId,
+                                      days: 1,
+                                    }),
+                                  })
+                                  const resJson = await res.json()
+                                  if (res.ok && resJson.ok) {
+                                    showToast(resJson.message)
+                                    loadCrm()
+                                  }
+                                }}
+                                className="rounded-lg bg-[#eff6ff] px-2.5 py-1 text-[11px] font-bold text-[#1769e0] hover:bg-[#dbeafe]"
+                              >
+                                +1 Kun
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  const res = await fetch('/api/admin/crm', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                    },
+                                    body: JSON.stringify({
+                                      action: 'grant_premium',
+                                      telegramId: u.telegramId,
+                                      days: 7,
+                                    }),
+                                  })
+                                  const resJson = await res.json()
+                                  if (res.ok && resJson.ok) {
+                                    showToast(resJson.message)
+                                    loadCrm()
+                                  }
+                                }}
+                                className="rounded-lg bg-[#eaf8f1] px-2.5 py-1 text-[11px] font-bold text-[#16865b] hover:bg-[#d1fae5]"
+                              >
+                                +7 Kun
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  const res = await fetch('/api/admin/crm', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                    },
+                                    body: JSON.stringify({
+                                      action: 'grant_premium',
+                                      telegramId: u.telegramId,
+                                      days: 30,
+                                    }),
+                                  })
+                                  const resJson = await res.json()
+                                  if (res.ok && resJson.ok) {
+                                    showToast(resJson.message)
+                                    loadCrm()
+                                  }
+                                }}
+                                className="rounded-lg bg-[#1769e0] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#1254b7]"
+                              >
+                                +30 Kun
+                              </button>
+                              {isPrem && (
+                                <button
+                                  onClick={async () => {
+                                    const res = await fetch('/api/admin/crm', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                      },
+                                      body: JSON.stringify({
+                                        action: 'revoke_premium',
+                                        telegramId: u.telegramId,
+                                      }),
+                                    })
+                                    if (res.ok) {
+                                      showToast('Premium bekor qilindi')
+                                      loadCrm()
+                                    }
+                                  }}
+                                  className="rounded-lg bg-[#fee2e2] px-2 py-1 text-[11px] font-bold text-[#dc2626] hover:bg-[#fecaca]"
+                                >
+                                  Bekor Qilish
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: BROADCAST (E'LON YUBORISH) */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'broadcast' && currentUser?.isAdmin && (
+          <div className="max-w-3xl bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
+            <h2 className="text-lg font-bold text-[#152238] mb-2 flex items-center gap-2">
+              <Send size={18} className="text-[#1769e0]" /> Foydalanuvchilarga Ommaviy E'lon Yuborish
+            </h2>
+            <p className="text-xs text-[#718096] mb-6">
+              Botning barcha yoki ma'lum toifadagi foydalanuvchilariga xabar va aksiya yuborish.
+            </p>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (!broadcastText.trim()) {
+                  showToast("E'lon matnini kiriting", 'error')
+                  return
+                }
+                setSendingBroadcast(true)
+                try {
+                  const res = await fetch('/api/admin/crm', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                    },
+                    body: JSON.stringify({
+                      action: 'broadcast',
+                      text: broadcastText,
+                      targetGroup: broadcastTarget,
+                      buttonText: broadcastBtnText.trim() || undefined,
+                      buttonUrl: broadcastBtnUrl.trim() || undefined,
+                    }),
+                  })
+                  const data = await res.json()
+                  if (res.ok && data.ok) {
+                    showToast(data.message)
+                    setBroadcastText('')
+                    setBroadcastBtnText('')
+                    setBroadcastBtnUrl('')
+                  } else {
+                    showToast(data.error || 'Yuborishda xatolik yuz berdi', 'error')
+                  }
+                } catch {
+                  showToast('Server bilan aloqa uzildi', 'error')
+                } finally {
+                  setSendingBroadcast(false)
+                }
+              }}
+              className="space-y-5"
+            >
+              <div>
+                <label className="block text-xs font-bold text-[#475569] mb-1">
+                  Qabul Qiluvchilar Guruhi:
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastTarget('all')}
+                    className={`rounded-xl py-2.5 text-xs font-bold border transition ${
+                      broadcastTarget === 'all'
+                        ? 'border-[#1769e0] bg-[#eff6ff] text-[#1769e0]'
+                        : 'border-[#cbd5e1] bg-white text-[#64748b]'
+                    }`}
+                  >
+                    🌐 Barcha Foydalanuvchilar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastTarget('premium')}
+                    className={`rounded-xl py-2.5 text-xs font-bold border transition ${
+                      broadcastTarget === 'premium'
+                        ? 'border-[#16865b] bg-[#eaf8f1] text-[#16865b]'
+                        : 'border-[#cbd5e1] bg-white text-[#64748b]'
+                    }`}
+                  >
+                    💎 Faqat Premium VIP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastTarget('free')}
+                    className={`rounded-xl py-2.5 text-xs font-bold border transition ${
+                      broadcastTarget === 'free'
+                        ? 'border-[#334155] bg-[#f8fafc] text-[#334155]'
+                        : 'border-[#cbd5e1] bg-white text-[#64748b]'
+                    }`}
+                  >
+                    👤 Faqat Oddiy (Bepul)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#475569] mb-1">
+                  E'lon Matni (HTML teglari qo'llab-quvvatlanadi):
+                </label>
+                <textarea
+                  value={broadcastText}
+                  onChange={(e) => setBroadcastText(e.target.value)}
+                  rows={6}
+                  placeholder="Masalan: 🚀 Yangi aksiya boshlandi! Bugun Premium tariflarga 30% chegirma..."
+                  className="w-full rounded-2xl border border-[#cbd5e1] p-4 text-xs outline-none focus:border-[#1769e0] focus:ring-2 focus:ring-blue-50 font-mono"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#475569] mb-1">
+                    Tugma Yozuvi (Ixtiyoriy):
+                  </label>
+                  <input
+                    type="text"
+                    value={broadcastBtnText}
+                    onChange={(e) => setBroadcastBtnText(e.target.value)}
+                    placeholder="Masalan: 🔗 Saytga o'tish"
+                    className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2 text-xs outline-none focus:border-[#1769e0]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#475569] mb-1">
+                    Tugma Havolasi (URL):
+                  </label>
+                  <input
+                    type="text"
+                    value={broadcastBtnUrl}
+                    onChange={(e) => setBroadcastBtnUrl(e.target.value)}
+                    placeholder="https://paygo-pearl.vercel.app"
+                    className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2 text-xs outline-none focus:border-[#1769e0]"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={sendingBroadcast}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1769e0] py-3.5 text-xs font-bold text-white shadow-md hover:bg-[#1254b7] transition disabled:opacity-50"
+              >
+                {sendingBroadcast ? (
+                  <RefreshCw className="animate-spin size-4" />
+                ) : (
+                  <Send size={16} />
+                )}
+                {sendingBroadcast ? "E'lon Yuborilmoqda..." : "🚀 E'lonni Yuborish"}
+              </button>
+            </form>
           </div>
         )}
       </div>

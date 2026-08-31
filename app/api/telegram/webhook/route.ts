@@ -91,11 +91,11 @@ const menu = {
   keyboard: [
     [{ text: '🛍 Do‘kon ochish' }, { text: '🏪 Mening do‘konim' }],
     [{ text: '💳 Mening kartam' }, { text: '🔐 Userbot ulash' }],
+    [{ text: '🤝 Referal (Tekin Premium)' }, { text: '💎 Tariflar' }],
     [{ text: '🧪 Test to‘lov' }, { text: '📣 Kanal ulash' }],
-    [{ text: '🔗 Webhook sozlash' }, { text: '💎 Tariflar' }],
-    [{ text: '📊 Statistika' }, { text: '🌐 Veb-panelga kirish' }],
-    [{ text: '📜 Tarix' }, { text: '⚖️ Qoidalar' }],
-    [{ text: '📚 API hujjat' }],
+    [{ text: '🔗 Webhook sozlash' }, { text: '🌐 Veb-panelga kirish' }],
+    [{ text: '📊 Statistika' }, { text: '📜 Tarix' }],
+    [{ text: '⚖️ Qoidalar' }, { text: '📚 API hujjat' }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -326,6 +326,42 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
   ])
 
   await send(token, chatId, text, { inline_keyboard: inlineKeyboard })
+}
+
+async function renderReferralInfo(token: string, chatId: number | string, userIdStr: string) {
+  let profile: any = null
+  try {
+    const profs = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, userIdStr)).limit(1)
+    profile = profs[0]
+  } catch {}
+
+  const refCount = profile?.referralCount || 0
+  const refLink = `https://t.me/PayGoBot?start=ref_${userIdStr}`
+
+  let currentTierInfo = '<b>Oddiy (Birlamchi Bepul)</b>'
+  if (profile?.tier === 'premium' && profile?.premiumEndsAt && new Date(profile.premiumEndsAt) > new Date()) {
+    currentTierInfo = `💎 <b>PREMIUM VIP</b> (Amal qilish muddati: <code>${new Date(profile.premiumEndsAt).toLocaleString('uz-UZ')}</code> gacha)`
+  }
+
+  const text =
+    `🤝 <b>PayGo Taklif va Referal Tizimi</b>\n\n` +
+    `👤 <b>Hozirgi maqomingiz:</b>\n${currentTierInfo}\n\n` +
+    `🔗 <b>Sizning Shaxsiy Taklif Havolangiz:</b>\n` +
+    `<code>${refLink}</code>\n\n` +
+    `👥 <b>Siz taklif qilgan do‘stlar soni:</b> <code>${refCount} ta</code>\n\n` +
+    `─────────────\n\n` +
+    `🎁 <b>Maxsus Sovg‘alar va Mukofotlar:</b>\n\n` +
+    `• 👥 <b>2 ta do‘st taklif qilsangiz</b> ➔ <b>1 KUNLIK (24 soat) Premium VIP</b> sovg‘a! 🎁\n` +
+    `• 👥 <b>3 ta do‘st taklif qilsangiz</b> ➔ <b>1 HAFTALIK (7 kun) Premium VIP</b> sovg‘a! 🎁\n` +
+    `• 🚀 <b>Har keyingi 3 ta do‘st uchun</b> ➔ <b>+7 KUNLIK Premium VIP</b> uzaytirish!\n\n` +
+    `ℹ️ <i>Ushbu havolangizni do‘stlaringizga yuboring. Ular botimizga kirib /start tugmasini bosishi bilan sovg‘angiz avtomatik hisoblanadi!</i>`
+
+  await send(token, chatId, text, {
+    inline_keyboard: [
+      [{ text: '📢 Havolani do‘stlarga ulashish', url: `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent('🔥 PayGo - HUMO to‘lovlarini avtomatlashtirish va telegram botlar integratsiyasi botiga taklif qilaman!')}` }],
+      [{ text: '💎 Tariflar bo‘limiga o‘tish', callback_data: 'tariffs_page' }],
+    ],
+  })
 }
 
 async function activateTariffForUser(
@@ -1039,8 +1075,18 @@ export async function POST(request: Request) {
     }
 
     // -------------------------------------------------------------
-    // TARIFF PAYMENT CALLBACK HANDLERS
+    // TARIFF & REFERRAL CALLBACK HANDLERS
     // -------------------------------------------------------------
+    if (data === 'tariffs_page') {
+      await renderUserTariffs(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'referral_page') {
+      await renderReferralInfo(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
     if (data.startsWith('buy_tariff_')) {
       const tariffId = data.replace('buy_tariff_', '')
 
@@ -1347,6 +1393,14 @@ export async function POST(request: Request) {
     text === 'Tariflar' ||
     text === 'Premium' ||
     raw === '/tariffs'
+
+  const isReferralCmd =
+    norm.includes('referal') ||
+    norm.includes('tekin premium') ||
+    text === '🤝 Referal (Tekin Premium)' ||
+    text === 'Referal' ||
+    raw === '/ref' ||
+    raw === '/referral'
 
   const isPanelCmd =
     norm.includes('veb-panel') ||
@@ -1662,6 +1716,15 @@ export async function POST(request: Request) {
   if (isTariffsCmd) {
     await stateDelete(chatId)
     await renderUserTariffs(token, chatId, userIdStr)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // REFERAL VA TEKIN PREMIUM
+  // -------------------------------------------------------------
+  if (isReferralCmd) {
+    await stateDelete(chatId)
+    await renderReferralInfo(token, chatId, userIdStr)
     return NextResponse.json({ ok: true })
   }
 

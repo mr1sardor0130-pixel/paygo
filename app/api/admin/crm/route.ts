@@ -4,6 +4,7 @@ import { db, ensureDbSchema } from '@/lib/db'
 import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles } from '@/lib/db/schema'
 import { eq, desc } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
+import { sendTelegramMessage } from '@/lib/telegram-notifier'
 
 export const dynamic = 'force-dynamic'
 
@@ -158,6 +159,117 @@ export async function POST(request: Request) {
       const { tariffId } = body
       await db.delete(systemTariffs).where(eq(systemTariffs.id, tariffId))
       return NextResponse.json({ ok: true, message: 'Tarif o‘chirildi' })
+    }
+
+    // 6. GRANT / EXTEND PREMIUM FOR USER
+    if (action === 'grant_premium') {
+      const { telegramId, days } = body
+      if (!telegramId) return NextResponse.json({ error: 'Telegram ID majburiy' }, { status: 400 })
+
+      const daysToAdd = Number(days) || 7
+      let baseDate = new Date()
+
+      const existing = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, String(telegramId))).limit(1)
+      if (existing.length && existing[0]?.premiumEndsAt && new Date(existing[0].premiumEndsAt) > new Date()) {
+        baseDate = new Date(existing[0].premiumEndsAt)
+      }
+
+      const premiumEndsAt = new Date(baseDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000)
+
+      await db
+        .insert(userProfiles)
+        .values({
+          telegramId: String(telegramId),
+          termsAccepted: true,
+          tier: 'premium',
+          premiumEndsAt,
+          acceptedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: userProfiles.telegramId,
+          set: {
+            tier: 'premium',
+            premiumEndsAt,
+          },
+        })
+
+      await db.update(shops).set({ tier: 'premium' }).where(eq(shops.userId, String(telegramId)))
+
+      // Notify user via Telegram
+      const formattedDate = premiumEndsAt.toLocaleString('uz-UZ')
+      await sendTelegramMessage(
+        String(telegramId),
+        `🎉 <b>Tabriklaymiz! Admin tomonidan sizga Premium VIP taqdim etildi!</b>\n\n` +
+        `💎 <b>Qo‘shilgan muddat:</b> +${daysToAdd} kun\n` +
+        `⏳ <b>Yangi amal qilish muddati:</b> <code>${formattedDate}</code> gacha\n\n` +
+        `🚀 Barcha imkoniyatlar faollashtirildi!`
+      )
+
+      return NextResponse.json({
+        ok: true,
+        message: `Foydalanuvchi ${telegramId} ga +${daysToAdd} kunlik Premium berildi (${formattedDate} gacha)`,
+      })
+    }
+
+    // 7. REVOKE PREMIUM
+    if (action === 'revoke_premium') {
+      const { telegramId } = body
+      if (!telegramId) return NextResponse.json({ error: 'Telegram ID majburiy' }, { status: 400 })
+
+      await db
+        .update(userProfiles)
+        .set({ tier: 'free', premiumEndsAt: null })
+        .where(eq(userProfiles.telegramId, String(telegramId)))
+
+      await db.update(shops).set({ tier: 'free' }).where(eq(shops.userId, String(telegramId)))
+
+      await sendTelegramMessage(
+        String(telegramId),
+        `⚠️ <b>Diqqat:</b> Sizning Premium VIP maqomingiz bekor qilindi.`
+      )
+
+      return NextResponse.json({ ok: true, message: `Foydalanuvchi ${telegramId} Premium maqomi bekor qilindi` })
+    }
+
+    // 8. BROADCAST MESSAGE TO USERS
+    if (action === 'broadcast') {
+      const { text, targetGroup, buttonText, buttonUrl } = body
+      if (!text || !text.trim()) {
+        return NextResponse.json({ error: 'E’lon matni bo‘sh bo‘lishi mumkin emas' }, { status: 400 })
+      }
+
+      const allUsers = await db.select().from(userProfiles)
+      let targetUsers = allUsers
+
+      if (targetGroup === 'premium') {
+        targetUsers = allUsers.filter((u) => u.tier === 'premium' && u.premiumEndsAt && new Date(u.premiumEndsAt) > new Date())
+      } else if (targetGroup === 'free') {
+        targetUsers = allUsers.filter((u) => u.tier !== 'premium' || !u.premiumEndsAt || new Date(u.premiumEndsAt) <= new Date())
+      }
+
+      let successCount = 0
+      let failCount = 0
+
+      const replyMarkup = buttonText && buttonUrl ? { inline_keyboard: [[{ text: buttonText, url: buttonUrl }]] } : undefined
+
+      for (const u of targetUsers) {
+        try {
+          const res = await sendTelegramMessage(u.telegramId, text.trim(), replyMarkup)
+          if (res && res.ok) {
+            successCount++
+          } else {
+            failCount++
+          }
+        } catch {
+          failCount++
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: `E’lon yuborildi! Muvaffaqiyatli: ${successCount} ta, Xatolik: ${failCount} ta`,
+        stats: { total: targetUsers.length, success: successCount, failed: failCount },
+      })
     }
 
     return NextResponse.json({ error: 'Noma’lum amal' }, { status: 400 })
