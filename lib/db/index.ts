@@ -11,7 +11,8 @@ export const db = drizzle(pool, { schema })
 // Ensure essential schema columns exist on production DB
 let columnsEnsured = false
 export async function ensureDbSchema() {
-  if (columnsEnsured || !process.env.DATABASE_URL) return
+  if (!process.env.DATABASE_URL) return
+  if (columnsEnsured) return
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "shops" (
@@ -127,6 +128,12 @@ export async function ensureDbSchema() {
         "cardBank" text DEFAULT 'HUMOCARD',
         "active" boolean NOT NULL DEFAULT true,
         "createdAt" timestamp NOT NULL DEFAULT NOW(),
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "system_settings" (
+        "key" text PRIMARY KEY,
+        "value" text NOT NULL,
         "updatedAt" timestamp NOT NULL DEFAULT NOW()
       );
 

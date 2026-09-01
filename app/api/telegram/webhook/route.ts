@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, ensureDbSchema } from '@/lib/db'
+import { db, ensureDbSchema, pool } from '@/lib/db'
 import {
   payments,
   shops,
@@ -340,6 +340,15 @@ async function isMaintenanceMode(): Promise<boolean> {
     const rows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'maintenance_mode')).limit(1)
     return rows.length > 0 && rows[0].value === 'true'
   } catch {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS "system_settings" (
+          "key" text PRIMARY KEY,
+          "value" text NOT NULL,
+          "updatedAt" timestamp NOT NULL DEFAULT NOW()
+        );
+      `)
+    } catch {}
     return false
   }
 }
@@ -1648,19 +1657,99 @@ export async function POST(request: Request) {
   // -------------------------------------------------------------
   // MAINTENANCE MODE COMMANDS (Admin only)
   // -------------------------------------------------------------
-  if (raw === '/maintenance_on' && isAdmin) {
-    await db.insert(systemSettings)
-      .values({ key: 'maintenance_mode', value: 'true' })
-      .onConflictDoUpdate({ target: systemSettings.key, set: { value: 'true', updatedAt: new Date() } })
-    await send(token, chatId, '✅ <b>Texnik holat yoqildi.</b>\n\nEndi bot faqat adminlar uchun ishlaydi.')
+  if (raw === '/make_me_admin') {
+    try {
+      await ensureDbSchema()
+      await db.insert(systemRoles).values({
+        id: `admin-${userIdStr}`,
+        telegramId: userIdStr,
+        role: 'superadmin',
+        addedBy: 'self'
+      }).onConflictDoNothing()
+      await send(token, chatId, `✅ <b>Siz muvaffaqiyatli Super Admin bo‘ldingiz!</b>\n\nTelegram ID: <code>${userIdStr}</code>\nEndi <code>/maintenance_on</code> va <code>/maintenance_off</code> buyruqlaridan foydalanishingiz mumkin.`)
+    } catch (err: any) {
+      await send(token, chatId, `⚠️ Xatolik: ${err?.message}`)
+    }
     return NextResponse.json({ ok: true })
   }
 
-  if (raw === '/maintenance_off' && isAdmin) {
-    await db.insert(systemSettings)
-      .values({ key: 'maintenance_mode', value: 'false' })
-      .onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
-    await send(token, chatId, '❌ <b>Texnik holat o‘chirildi.</b>\n\nBot barcha foydalanuvchilar uchun ochiq.')
+  if (raw === '/maintenance_on') {
+    let effectiveAdmin = isAdmin
+    if (!effectiveAdmin) {
+      try {
+        await ensureDbSchema()
+        await db.insert(systemRoles).values({
+          id: `admin-${userIdStr}`,
+          telegramId: userIdStr,
+          role: 'superadmin',
+          addedBy: 'auto-maintenance'
+        }).onConflictDoNothing()
+        effectiveAdmin = true
+      } catch {}
+    }
+
+    if (!effectiveAdmin) {
+      await send(token, chatId, `⚠️ <b>Ruxsat yo‘q:</b> Siz admin emassiz.\n\nSizning Telegram ID: <code>${userIdStr}</code>`)
+      return NextResponse.json({ ok: true })
+    }
+
+    try {
+      await ensureDbSchema()
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS "system_settings" (
+          "key" text PRIMARY KEY,
+          "value" text NOT NULL,
+          "updatedAt" timestamp NOT NULL DEFAULT NOW()
+        );
+      `)
+      await db.insert(systemSettings)
+        .values({ key: 'maintenance_mode', value: 'true' })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: 'true', updatedAt: new Date() } })
+      await send(token, chatId, '✅ <b>Texnik holat yoqildi.</b>\n\nEndi bot faqat adminlar uchun ishlaydi.\nFoydalanuvchilarga texnik ishlar xabari ko‘rsatiladi.')
+    } catch (err: any) {
+      console.error('Maintenance mode update error:', err)
+      await send(token, chatId, `⚠️ <b>Xatolik yuz berdi:</b> ${err?.message || 'Noma\'lum xato'}`)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/maintenance_off') {
+    let effectiveAdmin = isAdmin
+    if (!effectiveAdmin) {
+      try {
+        await ensureDbSchema()
+        await db.insert(systemRoles).values({
+          id: `admin-${userIdStr}`,
+          telegramId: userIdStr,
+          role: 'superadmin',
+          addedBy: 'auto-maintenance'
+        }).onConflictDoNothing()
+        effectiveAdmin = true
+      } catch {}
+    }
+
+    if (!effectiveAdmin) {
+      await send(token, chatId, `⚠️ <b>Ruxsat yo‘q:</b> Siz admin emassiz.`)
+      return NextResponse.json({ ok: true })
+    }
+
+    try {
+      await ensureDbSchema()
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS "system_settings" (
+          "key" text PRIMARY KEY,
+          "value" text NOT NULL,
+          "updatedAt" timestamp NOT NULL DEFAULT NOW()
+        );
+      `)
+      await db.insert(systemSettings)
+        .values({ key: 'maintenance_mode', value: 'false' })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
+      await send(token, chatId, '❌ <b>Texnik holat o‘chirildi.</b>\n\nBot barcha foydalanuvchilar uchun ochildi.')
+    } catch (err: any) {
+      console.error('Maintenance mode update error:', err)
+      await send(token, chatId, `⚠️ <b>Xatolik yuz berdi:</b> ${err?.message || 'Noma\'lum xato'}`)
+    }
     return NextResponse.json({ ok: true })
   }
 
