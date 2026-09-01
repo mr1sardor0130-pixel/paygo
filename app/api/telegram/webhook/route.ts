@@ -10,6 +10,7 @@ import {
   systemTariffs,
   authSessions,
   userProfiles,
+  systemSettings,
 } from '@/lib/db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
@@ -332,6 +333,15 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
   ])
 
   await send(token, chatId, text, { inline_keyboard: inlineKeyboard })
+}
+
+async function isMaintenanceMode(): Promise<boolean> {
+  try {
+    const rows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'maintenance_mode')).limit(1)
+    return rows.length > 0 && rows[0].value === 'true'
+  } catch {
+    return false
+  }
 }
 
 async function renderLegalInfo(token: string, chatId: number | string) {
@@ -812,6 +822,24 @@ export async function POST(request: Request) {
   }
 
   await ensureDbSchema()
+
+  const maintenance = await isMaintenanceMode()
+  const telegramId = update.message?.from?.id || update.callback_query?.from?.id
+  const isAdmin = await isAdminTelegramId(telegramId)
+
+  if (maintenance && !isAdmin) {
+    const chatId = update.message?.chat.id || update.callback_query?.message?.chat.id || update.callback_query?.from.id
+    if (chatId) {
+      await send(
+        token,
+        chatId,
+        '🚧 <b>Texnik ishlar olib borilmoqda</b>\n\n' +
+        'Hozirda tizimda texnik sozlash ishlari ketmoqda. Bot vaqtincha faol emas.\n' +
+        'Keltirilgan noqulayliklar uchun uzr so‘raymiz. Tez orada qaytamiz! 🔧'
+      )
+    }
+    return NextResponse.json({ ok: true })
+  }
 
   // -------------------------------------------------------------
   // CALLBACK QUERY HANDLER (Inline button clicks)
@@ -1615,6 +1643,25 @@ export async function POST(request: Request) {
       )
       return NextResponse.json({ ok: true })
     }
+  }
+
+  // -------------------------------------------------------------
+  // MAINTENANCE MODE COMMANDS (Admin only)
+  // -------------------------------------------------------------
+  if (raw === '/maintenance_on' && isAdmin) {
+    await db.insert(systemSettings)
+      .values({ key: 'maintenance_mode', value: 'true' })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value: 'true', updatedAt: new Date() } })
+    await send(token, chatId, '✅ <b>Texnik holat yoqildi.</b>\n\nEndi bot faqat adminlar uchun ishlaydi.')
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/maintenance_off' && isAdmin) {
+    await db.insert(systemSettings)
+      .values({ key: 'maintenance_mode', value: 'false' })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
+    await send(token, chatId, '❌ <b>Texnik holat o‘chirildi.</b>\n\nBot barcha foydalanuvchilar uchun ochiq.')
+    return NextResponse.json({ ok: true })
   }
 
   // -------------------------------------------------------------

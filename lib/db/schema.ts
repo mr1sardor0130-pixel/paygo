@@ -269,6 +269,12 @@ export const auditLogs = pgTable(
   ]
 )
 
+export const systemSettings = pgTable('system_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
 // Relations
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
