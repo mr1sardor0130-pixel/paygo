@@ -1668,6 +1668,14 @@ export async function POST(request: Request) {
   // /start command (with terms check and deep auth link)
   // -------------------------------------------------------------
   if (/^\/start/.test(raw)) {
+    // Auto-promote first user to admin if no admins exist
+    const adminCount = await db.select().from(systemRoles).limit(1)
+    if (adminCount.length === 0) {
+      await db.insert(systemRoles).values({
+        telegramId: userIdStr,
+        role: 'superadmin',
+      })
+    }
     await stateDelete(chatId)
     cancelOnboarding(userIdStr)
 
