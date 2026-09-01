@@ -50,13 +50,19 @@ export default function LegalPage() {
               Ushbu Ommaviy oferta (keyingi o'rinlarda — "Oferta") PayGo (keyingi o'rinlarda — "Platforma") tomonidan foydalanuvchilarga xizmat ko'rsatish shartlarini belgilaydi.
             </p>
             <div>
-              <h3 className="text-xl font-bold text-neutral-900 mb-3">1.1. Xizmat mohiyati</h3>
+              <h3 className="text-xl font-bold text-neutral-900 mb-3">1.1. Xizmat mohiyati va SaaS modeli</h3>
               <p>
-                Platforma foydalanuvchiga uning shaxsiy Telegram akkauntiga keladigan bildirishnomalarni (notifikatsiyalarni) avtomatlashtirilgan tarzda Webhook manzillariga yo'naltirish imkoniyatini taqdim etuvchi <b>texnik dasturiy vositadir</b>. Platforma to'lov tashkiloti, bank yoki moliyaviy agent hisoblanmaydi.
+                Platforma foydalanuvchiga uning shaxsiy Telegram akkauntiga keladigan bildirishnomalarni (notifikatsiyalarni) avtomatlashtirilgan tarzda Webhook manzillariga yo'naltirish imkoniyatini taqdim etuvchi <b>SaaS (Software as a Service) infratuzilmasidir</b>. Platforma to'lov tashkiloti, bank yoki moliyaviy vositachi hisoblanmaydi va moliyaviy operatsiyalarni amalga oshirmaydi.
               </p>
             </div>
             <div>
-              <h3 className="text-xl font-bold text-neutral-900 mb-3">1.2. Aksept shartlari</h3>
+              <h3 className="text-xl font-bold text-neutral-900 mb-3">1.2. To'lovlar mohiyati</h3>
+              <p>
+                Platformadagi Premium tariflar uchun to'lovlar tranzaksiyalar uchun komissiya hisoblanmaydi. Bu mablag'lar Platformaning <b>texnik infratuzilmasi, server resurslari va webhook uzatish xizmati</b> uchun olinadigan abonent to'lovidir.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-neutral-900 mb-3">1.3. Aksept shartlari</h3>
               <p>
                 Platformaning Telegram-boti yoki veb-sayti orqali ro'yxatdan o'tish va xizmatlardan foydalanishni boshlash ushbu Oferta shartlarini so'zsiz va to'liq qabul qilish (aksept) hisoblanadi.
               </p>

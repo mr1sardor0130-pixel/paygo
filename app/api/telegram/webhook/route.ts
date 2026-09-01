@@ -335,17 +335,17 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
 }
 
 async function renderLegalInfo(token: string, chatId: number | string) {
-  const textLegal = `⚖️ <b>PayGo Platformasi: Huquqiy Ma'lumotlar va Shaffoflik</b>\n\n` +
-    `PayGo — bu dasturiy ta'minot bo'lib, uning faoliyati O'zbekiston Respublikasi qonunchiligiga to'la muvofiq keladi. Quyida tizimning huquqiy va texnik asoslari keltirilgan:\n\n` +
-    `🛡 <b>1. Faoliyatning Texnik Maqsadi:</b>\n` +
-    `PayGo — bu to'lov tashkiloti emas. Tizim foydalanuvchining shaxsiy Telegram akkauntiga kelgan SMS/Push xabarlarni (notifikatsiyalarni) avtomatlashtirilgan tarzda Webhook orqali foydalanuvchining shaxsiy serveriga yo'naltiruvchi <b>"SaaS" (Software as a Service)</b> platformasidir.\n\n` +
-    `💰 <b>2. Mablag'lar va Tranzaksiyalar:</b>\n` +
-    `Tizim foydalanuvchilarning pul mablag'larini yig'maydi, saqlamaydi va tranzaksiyalarni boshqarmaydi. Barcha moliyaviy operatsiyalar bevosita banklar o'rtasida amalga oshadi. PayGo faqatgina <i>"Xabar keldi"</i> degan axborotni yetkazib beradi.\n\n` +
-    `🏛 <b>3. Qonuniy Asoslar (ZRU-547):</b>\n` +
-    `O'zR "Shaxsiy ma'lumotlar to'g'risida"gi qonuniga muvofiq, foydalanuvchi o'zining shaxsiy ma'lumotlarini qayta ishlash uchun platformaga ixtiyoriy ravishda ruxsat beradi. Userbot texnologiyasi orqali shaxsiy ma'lumotlarni avtomatlashtirish qonun bilan taqiqlanmagan.\n\n` +
+  const textLegal = `⚖️ <b>PayGo Platformasi: SaaS Infratuzilma va Shaffoflik</b>\n\n` +
+    `PayGo — bu dasturchilar va tadbirkorlar uchun yaratilgan <b>SaaS (Software as a Service)</b> platformasidir. Tizimning huquqiy asoslari quyidagicha:\n\n` +
+    `🛡 <b>1. Xizmatning Mohiyati:</b>\n` +
+    `Platforma to'lov tashkiloti emas va pul o'tkazmalarini amalga oshirmaydi. Bizning xizmatimiz — foydalanuvchining shaxsiy Telegram notifikatsiyalarini Webhook orqali xavfsiz yo'naltirib beruvchi <b>texnik infratuzilma (SaaS)</b> hisoblanadi.\n\n` +
+    `💰 <b>2. To'lovlar va Haq olish:</b>\n` +
+    `Platformadagi to'lovlar (Premium tariflar) tranzaksiyalar uchun komissiya emas, balki <b>server resurslari, webhook yetkazib berish va texnik qo'llab-quvvatlash</b> uchun olinadigan abonent to'lovidir.\n\n` +
+    `🏛 <b>3. Qonuniy Asos (O'zR):</b>\n` +
+    `O'zR "Shaxsiy ma'lumotlar to'g'risida"gi (ZRU-547) qonuniga muvofiq, foydalanuvchi o'z ma'lumotlarini qayta ishlash uchun ixtiyoriy rozilik beradi. Platforma bank sirini buzmaydi, balki egasining ruxsati bilan ma'lumotni yetkazadi.\n\n` +
     `⚠️ <b>4. Mas'uliyat Chegarasi:</b>\n` +
-    `Platformadan qonuniy maqsadlarda foydalanish foydalanuvchining o'z zimmasida. PayGo noqonuniy faoliyat (firibgarlik, qimor va b.) uchun ishlatilgan holda, barcha mas'uliyat foydalanuvchi zimmasiga tushadi.\n\n` +
-    `🤝 <i>Biz shaffof va xavfsiz texnologiyalar tarafdorimiz.</i>`
+    `Platformadan faqat qonuniy maqsadlarda foydalanish shart. Noqonuniy faoliyat uchun tizimdan foydalanilganda barcha huquqiy javobgarlik foydalanuvchi zimmasida qoladi.\n\n` +
+    `🤝 <i>Loyiha hozirda startap bosqichida va barcha texnik imkoniyatlar dasturchilar uchun ochiq.</i>`
 
   await send(token, chatId, textLegal, {
     inline_keyboard: [
