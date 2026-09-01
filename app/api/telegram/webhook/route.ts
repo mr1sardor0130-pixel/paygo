@@ -335,21 +335,22 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
 }
 
 async function renderLegalInfo(token: string, chatId: number | string) {
-  const textLegal = `⚖️ <b>Dastur faoliyati va Qonuniylik asoslari</b>\n\n` +
-    `<b>1. Dasturning mohiyati:</b>\n` +
-    `Ushbu bot — bu to‘lov tizimi (bank, Payme, Click kabi) emas. Bu shunchaki shaxsiy Telegram xabarlarini (notifikatsiyalarni) avtomatlashtirilgan tarzda Webhook orqali uchinchi tomon serverlariga yo‘naltiruvchi <b>texnik dasturiy vosita (ko‘prik)</b> hisoblanadi.\n\n` +
-    `<b>2. Moliyaviy operatsiyalar:</b>\n` +
-    `Dastur foydalanuvchilarning mablag‘larini saqlamaydi, boshqarmaydi va pul o‘tkazmalarini amalga oshirmaydi. Bot faqatgina sizning xabarlaringizni o‘qiydi va ularni qayta ishlaydi.\n\n` +
-    `<b>3. Texnologiya (Userbot):</b>\n` +
-    `Dastur rasmiy Telegram API (Userbot texnologiyasi) asosida ishlaydi. Shaxsiy profildagi ma'lumotlarni avtomatlashtirish Telegram qoidalariga va O'zbekiston qonunchiligiga zid emas, modomiki u firibgarlik yoki boshqa jinoiy maqsadlarda ishlatilmasa.\n\n` +
-    `<b>4. Mas'uliyat:</b>\n` +
-    `Dasturdan foydalanish natijasida yuzaga keladigan moliyaviy yoki huquqiy oqibatlar uchun foydalanuvchining o'zi javobgar. Dasturchi faqat dasturning texnik ishlashiga kafolat beradi.\n\n` +
-    `📜 <i>Batafsil ma'lumot uchun Ommaviy oferta va Qoidalarni o'qing.</i>`
+  const textLegal = `⚖️ <b>PayGo Platformasi: Huquqiy Ma'lumotlar va Shaffoflik</b>\n\n` +
+    `PayGo — bu dasturiy ta'minot bo'lib, uning faoliyati O'zbekiston Respublikasi qonunchiligiga to'la muvofiq keladi. Quyida tizimning huquqiy va texnik asoslari keltirilgan:\n\n` +
+    `🛡 <b>1. Faoliyatning Texnik Maqsadi:</b>\n` +
+    `PayGo — bu to'lov tashkiloti emas. Tizim foydalanuvchining shaxsiy Telegram akkauntiga kelgan SMS/Push xabarlarni (notifikatsiyalarni) avtomatlashtirilgan tarzda Webhook orqali foydalanuvchining shaxsiy serveriga yo'naltiruvchi <b>"SaaS" (Software as a Service)</b> platformasidir.\n\n` +
+    `💰 <b>2. Mablag'lar va Tranzaksiyalar:</b>\n` +
+    `Tizim foydalanuvchilarning pul mablag'larini yig'maydi, saqlamaydi va tranzaksiyalarni boshqarmaydi. Barcha moliyaviy operatsiyalar bevosita banklar o'rtasida amalga oshadi. PayGo faqatgina <i>"Xabar keldi"</i> degan axborotni yetkazib beradi.\n\n` +
+    `🏛 <b>3. Qonuniy Asoslar (ZRU-547):</b>\n` +
+    `O'zR "Shaxsiy ma'lumotlar to'g'risida"gi qonuniga muvofiq, foydalanuvchi o'zining shaxsiy ma'lumotlarini qayta ishlash uchun platformaga ixtiyoriy ravishda ruxsat beradi. Userbot texnologiyasi orqali shaxsiy ma'lumotlarni avtomatlashtirish qonun bilan taqiqlanmagan.\n\n` +
+    `⚠️ <b>4. Mas'uliyat Chegarasi:</b>\n` +
+    `Platformadan qonuniy maqsadlarda foydalanish foydalanuvchining o'z zimmasida. PayGo noqonuniy faoliyat (firibgarlik, qimor va b.) uchun ishlatilgan holda, barcha mas'uliyat foydalanuvchi zimmasiga tushadi.\n\n` +
+    `🤝 <i>Biz shaffof va xavfsiz texnologiyalar tarafdorimiz.</i>`
 
   await send(token, chatId, textLegal, {
     inline_keyboard: [
-      [{ text: '📜 Ommaviy oferta', callback_data: 'view_offer' }],
-      [{ text: '📄 Foydalanish shartlari', callback_data: 'view_terms' }],
+      [{ text: '📜 Ommaviy oferta (Public Offer)', callback_data: 'view_offer' }],
+      [{ text: '📄 Maxfiylik siyosati', callback_data: 'view_terms' }],
     ],
   })
 }
@@ -1164,11 +1165,12 @@ export async function POST(request: Request) {
 
     if (data === 'view_offer') {
       const offerText = `📜 <b>Ommaviy oferta (Public Offer)</b>\n\n` +
-        `Ushbu hujjat bot va foydalanuvchi o'rtasidagi kelishuv hisoblanadi.\n\n` +
-        `<b>1. Shartnoma mavzusi:</b> Dasturchi foydalanuvchiga Telegram notifikatsiyalarini avtomatlashtirish uchun texnik platforma taqdim etadi.\n` +
-        `<b>2. Tomonlarning majburiyati:</b> Foydalanuvchi tizimdan faqat qonuniy maqsadlarda foydalanishi shart.\n` +
-        `<b>3. To'lovlar:</b> Tizimdagi to'lovlar xizmatni (Premium) faollashtirish uchun ixtiyoriy amalga oshiriladi.\n\n` +
-        `Batafsil ma'lumot saytda: ${process.env.NEXT_PUBLIC_APP_URL}/terms`
+        `Ushbu hujjat "PayGo" platformasi va foydalanuvchi o'rtasidagi yuridik kelishuvdir.\n\n` +
+        `<b>1. Xizmat turi:</b> Texnik xizmat ko'rsatish, axborotni avtomatlashtirilgan tarzda uzatish.\n` +
+        `<b>2. Aksept:</b> Platformadan foydalanishni boshlash shartnoma shartlariga to'liq rozilikni bildiradi.\n` +
+        `<b>3. To'lovlar:</b> Premium xizmatlar uchun to'lovlar ixtiyoriy va qaytarib berilmaydi (xizmat ko'rsatilganligi sababli).\n` +
+        `<b>4. Xavfsizlik:</b> Platforma shaxsiy ma'lumotlar maxfiyligini ta'minlash uchun xalqaro standartlardan foydalanadi.\n\n` +
+        `Batafsil veb-saytda: ${process.env.NEXT_PUBLIC_APP_URL}/legal`
       await send(token, chatId, offerText, {
         inline_keyboard: [[{ text: '↩️ Orqaga', callback_data: 'view_legal_info' }]],
       })
@@ -1176,11 +1178,11 @@ export async function POST(request: Request) {
     }
 
     if (data === 'view_terms') {
-      const termsText = `📄 <b>Foydalanish shartlari</b>\n\n` +
-        `<b>1. Xizmat ko'rsatish:</b> Xizmat "boricha" taqdim etiladi. Texnik uzilishlar uchun dasturchi javobgar emas.\n` +
-        `<b>2. Ma'lumotlar xavfsizligi:</b> Userbot uchun taqdim etilgan API ID/Hash ma'lumotlari faqat monitoring uchun ishlatiladi.\n` +
-        `<b>3. Taqiqlangan harakatlar:</b> Firibgarlik, spam va noqonuniy moliyaviy oqimlar uchun botdan foydalanish qat'iyan taqiqlanadi.\n\n` +
-        `Batafsil ma'lumot saytda: ${process.env.NEXT_PUBLIC_APP_URL}/terms`
+      const termsText = `📄 <b>Foydalanish shartlari va Maxfiylik</b>\n\n` +
+        `<b>1. Shaxsiy ma'lumotlar:</b> Biz sizning Telegram API ma'lumotlaringizni uchinchi shaxslarga bermaymiz. Ma'lumotlar faqat monitoring uchun ishlatiladi.\n` +
+        `<b>2. Maqsad:</b> Platformadan noqonuniy moliyaviy oqimlar (High-risk merch, qimor va b.) uchun foydalanish taqiqlanadi.\n` +
+        `<b>3. Cheklovlar:</b> Tizim o'z ishini xavfsizlik nuqtai nazaridan bir tomonlama to'xtatish huquqiga ega.\n\n` +
+        `Batafsil veb-saytda: ${process.env.NEXT_PUBLIC_APP_URL}/terms`
       await send(token, chatId, termsText, {
         inline_keyboard: [[{ text: '↩️ Orqaga', callback_data: 'view_legal_info' }]],
       })
@@ -2948,7 +2950,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (text === 'Qoidalar' || text === '⚖️ Qoidalar' || text === '⚖️ Faoliyat va Qonuniylik') {
+  if (text === 'Qoidalar' || text === 'Faoliyat va Qonuniylik' || raw === '⚖️ Qoidalar' || raw === '⚖️ Faoliyat va Qonuniylik') {
     await renderLegalInfo(token, chatId)
     return NextResponse.json({ ok: true })
   }
