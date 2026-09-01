@@ -351,6 +351,7 @@ async function renderLegalInfo(token: string, chatId: number | string) {
     inline_keyboard: [
       [{ text: '📜 Ommaviy oferta (Public Offer)', callback_data: 'view_offer' }],
       [{ text: '📄 Maxfiylik siyosati', callback_data: 'view_terms' }],
+      [{ text: '🌐 Batafsil ma\'lumot (Veb-saytda)', url: `${APP_URL}/legal` }],
     ],
   })
 }
@@ -1170,7 +1171,7 @@ export async function POST(request: Request) {
         `<b>2. Aksept:</b> Platformadan foydalanishni boshlash shartnoma shartlariga to'liq rozilikni bildiradi.\n` +
         `<b>3. To'lovlar:</b> Premium xizmatlar uchun to'lovlar ixtiyoriy va qaytarib berilmaydi (xizmat ko'rsatilganligi sababli).\n` +
         `<b>4. Xavfsizlik:</b> Platforma shaxsiy ma'lumotlar maxfiyligini ta'minlash uchun xalqaro standartlardan foydalanadi.\n\n` +
-        `Batafsil veb-saytda: ${process.env.NEXT_PUBLIC_APP_URL}/legal`
+        `Batafsil veb-saytda: ${APP_URL}/legal`
       await send(token, chatId, offerText, {
         inline_keyboard: [[{ text: '↩️ Orqaga', callback_data: 'view_legal_info' }]],
       })
@@ -1182,7 +1183,7 @@ export async function POST(request: Request) {
         `<b>1. Shaxsiy ma'lumotlar:</b> Biz sizning Telegram API ma'lumotlaringizni uchinchi shaxslarga bermaymiz. Ma'lumotlar faqat monitoring uchun ishlatiladi.\n` +
         `<b>2. Maqsad:</b> Platformadan noqonuniy moliyaviy oqimlar (High-risk merch, qimor va b.) uchun foydalanish taqiqlanadi.\n` +
         `<b>3. Cheklovlar:</b> Tizim o'z ishini xavfsizlik nuqtai nazaridan bir tomonlama to'xtatish huquqiga ega.\n\n` +
-        `Batafsil veb-saytda: ${process.env.NEXT_PUBLIC_APP_URL}/terms`
+        `Batafsil veb-saytda: ${APP_URL}/legal`
       await send(token, chatId, termsText, {
         inline_keyboard: [[{ text: '↩️ Orqaga', callback_data: 'view_legal_info' }]],
       })
