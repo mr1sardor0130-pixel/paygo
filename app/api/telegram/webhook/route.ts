@@ -93,9 +93,9 @@ const menu = {
     [{ text: '🛍 Do‘kon ochish' }, { text: '🏪 Mening do‘konim' }],
     [{ text: '💳 Mening kartam' }, { text: '🔐 Userbot ulash' }],
     [{ text: '🤝 Referal (Tekin Premium)' }, { text: '💎 Tariflar' }],
-    [{ text: '🧪 Test to‘lov' }, { text: '📣 Kanal ulash' }],
+    [{ text: '🧪 Webhook Test' }, { text: '📣 Kanal ulash' }],
     [{ text: '🔗 Webhook sozlash' }, { text: '🌐 Veb-panelga kirish' }],
-    [{ text: '📊 Statistika' }, { text: '📜 Tarix' }],
+    [{ text: '📊 Statistika' }, { text: '🏆 Liderlar' }],
     [{ text: '⚖️ Faoliyat va Qonuniylik' }, { text: '📚 API hujjat' }],
     [{ text: '❌ Menyuni yopish' }],
   ],
@@ -108,7 +108,8 @@ const adminMenu = {
   keyboard: [
     [{ text: '🏪 Do‘konlar boshqaruvi' }, { text: '💎 Tariflar boshqaruvi' }],
     [{ text: '👥 Adminlar boshqaruvi' }, { text: '📊 Barcha statistika' }],
-    [{ text: '🤖 Userbotlar holati' }, { text: '🌐 Web CRM Dashboard' }],
+    [{ text: '📢 Reklama & Broadcast' }, { text: '🤖 Userbotlar holati' }],
+    [{ text: '🌐 Web CRM Dashboard' }],
     [{ text: '🏠 Asosiy menyuga qaytish' }, { text: '❌ Admin panelni yopish' }],
   ],
   resize_keyboard: true,
@@ -350,6 +351,103 @@ async function isMaintenanceMode(): Promise<boolean> {
       `)
     } catch {}
     return false
+  }
+}
+
+export const PROMO_MESSAGES = [
+  `🚀 <b>PayGo bilan biznesingizni avtomatlashtiring!</b>\n\n` +
+  `Siz hali ham HUMO to‘lovlarini qo‘lda tekshiryapsizmi? PayGo Webhook xizmati orqali to‘lov xabarnomalari 1 soniyada serveringizga yetib boradi!\n\n` +
+  `💡 <i>Veb-saytingiz yoki Telegram botingizga atigi 2 daqiqada ulashingiz mumkin.</i>\n\n` +
+  ` Boshlash uchun menyudan <b>"🏪 Do‘kon ochish"</b> bo‘limiga o‘ting!`,
+
+  `🎁 <b>PayGo Premium — 15 kun BEPUL Oling!</b>\n\n` +
+  `Do‘stlaringiz va hamkasblaringizga o‘zingizning taklif havolangizni yuboring. Har bir taklif qilingan 3 ta do‘stingiz uchun sizga <b>15 kunlik Premium</b> sovg‘a qilinadi!\n\n` +
+  ` Taklif havolangizni olish uchun botdagi <b>"🤝 Referal (Tekin Premium)"</b> tugmasini bosing!`,
+
+  `🔒 <b>Qonuniylik va Maxfiylik Kafolati</b>\n\n` +
+  `PayGo — O‘zbekiston Respublikasi qonunchiligi (ZRU-547, ZRU-530-II, ZRU-792) doirasida ishlovchi ishonchli SaaS infratuzilmasi.\n\n` +
+  ` Biz pul mablag‘lariga tegmaymiz va saqlamaymiz, faqatgina texnik xabarnomalarni xavfsiz yetkazamiz.\n📜 Batafsil ma'lumot: /legal`,
+
+  `⚡️ <b>Dasturchilar va API Integratsiyasi</b>\n\n` +
+  `PayGo API & Webhook orqali to‘lovlarni avtomatik tasdiqlang. Har bir muvaffaqiyatli HUMO to‘lovi haqida lahzalik JSON notifikatsiya oling va xizmatlarni avtomatik faollashtiring!\n\n` +
+  ` Webhook test qilish uchun botda <b>/test_webhook</b> deb yuboring!`,
+
+  `📊 <b>Veb CRM Dashboard orqali Tushumlarni Kuzating</b>\n\n` +
+  `PayGo Web CRM paneli orqali barcha tushumlaringiz, do‘konlaringiz va tranzaksiyalar statistikasini real vaqt rejimida qulay vizual grafiklarda kuzatishingiz mumkin.\n\n` +
+  ` Panelga kirish uchun botda <b>"🌐 Veb-panelga kirish"</b> tugmasini bosing!`
+]
+
+export async function broadcastToAllUsers(token: string, messageText: string, replyMarkup: any = menu) {
+  try {
+    await ensureDbSchema()
+    const allUsers = await db.select({ telegramId: userProfiles.telegramId }).from(userProfiles)
+    let successCount = 0
+    let failCount = 0
+
+    for (const u of allUsers) {
+      if (!u.telegramId) continue
+      try {
+        const res = await send(token, u.telegramId, messageText, replyMarkup)
+        if (res && res.ok) {
+          successCount++
+        } else {
+          failCount++
+        }
+        await new Promise((r) => setTimeout(r, 40))
+      } catch {
+        failCount++
+      }
+    }
+    return { successCount, failCount, total: allUsers.length }
+  } catch (err) {
+    console.error('Broadcast error:', err)
+    return { successCount: 0, failCount: 0, total: 0 }
+  }
+}
+
+export async function triggerAutoPromoIfNeeded(token: string) {
+  try {
+    await ensureDbSchema()
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "system_settings" (
+        "key" text PRIMARY KEY,
+        "value" text NOT NULL,
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );
+    `)
+
+    // Check status
+    const statusRow = await db.select().from(systemSettings).where(eq(systemSettings.key, 'autopromo_status')).limit(1)
+    if (statusRow.length > 0 && statusRow[0].value === 'disabled') {
+      return { triggered: false, reason: 'disabled' }
+    }
+
+    // Check interval (1 hour = 3,600,000 ms)
+    const lastSentRow = await db.select().from(systemSettings).where(eq(systemSettings.key, 'autopromo_last_sent')).limit(1)
+    const now = Date.now()
+    const lastSent = lastSentRow.length > 0 ? Number(lastSentRow[0].value) || 0 : 0
+
+    if (now - lastSent < 3600000) {
+      return { triggered: false, reason: 'interval_not_reached', nextInMinutes: Math.round((3600000 - (now - lastSent)) / 60000) }
+    }
+
+    // Get current index
+    const indexRow = await db.select().from(systemSettings).where(eq(systemSettings.key, 'autopromo_index')).limit(1)
+    const currentIndex = indexRow.length > 0 ? Number(indexRow[0].value) || 0 : 0
+
+    const messageText = PROMO_MESSAGES[currentIndex % PROMO_MESSAGES.length]
+    const nextIndex = (currentIndex + 1) % PROMO_MESSAGES.length
+
+    // Update settings FIRST
+    await db.insert(systemSettings).values({ key: 'autopromo_last_sent', value: String(now) }).onConflictDoUpdate({ target: systemSettings.key, set: { value: String(now), updatedAt: new Date() } })
+    await db.insert(systemSettings).values({ key: 'autopromo_index', value: String(nextIndex) }).onConflictDoUpdate({ target: systemSettings.key, set: { value: String(nextIndex), updatedAt: new Date() } })
+
+    // Broadcast
+    const res = await broadcastToAllUsers(token, messageText)
+    return { triggered: true, index: currentIndex, stats: res }
+  } catch (err) {
+    console.error('triggerAutoPromoIfNeeded error:', err)
+    return { triggered: false, error: String(err) }
   }
 }
 
@@ -831,6 +929,9 @@ export async function POST(request: Request) {
   }
 
   await ensureDbSchema()
+
+  // Non-blocking hourly auto-promo trigger check
+  triggerAutoPromoIfNeeded(token).catch((err) => console.error('AutoPromo background trigger error:', err))
 
   const maintenance = await isMaintenanceMode()
   const telegramId = update.message?.from?.id || update.callback_query?.from?.id
@@ -1745,11 +1846,168 @@ export async function POST(request: Request) {
       await db.insert(systemSettings)
         .values({ key: 'maintenance_mode', value: 'false' })
         .onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
-      await send(token, chatId, '❌ <b>Texnik holat o‘chirildi.</b>\n\nBot barcha foydalanuvchilar uchun ochildi.')
+
+      await send(token, chatId, '❌ <b>Texnik holat o‘chirildi.</b>\n\nBot barcha foydalanuvchilar uchun ochildi.\n📢 <b>Barcha foydalanuvchilarga xabarnoma yuborilmoqda...</b>')
+
+      // Broadcast maintenance finish message to all registered users!
+      const maintenanceOffMsg = `🟢 <b>PayGo Botimiz Qayta Ishga Tushdi!</b>\n\n` +
+        `Texnik profilaktika va sozlash ishlari muvaffaqiyatli yakunlandi.\n\n` +
+        `⚡️ Endi barcha xizmatlar, Webhooklar va HUMO to‘lov xabarnomalaridan cheklovlarsiz va to‘liq tezlikda foydalanishingiz mumkin!\n\n` +
+        `Tizimdan foydalanish uchun quyidagi menyudan foydalaning 👇`
+
+      const broadcastRes = await broadcastToAllUsers(token, maintenanceOffMsg)
+
+      await send(token, chatId, `📢 <b>Texnik holat tugagani haqidagi xabarnoma yuborildi!</b>\n\n` +
+        `• Muvaffaqiyatli yetkazildi: <b>${broadcastRes.successCount}</b> ta\n` +
+        `• Xatolik: <b>${broadcastRes.failCount}</b> ta\n` +
+        `• Jami foydalanuvchilar: <b>${broadcastRes.total}</b> ta`)
     } catch (err: any) {
       console.error('Maintenance mode update error:', err)
       await send(token, chatId, `⚠️ <b>Xatolik yuz berdi:</b> ${err?.message || 'Noma\'lum xato'}`)
     }
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // ADVERTISING & BROADCAST COMMANDS (Admin)
+  // -------------------------------------------------------------
+  if (raw === '/send_promo') {
+    if (!isAdmin) {
+      await send(token, chatId, `⚠️ <b>Ruxsat yo‘q:</b> Siz admin emassiz.`)
+      return NextResponse.json({ ok: true })
+    }
+    await send(token, chatId, '⏳ <b>Navbatdagi reklama xabari barcha mijozlarga yuborilmoqda...</b>')
+    
+    const indexRow = await db.select().from(systemSettings).where(eq(systemSettings.key, 'autopromo_index')).limit(1)
+    const currentIndex = indexRow.length > 0 ? Number(indexRow[0].value) || 0 : 0
+    const promoText = PROMO_MESSAGES[currentIndex % PROMO_MESSAGES.length]
+    const nextIndex = (currentIndex + 1) % PROMO_MESSAGES.length
+
+    await db.insert(systemSettings).values({ key: 'autopromo_last_sent', value: String(Date.now()) }).onConflictDoUpdate({ target: systemSettings.key, set: { value: String(Date.now()), updatedAt: new Date() } })
+    await db.insert(systemSettings).values({ key: 'autopromo_index', value: String(nextIndex) }).onConflictDoUpdate({ target: systemSettings.key, set: { value: String(nextIndex), updatedAt: new Date() } })
+
+    const res = await broadcastToAllUsers(token, promoText)
+    await send(token, chatId, `✅ <b>Reklama muvaffaqiyatli yuborildi!</b>\n\n` +
+      `• Reklama №: <b>${(currentIndex % PROMO_MESSAGES.length) + 1}/${PROMO_MESSAGES.length}</b>\n` +
+      `• Muvaffaqiyatli: <b>${res.successCount}</b> ta\n` +
+      `• Xatolik: <b>${res.failCount}</b> ta\n` +
+      `• Jami: <b>${res.total}</b> ta`)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/autopromo_on') {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    await db.insert(systemSettings).values({ key: 'autopromo_status', value: 'enabled' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'enabled', updatedAt: new Date() } })
+    await send(token, chatId, '✅ <b>Har 1 soatlik avto-reklama yoqildi!</b>\n\nEndi bot har 1 soatda avtomatik ravishda turli xil reklama va foydali xabarlarni barcha mijozlarga yuborib turadi.')
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/autopromo_off') {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    await db.insert(systemSettings).values({ key: 'autopromo_status', value: 'disabled' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'disabled', updatedAt: new Date() } })
+    await send(token, chatId, '❌ <b>Avto-reklama o‘chirildi!</b>\n\nSoatlik reklama xabarlari to‘xtatildi.')
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw.startsWith('/broadcast')) {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    const textToBroadcast = raw.replace('/broadcast', '').trim()
+    if (!textToBroadcast) {
+      await send(token, chatId, '✍️ <b>Barcha mijozlarga xabar yuborish:</b>\n\nFoydalanish: <code>/broadcast Sizning xabar matningiz</code>\n\nYoki shunchaki rasmiy e’lonlar yuborish uchun ishlatiladi.')
+      return NextResponse.json({ ok: true })
+    }
+    await send(token, chatId, '⏳ <b>Xabaringiz barcha mijozlarga yuborilmoqda...</b>')
+    const res = await broadcastToAllUsers(token, textToBroadcast)
+    await send(token, chatId, `✅ <b>Xabar yuborildi!</b>\n\n• Yetkazildi: <b>${res.successCount}</b> ta\n• Yetib bormadi: <b>${res.failCount}</b> ta`)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (text === '📢 Reklama & Broadcast') {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    const statusRow = await db.select().from(systemSettings).where(eq(systemSettings.key, 'autopromo_status')).limit(1)
+    const isAutoOn = statusRow.length === 0 || statusRow[0].value !== 'disabled'
+
+    await send(
+      token,
+      chatId,
+      `📢 <b>Reklama va Avto-Broadcast Boshqaruvi</b>\n\n` +
+      `⏱ <b>Soatlik Avto-reklama holati:</b> ${isAutoOn ? '🟢 Yoqilgan (Har 1 soatda)' : '🔴 O‘chirilgan'}\n\n` +
+      `🛠 <b>Mavjud buyruqlar:</b>\n` +
+      `• <code>/send_promo</code> — Hozirroq navbatdagi reklamani barcha mijozlarga yuborish\n` +
+      `• <code>/autopromo_on</code> — Soatlik avto-reklamani yoqish\n` +
+      `• <code>/autopromo_off</code> — Soatlik avto-reklamani o‘chirish\n` +
+      `• <code>/broadcast xabar_matni</code> — Istalgan shaxsiy e’loningizni tarqatish`,
+      adminMenu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // WEBHOOK TESTER & LEADERBOARD & MY STATS
+  // -------------------------------------------------------------
+  if (raw === '/test_webhook' || raw === '/test_wh' || text === '🧪 Webhook Test') {
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+    if (userShops.length === 0) {
+      await send(token, chatId, '⚠️ Sizda hali do‘kon yo‘q. Webhook test qilish uchun avval "🛍 Do‘kon ochish" bo‘limidan do‘kon yarating.')
+      return NextResponse.json({ ok: true })
+    }
+    const myShop = userShops[0]
+    if (!myShop.webhookUrl) {
+      await send(token, chatId, `⚠️ <b>${myShop.name}</b> do‘koningizda Webhook URL o‘rnatilmagan.\n\nAvval "🏪 Mening do‘konim" bo‘limida Webhook URL manzilini kiriting.`)
+      return NextResponse.json({ ok: true })
+    }
+
+    await send(token, chatId, `🧪 <b>Webhook Sinov Simulyatsiyasi:</b>\n\n📍 URL: <code>${myShop.webhookUrl}</code>\n\nTest to‘lov payload yuborilmoqda...`)
+
+    const testPayload = {
+      event: 'payment.success',
+      paymentId: `test_${randomUUID().slice(0, 8)}`,
+      amount: 100000,
+      currency: 'UZS',
+      shopId: myShop.id,
+      shopName: myShop.name,
+      cardLast4: myShop.cardLast4 || '3587',
+      timestamp: new Date().toISOString(),
+      isTest: true
+    }
+
+    try {
+      const whResult = await deliverWebhook(myShop.webhookUrl, testPayload, myShop.id)
+      if (whResult.success) {
+        await send(token, chatId, `✅ <b>Webhook Test Muvaffaqiyatli!</b>\n\n` +
+          `• HTTP Status: <code>${whResult.statusCode} OK</code>\n` +
+          `• Serveringiz to‘lov xabarnomasini qabul qildi va to‘g‘ri javob qaytardi. 🚀`)
+      } else {
+        await send(token, chatId, `❌ <b>Webhook Testda Xatolik:</b>\n\n` +
+          `• HTTP Status: <code>${whResult.statusCode || 'Ulanib bo‘lmadi'}</code>\n` +
+          `• Xato: <code>${whResult.error || 'Server javob bermadi'}</code>\n\n` +
+          `Iltimos, serveringizda ushbu URL ochiq va tayyor ekanligini tekshiring: <code>${myShop.webhookUrl}</code>`)
+      }
+    } catch (err: any) {
+      await send(token, chatId, `⚠️ <b>Xatolik:</b> ${err?.message || 'Serverga bog‘lanib bo‘lmadi'}`)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/leaderboard' || text === '🏆 Liderlar') {
+    const topUsers = await db.select()
+      .from(userProfiles)
+      .orderBy(desc(userProfiles.referralCount))
+      .limit(10)
+
+    let leaderboardTxt = `🏆 <b>Eng Faol Taklif Qiluvchilar (Liderlar Jadvali):</b>\n\n`
+    if (topUsers.length === 0) {
+      leaderboardTxt += `Hozircha faol taklif qiluvchilar yo‘q. Birinchi bo‘ling!`
+    } else {
+      topUsers.forEach((u, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '👤'
+        const maskedId = u.telegramId ? `${u.telegramId.slice(0, 4)}***${u.telegramId.slice(-2)}` : 'Foydalanuvchi'
+        leaderboardTxt += `${medal} <b>${i + 1}-o‘rin:</b> ${maskedId} — <b>${u.referralCount} ta</b> taklif (${u.rewardedDays} kun Premium)\n`
+      })
+    }
+    leaderboardTxt += `\n🎁 Siz ham do‘stlaringizni taklif qilib bepul Premium va sovg‘alar yutib oling!\nTaklif havolangizni olish uchun <b>"🤝 Referal (Tekin Premium)"</b> tugmasini bosing.`
+
+    await send(token, chatId, leaderboardTxt)
     return NextResponse.json({ ok: true })
   }
 
