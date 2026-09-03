@@ -36,6 +36,8 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -71,6 +73,70 @@ export function PaybotDashboard() {
   const [savingShop, setSavingShop] = useState(false)
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [testingChannel, setTestingChannel] = useState(false)
+
+  // Custom Brand Logos State (HUMO, UZCARD, PAYME, CLICK, UZUM)
+  const [brandLogos, setBrandLogos] = useState({
+    humo: '',
+    uzcard: '',
+    payme: '',
+    click: '',
+    uzum: '',
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setBrandLogos({
+        humo: localStorage.getItem('paygo_humo_logo') || '',
+        uzcard: localStorage.getItem('paygo_uzcard_logo') || '',
+        payme: localStorage.getItem('paygo_payme_logo') || '',
+        click: localStorage.getItem('paygo_click_logo') || '',
+        uzum: localStorage.getItem('paygo_uzum_logo') || '',
+      })
+    }
+  }, [])
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, targetKey: 'logoUrl' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Fayl hajmi 5MB dan oshmasligi kerak!')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      if (!dataUrl) return
+
+      if (targetKey === 'logoUrl') {
+        setShopForm(prev => ({ ...prev, logoUrl: dataUrl }))
+      } else {
+        setBrandLogos(prev => {
+          const next = { ...prev, [targetKey]: dataUrl }
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`paygo_${targetKey}_logo`, dataUrl)
+          }
+          return next
+        })
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveLogo = (targetKey: 'logoUrl' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
+    if (targetKey === 'logoUrl') {
+      setShopForm(prev => ({ ...prev, logoUrl: '' }))
+    } else {
+      setBrandLogos(prev => {
+        const next = { ...prev, [targetKey]: '' }
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(`paygo_${targetKey}_logo`)
+        }
+        return next
+      })
+    }
+  }
 
   // Test Payment Creator state
   const [testAmount, setTestAmount] = useState('15000')
@@ -732,6 +798,259 @@ export function PaybotDashboard() {
                       placeholder="Online do‘konimiz orqali tezkor to‘lovlar"
                       className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2.5 text-sm outline-none focus:border-[#1769e0] focus:ring-2 focus:ring-blue-50"
                     />
+                  </div>
+
+                  {/* ------------------------------------------------------------- */}
+                  {/* BRAND & SHOP LOGO UPLOAD SECTION (HUMO, UZCARD, PAYME, CLICK, UZUM) */}
+                  {/* ------------------------------------------------------------- */}
+                  <div className="rounded-2xl bg-slate-50 border border-slate-200 p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                        <ImageIcon size={18} className="text-[#1769e0]" />
+                        <span>🖼 Brend & Do‘kon Logotiplari (Fayldan Yuklash / Upload)</span>
+                      </div>
+                      <span className="text-[11px] font-medium text-slate-500">PNG, JPG, SVG, WebP (Max: 5MB)</span>
+                    </div>
+
+                    <p className="text-xs text-slate-600">
+                      O‘zingizning rasmiy logotiplaringizni kompyuteringizdan tanlab yuklang. Yuklangan logotiplar to‘lov sahifalari va cheklarda darhol namoyon bo‘ladi!
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+                      {/* 1. Do'kon Logotipi */}
+                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              🏪 Do‘kon Logotipi
+                            </span>
+                            {shopForm.logoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLogo('logoUrl')}
+                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                              >
+                                <Trash2 size={12} /> O‘chirish
+                              </button>
+                            )}
+                          </div>
+                          {shopForm.logoUrl ? (
+                            <div className="h-16 w-full rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                              <img src={shopForm.logoUrl} alt="Do‘kon Logo" className="max-h-full max-w-full object-contain p-1" />
+                            </div>
+                          ) : (
+                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                              Logo yuklanmagan
+                            </div>
+                          )}
+                        </div>
+                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#1769e0] hover:bg-blue-700 text-white font-bold text-xs transition active:scale-95 text-center">
+                          <Upload size={13} />
+                          <span>Fayl tanlash</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'logoUrl')}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* 2. HUMO Logo */}
+                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              💳 HUMO Logo
+                            </span>
+                            {brandLogos.humo && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLogo('humo')}
+                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                              >
+                                <Trash2 size={12} /> O‘chirish
+                              </button>
+                            )}
+                          </div>
+                          {brandLogos.humo ? (
+                            <div className="h-16 w-full rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                              <img src={brandLogos.humo} alt="HUMO Logo" className="max-h-full max-w-full object-contain p-1" />
+                            </div>
+                          ) : (
+                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                              Standard HUMO Logo
+                            </div>
+                          )}
+                        </div>
+                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#022B18] hover:bg-emerald-950 text-emerald-400 font-bold text-xs transition active:scale-95 text-center border border-emerald-900">
+                          <Upload size={13} />
+                          <span>HUMO rasm yuklash</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'humo')}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* 3. UZCARD Logo */}
+                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              💳 UZCARD Logo
+                            </span>
+                            {brandLogos.uzcard && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLogo('uzcard')}
+                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                              >
+                                <Trash2 size={12} /> O‘chirish
+                              </button>
+                            )}
+                          </div>
+                          {brandLogos.uzcard ? (
+                            <div className="h-16 w-full rounded-lg bg-[#003D75] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                              <img src={brandLogos.uzcard} alt="UZCARD Logo" className="max-h-full max-w-full object-contain p-1" />
+                            </div>
+                          ) : (
+                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                              Standard UZCARD Logo
+                            </div>
+                          )}
+                        </div>
+                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#003D75] hover:bg-blue-900 text-cyan-300 font-bold text-xs transition active:scale-95 text-center">
+                          <Upload size={13} />
+                          <span>UZCARD rasm yuklash</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'uzcard')}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* 4. Payme Logo */}
+                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              ⚡️ Payme Logo
+                            </span>
+                            {brandLogos.payme && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLogo('payme')}
+                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                              >
+                                <Trash2 size={12} /> O‘chirish
+                              </button>
+                            )}
+                          </div>
+                          {brandLogos.payme ? (
+                            <div className="h-16 w-full rounded-lg bg-[#002B28] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                              <img src={brandLogos.payme} alt="Payme Logo" className="max-h-full max-w-full object-contain p-1" />
+                            </div>
+                          ) : (
+                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                              Standard Payme Button
+                            </div>
+                          )}
+                        </div>
+                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#19D3C5] hover:bg-teal-400 text-[#002B28] font-black text-xs transition active:scale-95 text-center">
+                          <Upload size={13} />
+                          <span>Payme rasm yuklash</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'payme')}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* 5. Click Logo */}
+                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              ⚡️ Click Logo
+                            </span>
+                            {brandLogos.click && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLogo('click')}
+                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                              >
+                                <Trash2 size={12} /> O‘chirish
+                              </button>
+                            )}
+                          </div>
+                          {brandLogos.click ? (
+                            <div className="h-16 w-full rounded-lg bg-[#008BE3] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                              <img src={brandLogos.click} alt="Click Logo" className="max-h-full max-w-full object-contain p-1" />
+                            </div>
+                          ) : (
+                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                              Standard Click Button
+                            </div>
+                          )}
+                        </div>
+                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#008BE3] hover:bg-blue-600 text-white font-black text-xs transition active:scale-95 text-center">
+                          <Upload size={13} />
+                          <span>Click rasm yuklash</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'click')}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* 6. Uzum Bank Logo */}
+                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              🟣 Uzum Bank Logo
+                            </span>
+                            {brandLogos.uzum && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLogo('uzum')}
+                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                              >
+                                <Trash2 size={12} /> O‘chirish
+                              </button>
+                            )}
+                          </div>
+                          {brandLogos.uzum ? (
+                            <div className="h-16 w-full rounded-lg bg-[#7000FF] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                              <img src={brandLogos.uzum} alt="Uzum Bank Logo" className="max-h-full max-w-full object-contain p-1" />
+                            </div>
+                          ) : (
+                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                              Standard Uzum Button
+                            </div>
+                          )}
+                        </div>
+                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#7000FF] hover:bg-purple-800 text-white font-black text-xs transition active:scale-95 text-center">
+                          <Upload size={13} />
+                          <span>Uzum rasm yuklash</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'uzum')}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Karta qismi */}

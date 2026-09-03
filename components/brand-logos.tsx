@@ -1,85 +1,206 @@
 'use client'
 
-import React, { useState } from 'react'
-import { ExternalLink, Check, Copy, ShieldCheck } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { ExternalLink, Check, ShieldCheck } from 'lucide-react'
 
 /* ==========================================================================
-   OFFICIAL BRAND LOGO SVGs (HUMO, UZCARD, PAYME, CLICK, UZUM BANK)
+   OFFICIAL & CUSTOM BRAND LOGO COMPONENTS (HUMO, UZCARD, PAYME, CLICK, UZUM BANK)
    ========================================================================== */
 
 /**
- * Official HUMO Logo SVG
+ * HUMO Logo (Reads custom uploaded logo from localStorage or uses default)
  */
-export function HumoLogo({ className = "h-5" }: { className?: string }) {
+export function HumoLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
+  const [imgError, setImgError] = useState(false)
+  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
+
+  useEffect(() => {
+    if (customUrl) {
+      setLogoUrl(customUrl)
+      return
+    }
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_humo_logo') : null
+    if (saved) setLogoUrl(saved)
+  }, [customUrl])
+
+  if (logoUrl && !imgError) {
+    return (
+      <img
+        src={logoUrl}
+        alt="HUMO"
+        className={`${className} object-contain inline-block`}
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+
+  if (imgError) {
+    return (
+      <svg viewBox="0 0 100 30" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="30" rx="5" fill="#022B18" />
+        <path d="M12 7V23M12 15H20M20 7V23" stroke="#00C853" strokeWidth="3" strokeLinecap="round" />
+        <path d="M26 7V16C26 19.5 28.5 22 31.5 22C34.5 22 37 19.5 37 16V7" stroke="#00C853" strokeWidth="3" strokeLinecap="round" />
+        <path d="M43 23V7L50 16L57 7V23" stroke="#00C853" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="70" cy="15" r="7" stroke="#FF6D00" strokeWidth="3" />
+      </svg>
+    )
+  }
+
   return (
-    <svg viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      {/* Background Pill */}
-      <rect width="120" height="32" rx="6" fill="#022B18" />
-      {/* Green Curved H & M symbol */}
-      <path d="M12 8V24M12 16H22M22 8V24" stroke="#00C853" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M29 8V18C29 21.3 31.7 24 35 24C38.3 24 41 21.3 41 18V8" stroke="#00C853" strokeWidth="3.5" strokeLinecap="round" />
-      <path d="M48 24V8L56 18L64 8V24" stroke="#00C853" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Orange Circle O */}
-      <circle cx="78" cy="16" r="8" stroke="#FF6D00" strokeWidth="3.5" />
-      {/* HUMO Text */}
-      <text x="91" y="21" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="900" fontSize="13" letterSpacing="0.5">HUMO</text>
-    </svg>
+    <img
+      src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Humo_logo.png"
+      alt="HUMO"
+      className={`${className} object-contain inline-block`}
+      onError={() => setImgError(true)}
+    />
   )
 }
 
 /**
- * Official UZCARD Logo SVG
+ * UZCARD Logo (Reads custom uploaded logo from localStorage or uses default)
  */
-export function UzcardLogo({ className = "h-5" }: { className?: string }) {
+export function UzcardLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
+  const [imgError, setImgError] = useState(false)
+  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
+
+  useEffect(() => {
+    if (customUrl) {
+      setLogoUrl(customUrl)
+      return
+    }
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_uzcard_logo') : null
+    if (saved) setLogoUrl(saved)
+  }, [customUrl])
+
+  if (logoUrl && !imgError) {
+    return (
+      <img
+        src={logoUrl}
+        alt="UZCARD"
+        className={`${className} object-contain inline-block`}
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+
+  if (imgError) {
+    return (
+      <svg viewBox="0 0 110 30" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="110" height="30" rx="5" fill="#003D75" />
+        <text x="10" y="20" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="900" fontSize="14" letterSpacing="1">UZCARD</text>
+        <g transform="translate(82, 6)">
+          <rect width="18" height="18" rx="3" fill="#00A3E0" />
+          <rect y="4" width="18" height="4" fill="#002A54" />
+          <circle cx="13" cy="13" r="2" fill="#FFFFFF" />
+        </g>
+      </svg>
+    )
+  }
+
   return (
-    <svg viewBox="0 0 130 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect width="130" height="32" rx="6" fill="#003D75" />
-      <text x="12" y="21" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="900" fontSize="15" letterSpacing="1">UZCARD</text>
-      {/* Cyan card graphic emblem */}
-      <g transform="translate(98, 7)">
-        <rect width="20" height="18" rx="3" fill="#00A3E0" />
-        <rect y="4" width="20" height="4" fill="#002A54" />
-        <circle cx="15" cy="14" r="2" fill="#FFFFFF" />
-      </g>
-    </svg>
+    <img
+      src="https://upload.wikimedia.org/wikipedia/commons/d/d4/UZCARD_logo.png"
+      alt="UZCARD"
+      className={`${className} object-contain inline-block`}
+      onError={() => setImgError(true)}
+    />
   )
 }
 
 /**
- * Official Payme Logo SVG
+ * Payme Logo (Reads custom uploaded logo or fallback)
  */
-export function PaymeLogo({ className = "h-5" }: { className?: string }) {
+export function PaymeLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
+  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
+
+  useEffect(() => {
+    if (customUrl) {
+      setLogoUrl(customUrl)
+      return
+    }
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_payme_logo') : null
+    if (saved) setLogoUrl(saved)
+  }, [customUrl])
+
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt="Payme"
+        className={`${className} object-contain inline-block`}
+      />
+    )
+  }
+
   return (
-    <svg viewBox="0 0 110 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect width="110" height="32" rx="7" fill="#19D3C5" />
-      <text x="55" y="21" textAnchor="middle" fill="#002B28" fontFamily="sans-serif" fontWeight="900" fontSize="16" letterSpacing="-0.5">payme</text>
-    </svg>
+    <div className={`inline-flex items-center justify-center bg-[#19D3C5] px-2.5 py-1 rounded-lg font-black text-[#002B28] text-xs uppercase tracking-tight shadow-sm ${className}`}>
+      payme
+    </div>
   )
 }
 
 /**
- * Official Click Logo SVG
+ * Click Logo (Reads custom uploaded logo or fallback)
  */
-export function ClickLogo({ className = "h-5" }: { className?: string }) {
+export function ClickLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
+  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
+
+  useEffect(() => {
+    if (customUrl) {
+      setLogoUrl(customUrl)
+      return
+    }
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_click_logo') : null
+    if (saved) setLogoUrl(saved)
+  }, [customUrl])
+
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt="Click"
+        className={`${className} object-contain inline-block`}
+      />
+    )
+  }
+
   return (
-    <svg viewBox="0 0 110 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect width="110" height="32" rx="7" fill="#008BE3" />
-      <text x="50" y="21" textAnchor="middle" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="900" fontSize="17" letterSpacing="-0.5">click</text>
-      <circle cx="86" cy="11" r="3" fill="#00FFCC" />
-    </svg>
+    <div className={`inline-flex items-center justify-center bg-[#008BE3] px-2.5 py-1 rounded-lg font-black text-white text-xs tracking-tight shadow-sm ${className}`}>
+      click <span className="w-1.5 h-1.5 bg-[#00FFCC] rounded-full ml-0.5 inline-block"></span>
+    </div>
   )
 }
 
 /**
- * Official Uzum Bank Logo SVG
+ * Uzum Bank Logo (Reads custom uploaded logo or fallback)
  */
-export function UzumBankLogo({ className = "h-5" }: { className?: string }) {
+export function UzumBankLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
+  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
+
+  useEffect(() => {
+    if (customUrl) {
+      setLogoUrl(customUrl)
+      return
+    }
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_uzum_logo') : null
+    if (saved) setLogoUrl(saved)
+  }, [customUrl])
+
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt="Uzum Bank"
+        className={`${className} object-contain inline-block`}
+      />
+    )
+  }
+
   return (
-    <svg viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect width="120" height="32" rx="7" fill="#7000FF" />
-      <text x="12" y="21" fill="#FFC700" fontFamily="sans-serif" fontWeight="900" fontSize="15" letterSpacing="-0.3">uzum</text>
-      <text x="58" y="21" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="800" fontSize="13">bank</text>
-    </svg>
+    <div className={`inline-flex items-center justify-center bg-[#7000FF] px-2.5 py-1 rounded-lg font-black text-xs shadow-sm ${className}`}>
+      <span className="text-[#FFC700]">uzum</span>
+      <span className="text-white ml-1 font-bold">bank</span>
+    </div>
   )
 }
 
@@ -89,13 +210,14 @@ export function UzumBankLogo({ className = "h-5" }: { className?: string }) {
 
 export function AcceptedBrandsBar({ className = "" }: { className?: string }) {
   return (
-    <div className={`flex flex-wrap items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-slate-900/60 border border-slate-800 ${className}`}>
-      <span className="text-[11px] font-medium text-slate-400 mr-1 flex items-center gap-1">
-        <ShieldCheck size={14} className="text-emerald-400" /> Rasmiy qabul qilinadigan kartalar:
+    <div className={`flex flex-wrap items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-slate-900/80 border border-slate-800 ${className}`}>
+      <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+        <ShieldCheck size={14} className="text-emerald-400" /> Qabul qilinadigan kartalar:
       </span>
-      <div className="flex items-center gap-2">
-        <HumoLogo className="h-6 w-auto shadow-sm" />
-        <UzcardLogo className="h-6 w-auto shadow-sm" />
+      <div className="flex items-center gap-3 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
+        <HumoLogo className="h-5 w-auto" />
+        <div className="w-px h-4 bg-slate-700"></div>
+        <UzcardLogo className="h-5 w-auto" />
       </div>
     </div>
   )
@@ -161,8 +283,7 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
           className="group relative flex items-center justify-between px-3.5 py-3 rounded-2xl bg-[#19D3C5] hover:bg-[#16c4b7] text-[#002B28] font-black text-xs transition-all shadow-md active:scale-[0.98] cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <PaymeLogo className="h-5 w-auto" />
-            <span className="font-extrabold text-[12px]">Payme</span>
+            <PaymeLogo className="h-5" />
           </div>
           <ExternalLink size={14} className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
         </button>
@@ -174,8 +295,7 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
           className="group relative flex items-center justify-between px-3.5 py-3 rounded-2xl bg-[#008BE3] hover:bg-[#007ccb] text-white font-black text-xs transition-all shadow-md active:scale-[0.98] cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <ClickLogo className="h-5 w-auto" />
-            <span className="font-extrabold text-[12px]">Click</span>
+            <ClickLogo className="h-5" />
           </div>
           <ExternalLink size={14} className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
         </button>
@@ -187,8 +307,7 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
           className="group relative flex items-center justify-between px-3.5 py-3 rounded-2xl bg-[#7000FF] hover:bg-[#6200e0] text-white font-black text-xs transition-all shadow-md active:scale-[0.98] cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <UzumBankLogo className="h-5 w-auto" />
-            <span className="font-extrabold text-[12px]">Uzum Bank</span>
+            <UzumBankLogo className="h-5" />
           </div>
           <ExternalLink size={14} className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
         </button>
@@ -200,3 +319,4 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
     </div>
   )
 }
+
