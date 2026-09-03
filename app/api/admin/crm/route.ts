@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
 import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles } from '@/lib/db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, sql } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
 import { sendTelegramMessage } from '@/lib/telegram-notifier'
 
@@ -112,30 +112,54 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Telegram ID kiritilmadi' }, { status: 400 })
       }
       const newId = randomUUID()
+      const addedByWho = auth.telegramId || 'superadmin'
       await db
         .insert(systemRoles)
         .values({
           id: newId,
           telegramId: String(telegramId).trim(),
           role: role || 'admin',
-          addedBy: auth.telegramId,
+          addedBy: addedByWho,
         })
         .onConflictDoUpdate({
           target: systemRoles.telegramId,
-          set: { role: role || 'admin' },
+          set: { role: role || 'admin', addedBy: addedByWho },
         })
 
-      return NextResponse.json({ ok: true, message: `Foydalanuvchi ${telegramId} admin etib tayinlandi!` })
+      return NextResponse.json({ ok: true, message: `Foydalanuvchi ${telegramId} admin etib tayinlandi (${addedByWho} tomonidan)` })
     }
 
-    // 3. REMOVE ADMIN ROLE
-    if (action === 'remove_admin') {
-      const { telegramId } = body
-      if (String(telegramId) === '8021115446') {
+    // 3. REMOVE / DELETE ADMIN ROLE
+    if (action === 'remove_admin' || action === 'delete_admin') {
+      const { telegramId, roleId } = body
+      if (roleId) {
+        const found = await db.select().from(systemRoles).where(eq(systemRoles.id, roleId)).limit(1)
+        if (found[0]?.telegramId === '8021115446') {
+          return NextResponse.json({ error: 'Asosiy superadminni o‘chirib bo‘lmaydi' }, { status: 400 })
+        }
+        await db.delete(systemRoles).where(eq(systemRoles.id, roleId))
+        return NextResponse.json({ ok: true, message: 'Admin role muvaffaqiyatli o‘chirildi' })
+      }
+
+      const targetTgId = String(telegramId || '').trim()
+      if (!targetTgId) {
+        return NextResponse.json({ error: 'Telegram ID kiritilmadi' }, { status: 400 })
+      }
+
+      if (targetTgId === '8021115446') {
         return NextResponse.json({ error: 'Asosiy superadminni o‘chirib bo‘lmaydi' }, { status: 400 })
       }
-      await db.delete(systemRoles).where(eq(systemRoles.telegramId, String(telegramId)))
-      return NextResponse.json({ ok: true, message: `Admin ${telegramId} o‘chirildi` })
+
+      await db.delete(systemRoles).where(eq(systemRoles.telegramId, targetTgId))
+      return NextResponse.json({ ok: true, message: `Admin ${targetTgId} muvaffaqiyatli o‘chirildi` })
+    }
+
+    // 3.5 CLEANUP BOGUS AUTO-GRANT ADMINS
+    if (action === 'clean_auto_admins') {
+      await db.execute(
+        sql`DELETE FROM "system_roles" WHERE "telegramId" != '8021115446' AND ("addedBy" IN ('auto-grant', 'auto-maintenance', 'self') OR "addedBy" IS NULL)`
+      )
+      return NextResponse.json({ ok: true, message: 'Barcha nohaq berilgan avto-adminlar tozalandi!' })
     }
 
     // 4. CREATE / UPDATE TARIFF
