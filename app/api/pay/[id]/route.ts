@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { payments, shops, deliveryLogs } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { payments, shops, deliveryLogs, donations, fundraisers } from '@/lib/db/schema'
+import { eq, sql } from 'drizzle-orm'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 
 export const runtime = 'nodejs'
@@ -110,6 +110,23 @@ export async function POST(
       })
       .where(eq(payments.id, payment.id))
 
+    // If this payment belongs to a fundraiser donation, sync the donation & fundraiser
+    if (payment.id.startsWith('pay_don_') || payment.userId.startsWith('donor_')) {
+      try {
+        const donationId = payment.id.replace('pay_', '')
+        const donRows = await db.select().from(donations).where(eq(donations.id, donationId)).limit(1)
+        if (donRows.length > 0 && donRows[0].status !== 'paid') {
+          await db.update(donations).set({ status: 'paid', paymentId: payment.id }).where(eq(donations.id, donationId))
+          const fundId = donRows[0].fundraiserId
+          await db.execute(
+            sql`UPDATE "fundraisers" SET "collectedAmount" = "collectedAmount" + ${payment.amount}, "donorCount" = "donorCount" + 1, "updatedAt" = NOW() WHERE "id" = ${fundId}`
+          )
+        }
+      } catch (fundSyncErr) {
+        console.warn('Fund donation sync notice:', fundSyncErr)
+      }
+    }
+
     // Get shop info
     const shopRows = await db.select().from(shops).where(eq(shops.id, payment.shopId)).limit(1)
     const shop = shopRows[0] || null
@@ -148,57 +165,55 @@ export async function POST(
       }
     }
 
-    // 2. Deliver to Telegram Channel if shop has telegramChannelId
-    if (token && shop?.telegramChannelId) {
+    // Safe Telegram Message Helper with Timeout
+    const safeTelegramSend = async (chatId: string | number, htmlText: string) => {
+      if (!token || !chatId) return
       try {
-        const postText =
-          `💸 <b>Yangi To‘lov Tasdiqlandi!</b>\n\n` +
-          `🏪 <b>Do‘kon:</b> ${shop.name}\n` +
-          `💰 <b>Summa:</b> ${payment.amount.toLocaleString('uz-UZ')} UZS\n` +
-          `💳 <b>Karta:</b> <code>${formatCard(shop.cardNumber || '9860350123453587')}</code>\n` +
-          `👤 <b>Hisob egasi:</b> ${shop.accountOwner || 'HUMO hisob egasi'}\n` +
-          `⚡️ <b>Holat:</b> ✅ To‘landi\n` +
-          `🆔 <b>Tranzaksiya ID:</b> <code>${payment.id}</code>\n\n` +
-          `📦 <b>Webhook JSON Data:</b>\n` +
-          `<pre><code class="language-json">${JSON.stringify(webhookPayload, null, 2)}</code></pre>`
-
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 4000)
         await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: shop.telegramChannelId,
-            text: postText,
+            chat_id: chatId,
+            text: htmlText,
             parse_mode: 'HTML',
           }),
+          signal: controller.signal,
         })
-      } catch (chanErr) {
-        console.warn('Channel delivery error:', chanErr)
+        clearTimeout(timeoutId)
+      } catch (sendErr) {
+        console.warn('Safe telegram notification warning:', sendErr)
       }
     }
 
-    // 3. Deliver to Merchant Telegram DM
-    if (token && shop?.userId) {
-      try {
-        const dmText =
-          `🎉 <b>To‘lov Muvaffaqiyatli Qabul Qilindi!</b>\n\n` +
-          `💰 <b>Summa:</b> ${payment.amount.toLocaleString('uz-UZ')} UZS\n` +
-          `🏪 <b>Do‘kon:</b> ${shop.name}\n` +
-          `🆔 <b>To‘lov ID:</b> <code>${payment.id}</code>\n` +
-          `⚡️ <b>Holat:</b> ✅ To‘landi (Sessiya yopildi)\n\n` +
-          `📦 <i>Webhook va Kanalingizga to‘liq ma’lumot yetkazildi.</i>`
+    // 2. Deliver to Telegram Channel if shop has telegramChannelId
+    if (token && shop?.telegramChannelId) {
+      const postText =
+        `💸 <b>Yangi To‘lov Tasdiqlandi!</b>\n\n` +
+        `🏪 <b>Do‘kon:</b> ${shop.name}\n` +
+        `💰 <b>Summa:</b> ${payment.amount.toLocaleString('uz-UZ')} UZS\n` +
+        `💳 <b>Karta:</b> <code>${formatCard(shop.cardNumber || '9860350123453587')}</code>\n` +
+        `👤 <b>Hisob egasi:</b> ${shop.accountOwner || 'HUMO hisob egasi'}\n` +
+        `⚡️ <b>Holat:</b> ✅ To‘landi\n` +
+        `🆔 <b>Tranzaksiya ID:</b> <code>${payment.id}</code>\n\n` +
+        `📦 <b>Webhook JSON Data:</b>\n` +
+        `<pre><code class="language-json">${JSON.stringify(webhookPayload, null, 2)}</code></pre>`
 
-        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: shop.userId,
-            text: dmText,
-            parse_mode: 'HTML',
-          }),
-        })
-      } catch (dmErr) {
-        console.warn('Merchant DM delivery error:', dmErr)
-      }
+      await safeTelegramSend(shop.telegramChannelId, postText)
+    }
+
+    // 3. Deliver to Merchant Telegram DM
+    if (token && shop?.userId && /^\d+$/.test(shop.userId)) {
+      const dmText =
+        `🎉 <b>To‘lov Muvaffaqiyatli Qabul Qilindi!</b>\n\n` +
+        `💰 <b>Summa:</b> ${payment.amount.toLocaleString('uz-UZ')} UZS\n` +
+        `🏪 <b>Do‘kon:</b> ${shop.name}\n` +
+        `🆔 <b>To‘lov ID:</b> <code>${payment.id}</code>\n` +
+        `⚡️ <b>Holat:</b> ✅ To‘landi (Sessiya yopildi)\n\n` +
+        `📦 <i>Webhook va Kanalingizga to‘liq ma’lumot yetkazildi.</i>`
+
+      await safeTelegramSend(shop.userId, dmText)
     }
 
     return NextResponse.json({

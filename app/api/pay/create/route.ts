@@ -32,17 +32,36 @@ export async function POST(request: Request) {
     const user = await resolveUser(request)
     const body = await request.json().catch(() => ({}))
 
+    // 1. Amount Validation (Security constraint: 1,000 UZS - 500,000,000 UZS)
     const rawAmount = body.amount ? Number(String(body.amount).replace(/\D/g, '')) : 15000
-    const amount = rawAmount > 0 ? rawAmount : 15000
+    const amount = Number.isFinite(rawAmount) && rawAmount >= 1000 ? Math.min(rawAmount, 500000000) : 15000
 
-    const userId = user?.userId || body.userId || 'guest-user'
-    
-    // Find or create default shop for the user
-    let userShops = await db.select().from(shops).where(eq(shops.userId, userId)).limit(1)
-    let shop = userShops[0]
+    const apiKeyHeader = request.headers.get('x-api-key') || ''
+    const shopSlugHeader = request.headers.get('x-shop-slug') || body.shopSlug || ''
+    const shopIdRequested = body.shopId || ''
+
+    let shop = null
+
+    // 2. Resolve Shop by shopId or shopSlug if provided
+    if (shopIdRequested) {
+      const found = await db.select().from(shops).where(eq(shops.id, shopIdRequested)).limit(1)
+      if (found.length > 0) shop = found[0]
+    }
+
+    if (!shop && shopSlugHeader) {
+      const found = await db.select().from(shops).where(eq(shops.slug, shopSlugHeader)).limit(1)
+      if (found.length > 0) shop = found[0]
+    }
+
+    // 3. Fallback to user's shop or system default
+    const userId = user?.userId || body.userId || (shop ? shop.userId : 'guest-merchant')
+
+    if (!shop && user?.userId) {
+      const userShops = await db.select().from(shops).where(eq(shops.userId, user.userId)).limit(1)
+      if (userShops.length > 0) shop = userShops[0]
+    }
 
     if (!shop) {
-      // Find any approved shop or create one
       const anyShops = await db.select().from(shops).limit(1)
       if (anyShops.length > 0) {
         shop = anyShops[0]
@@ -51,7 +70,7 @@ export async function POST(request: Request) {
         await db.insert(shops).values({
           id: newShopId,
           userId,
-          name: 'PayGo Demo Shop',
+          name: 'PayGo Asosiy Do‘kon',
           slug: `shop-${userId.slice(-6)}`,
           cardNumber: '9860350123453587',
           cardLast4: '3587',
@@ -65,7 +84,12 @@ export async function POST(request: Request) {
     }
 
     const paymentId = `pay_${randomUUID().replace(/-/g, '').slice(0, 12)}`
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // Exactly 5 minutes
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // Exactly 5 minutes validity
+
+    // Store custom metadata if provided by merchant
+    const orderId = body.orderId || body.order_id || null
+    const description = body.description || body.comment || null
+    const sourceMessage = orderId ? `Buyurtma: #${orderId}${description ? ` - ${description}` : ''}` : null
 
     await db.insert(payments).values({
       id: paymentId,
@@ -75,18 +99,23 @@ export async function POST(request: Request) {
       currency: 'UZS',
       status: 'pending',
       expiresAt,
+      sourceMessage,
+      createdAt: new Date(),
     })
 
-    const reqHost = req.headers.get('x-forwarded-host') || req.headers.get('host')
-    const reqProto = req.headers.get('x-forwarded-proto') || 'https'
+    // Resolve accurate host
+    const reqHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || ''
+    const reqProto = request.headers.get('x-forwarded-proto') || 'https'
     const dynamicHost = reqHost && !reqHost.includes('localhost') ? `${reqProto}://${reqHost}` : undefined
 
     const baseUrl =
-      (process.env.APP_URL && !process.env.APP_URL.includes('paygo-pearl.vercel.app') ? process.env.APP_URL : undefined) ||
       dynamicHost ||
-      'https://paygo.uz'
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://paygo-pearl.vercel.app'
 
-    const payUrl = `${baseUrl.replace(/\/$/, '')}/pay/${paymentId}`
+    const cleanBaseUrl = baseUrl.replace(/\/$/, '')
+    const payUrl = `${cleanBaseUrl}/pay/${paymentId}`
 
     return NextResponse.json({
       ok: true,
@@ -94,16 +123,25 @@ export async function POST(request: Request) {
       amount,
       currency: 'UZS',
       status: 'pending',
+      orderId,
+      description,
       expiresAt: expiresAt.toISOString(),
       payUrl,
+      paymentUrl: payUrl,
       shop: {
         id: shop.id,
+        slug: shop.slug,
         name: shop.name,
         cardNumber: shop.cardNumber,
-        cardOwner: shop.accountOwner,
+        cardOwner: shop.accountOwner || 'HUMO hisob egasi',
+        cardBank: shop.cardBank || 'HUMOCARD',
       },
     })
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || 'Server xatosi' }, { status: 500 })
+    console.error('Payment create error:', error)
+    return NextResponse.json(
+      { ok: false, error: error?.message || 'To‘lov yaratishda server xatosi yuz berdi' },
+      { status: 500 }
+    )
   }
 }
