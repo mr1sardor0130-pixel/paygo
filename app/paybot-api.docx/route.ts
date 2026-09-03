@@ -15,7 +15,7 @@ PayGo - HUMO to'lov tizimi xabarnomalarini (@humocardbot) Telegram Userbot orqal
 avtomatik tarzda tutib olib, to'lovlarni real vaqtda tasdiqlovchi va savdogar
 serveriga Webhook (JSON) hamda Telegram kanaliga chek yuboruvchi to'lov integratsiyasi.
 
-Baza URL: https://paygo-pearl.vercel.app
+Baza URL: https://paygo.uz
 Bot Username: @Pay_Gouzbot
 
 2. AUTENTIFIKATSIYA VA XAVFSIZLIK
@@ -83,7 +83,7 @@ A) To'lov yaratish (Create Payment Link):
          "amount": 50000,
          "currency": "UZS",
          "status": "pending",
-         "payUrl": "https://paygo-pearl.vercel.app/pay/pay_hpqh98gxsc",
+         "payUrl": "https://paygo.uz/pay/pay_hpqh98gxsc",
          "expiresAt": "2026-08-30T11:10:00.000Z"
        }
      }
@@ -162,7 +162,7 @@ echo json_encode(['ok' => true]);
 ?>
 \`\`\`
 ================================================================================
-Hujjat versiyasi: 2.1.0 | Qo'llab-quvvatlash: @Pay_Gouzbot | https://paygo-pearl.vercel.app
+Hujjat versiyasi: 2.1.0 | Qo'llab-quvvatlash: @Pay_Gouzbot | https://paygo.uz
 ================================================================================
 `
 

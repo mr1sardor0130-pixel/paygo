@@ -9,12 +9,13 @@ export const auth = betterAuth({
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : process.env.APP_URL ?? 'https://paygo-pearl.vercel.app'),
+        : process.env.APP_URL ?? 'https://paygo.uz'),
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
   },
   trustedOrigins: [
+    'https://paygo.uz',
     'https://paygo-pearl.vercel.app',
     'https://t.me',
     ...(process.env.APP_URL ? [process.env.APP_URL] : []),

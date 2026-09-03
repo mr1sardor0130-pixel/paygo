@@ -119,7 +119,7 @@ export async function generateReceiptPdfBuffer(details: {
     color: rgb(0.5, 0.5, 0.5),
   })
 
-  page.drawText('Murojaat va CRM Boshqaruv: https://paygo-pearl.vercel.app', {
+  page.drawText('Murojaat va CRM Boshqaruv: https://paygo.uz', {
     x: 40,
     y: 60,
     size: 10,

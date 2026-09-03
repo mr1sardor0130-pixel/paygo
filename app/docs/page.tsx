@@ -51,7 +51,7 @@ export default function DocsPage() {
   "signature": "sha256_hash_hex"
 }`
 
-  const createPayCurl = `curl -X POST https://paygo-pearl.vercel.app/api/pay/create \\
+  const createPayCurl = `curl -X POST https://paygo.uz/api/pay/create \\
   -H "Content-Type: application/json" \\
   -H "x-telegram-user-id: 8925536385" \\
   -d '{
@@ -170,7 +170,7 @@ echo json_encode(['ok' => true]);
             <div className="flex flex-wrap gap-3 text-xs text-slate-400">
               <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700">
                 <Globe className="w-3.5 h-3.5 text-blue-400" />
-                <span>Base URL: https://paygo-pearl.vercel.app</span>
+                <span>Base URL: https://paygo.uz</span>
               </div>
               <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700">
                 <Lock className="w-3.5 h-3.5 text-emerald-400" />

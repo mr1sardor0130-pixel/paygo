@@ -77,11 +77,14 @@ export async function POST(request: Request) {
       expiresAt,
     })
 
+    const reqHost = req.headers.get('x-forwarded-host') || req.headers.get('host')
+    const reqProto = req.headers.get('x-forwarded-proto') || 'https'
+    const dynamicHost = reqHost && !reqHost.includes('localhost') ? `${reqProto}://${reqHost}` : undefined
+
     const baseUrl =
-      process.env.APP_URL ||
-      (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined) ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined) ||
-      'https://paygo-pearl.vercel.app'
+      (process.env.APP_URL && !process.env.APP_URL.includes('paygo-pearl.vercel.app') ? process.env.APP_URL : undefined) ||
+      dynamicHost ||
+      'https://paygo.uz'
 
     const payUrl = `${baseUrl.replace(/\/$/, '')}/pay/${paymentId}`
 

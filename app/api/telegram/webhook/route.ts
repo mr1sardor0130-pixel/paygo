@@ -33,12 +33,26 @@ import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
 
 export const dynamic = 'force-dynamic'
 
-const APP_URL =
-  process.env.APP_URL ||
-  process.env.BETTER_AUTH_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined) ||
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined) ||
-  'https://paygo-pearl.vercel.app'
+let APP_URL =
+  process.env.APP_URL && !process.env.APP_URL.includes('paygo-pearl.vercel.app')
+    ? process.env.APP_URL
+    : 'https://paygo.uz'
+
+function resolveAppUrl(req?: Request): string {
+  if (process.env.APP_URL && !process.env.APP_URL.includes('paygo-pearl.vercel.app')) {
+    return process.env.APP_URL
+  }
+  if (req) {
+    try {
+      const host = req.headers.get('x-forwarded-host') || req.headers.get('host')
+      const proto = req.headers.get('x-forwarded-proto') || 'https'
+      if (host && !host.includes('localhost')) {
+        return `${proto}://${host}`
+      }
+    } catch {}
+  }
+  return APP_URL
+}
 const BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || 'Pay_Gouzbot').replace('@', '')
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || '8021115446'
 
@@ -936,6 +950,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  APP_URL = resolveAppUrl(request)
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token) return NextResponse.json({ ok: true })
 
