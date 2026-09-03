@@ -22,6 +22,54 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
 
   const [copied, setCopied] = useState(false)
 
+  const [verifying, setVerifying] = useState(false)
+
+  // Poll status of current pending donation
+  useEffect(() => {
+    if (!successDonation?.donation?.id || successDonation?.donation?.status === 'paid') return
+
+    const donId = successDonation.donation.id
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/fundraisers/${fundraiserId}/donations/${donId}`)
+        const json = await res.json()
+        if (json.ok && json.donation?.status === 'paid') {
+          setSuccessDonation((prev: any) => ({
+            ...prev,
+            donation: json.donation,
+          }))
+          fetchFundraiser()
+        }
+      } catch (e) {}
+    }, 3000)
+
+    return () => clearInterval(pollInterval)
+  }, [successDonation, fundraiserId])
+
+  const handleTestVerify = async () => {
+    if (!successDonation?.donation?.id) return
+    setVerifying(true)
+    try {
+      const res = await fetch(`/api/fundraisers/${fundraiserId}/donations/${successDonation.donation.id}`, {
+        method: 'POST',
+      })
+      const json = await res.json()
+      if (json.ok) {
+        setSuccessDonation((prev: any) => ({
+          ...prev,
+          donation: json.donation,
+        }))
+        fetchFundraiser()
+      } else {
+        alert(json.error || 'Tasdiqlashda xatolik')
+      }
+    } catch (e) {
+      alert('Serverga ulanishda xatolik')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
   const fetchFundraiser = async () => {
     try {
       const res = await fetch(`/api/fundraisers/${fundraiserId}`)
@@ -308,13 +356,57 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
           ) : (
             /* Donation Confirmation & Card Details Screen */
             <div className="bg-slate-950 border border-emerald-500/30 rounded-2xl p-6 animate-fadeIn">
+              {/* Status Header Banner */}
+              {successDonation.donation?.status === 'paid' ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center font-bold text-lg">
+                      ✓
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-emerald-400 text-sm md:text-base">🎉 To‘lovingiz Muvaffaqiyatli Tasdiqlandi!</h4>
+                      <p className="text-xs text-slate-300">Rahmat, {successDonation.donation?.donorName}! To‘lovingiz qabul qilindi va ro‘yxatga qo‘shildi.</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold bg-emerald-500 text-slate-950 px-3 py-1 rounded-full uppercase">
+                    Qabul Qilindi
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center font-bold shrink-0">
+                      <Clock className="w-5 h-5 animate-pulse text-amber-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-amber-400 text-sm md:text-base">⏳ To‘lov Kutilmoqda...</h4>
+                      <p className="text-xs text-slate-300">
+                        Iltimos, pastdagi kartaga <b>{(successDonation.donation?.amount || 0).toLocaleString('uz-UZ')} UZS</b> o‘tkazma qiling. Userbot orqali xabar kelgach, avtomatik tasdiqlanadi.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleTestVerify}
+                    disabled={verifying}
+                    className="shrink-0 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {verifying ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    🧪 Test Tasdiqlash
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 font-bold">
-                    ✓
+                    👤
                   </div>
                   <div>
-                    <h3 className="font-bold text-white text-base">E’tiboringiz uchun rahmat, {successDonation.donation?.donorName}!</h3>
+                    <h3 className="font-bold text-white text-base">{successDonation.donation?.donorName}</h3>
                     <p className="text-xs text-slate-400">Sizga vaqtinchalik unikal ID biriktirildi</p>
                   </div>
                 </div>
@@ -373,7 +465,7 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                   onClick={() => setSuccessDonation(null)}
                   className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
                 >
-                  ← Yangi ehson kiritish
+                  ← Yangi donat kiritish
                 </button>
 
                 <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">

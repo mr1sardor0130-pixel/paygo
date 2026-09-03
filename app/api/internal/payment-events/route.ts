@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { payments, userProfiles, shops } from '@/lib/db/schema'
+import { payments, userProfiles, shops, donations, fundraisers } from '@/lib/db/schema'
 import { deliverWebhook, type PaymentEvent } from '@/lib/webhook'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
 import { sendTelegramMessage, sendTelegramDocument } from '@/lib/telegram-notifier'
 
@@ -132,6 +132,36 @@ export async function POST(request: Request) {
       const shop = shopList[0]
 
       if (shop) {
+        // Handle donation matching if this payment is linked to a fundraiser donation
+        if (payment.id.startsWith('pay_don_')) {
+          try {
+            const donationId = payment.id.replace('pay_', '')
+            const donRows = await db.select().from(donations).where(eq(donations.id, donationId)).limit(1)
+            if (donRows.length > 0) {
+              const don = donRows[0]
+              if (don.status !== 'paid') {
+                await db.update(donations).set({ status: 'paid' }).where(eq(donations.id, donationId))
+                await db.update(fundraisers).set({
+                  collectedAmount: sql`${fundraisers.collectedAmount} + ${don.amount}`,
+                  donorCount: sql`${fundraisers.donorCount} + 1`,
+                  updatedAt: new Date(),
+                }).where(eq(fundraisers.id, don.fundraiserId))
+
+                await sendTelegramMessage(
+                  shop.userId,
+                  `🎉 <b>Yangi Donat Qabul Qilindi!</b>\n\n` +
+                  `👤 <b>Sahovatpesha:</b> ${don.donorName} (<code>${don.donorTempId}</code>)\n` +
+                  `💰 <b>Summa:</b> <code>${don.amount.toLocaleString('uz-UZ')} UZS</code>\n` +
+                  `💬 <b>Izoh:</b> ${don.comment || 'Yo‘q'}\n` +
+                  `⏰ <b>Vaqt:</b> ${new Date().toLocaleString('uz-UZ')}`
+                )
+              }
+            }
+          } catch (donErr) {
+            console.error('Donation matching error in payment events:', donErr)
+          }
+        }
+
         // Send notification to shop owner
         await sendTelegramMessage(
           shop.userId,
