@@ -15,6 +15,7 @@ import {
   Share2,
   ShieldCheck,
 } from 'lucide-react'
+import { HumoLogo, UzcardLogo } from '@/components/brand-logos'
 
 interface ReceiptData {
   id: string
@@ -149,9 +150,13 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
           <p className="text-xs font-medium text-slate-500 mt-1 uppercase tracking-wider">
             {data.shop.name}
           </p>
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-            <CheckCircle2 size={13} className="text-emerald-600" />
-            <span>TO‘LOV TO‘LIQ TASDIQLANDI</span>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+              <CheckCircle2 size={13} className="text-emerald-600" />
+              <span>TO‘LOV TO‘LIQ TASDIQLANDI</span>
+            </div>
+            <HumoLogo className="h-5 w-auto" />
+            <UzcardLogo className="h-5 w-auto" />
           </div>
         </div>
 

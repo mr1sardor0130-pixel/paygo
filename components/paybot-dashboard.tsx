@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { HumoLogo, UzcardLogo, AcceptedBrandsBar } from '@/components/brand-logos'
 import {
   Activity,
   ArrowUpRight,
@@ -858,17 +859,20 @@ export function PaybotDashboard() {
                 )}
 
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#10223d] via-[#162a4a] to-[#0d1b32] p-5 text-white shadow-lg">
-                  <div className="flex items-center justify-between opacity-80 mb-4">
+                  <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <CreditCard size={16} className="text-[#60a5fa]" />
                       <span className="font-mono text-[11px] tracking-widest text-[#93c5fd]">
-                        HUMO CARD
+                        HUMO / UZCARD
                       </span>
                     </div>
-                    <span className="text-[10px] text-[#94a3b8]">O‘zbekiston</span>
+                    <div className="flex items-center gap-1.5">
+                      <HumoLogo className="h-4 w-auto" />
+                      <UzcardLogo className="h-4 w-auto" />
+                    </div>
                   </div>
 
-                  <p className="text-[10px] uppercase text-[#93c5fd]">HUMO Karta Raqami:</p>
+                  <p className="text-[10px] uppercase text-[#93c5fd]">Karta Raqami:</p>
                   <p className="mt-1 font-mono text-lg font-bold tracking-wider text-white">
                     {shopForm.cardNumber || '9860 3501 2345 3587'}
                   </p>

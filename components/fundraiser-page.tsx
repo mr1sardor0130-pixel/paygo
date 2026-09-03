@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Heart, CreditCard, Copy, Check, Users, Target, Sparkles, ShieldCheck, ArrowRight, Clock, MessageSquare, ExternalLink, RefreshCw } from 'lucide-react'
+import { HumoLogo, UzcardLogo, PaymentAppButtons, AcceptedBrandsBar } from '@/components/brand-logos'
 
 interface FundraiserPageProps {
   fundraiserId: string
@@ -483,9 +484,15 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                   </p>
 
                   <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4 mb-4 relative">
-                    <span className="text-xs font-semibold uppercase text-emerald-400 block mb-1">
-                      {shop.cardBank || 'HUMOCARD'}
-                    </span>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold uppercase text-emerald-400">
+                        {shop.cardBank || 'HUMOCARD'}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <HumoLogo className="h-5 w-auto" />
+                        <UzcardLogo className="h-5 w-auto" />
+                      </div>
+                    </div>
                     <div className="text-xl font-mono font-bold tracking-wider text-white mb-2 flex items-center justify-between">
                       <span>{formattedCard}</span>
                       <button
@@ -501,6 +508,9 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                       <span>Karta egasi: <b>{shop.accountOwner || 'Hisob egasi'}</b></span>
                     </div>
                   </div>
+
+                  {/* Payment App Transition Buttons (Payme, Click, Uzum Bank) */}
+                  <PaymentAppButtons cardNumber={rawCard} amount={successDonation.donation?.amount} className="mb-4" />
 
                   <p className="text-xs text-slate-400 leading-relaxed">
                     💡 <b>Maslahat:</b> To‘lov ilovasida (Click, Payme, Uzum) o‘tkazma izohiga <code>{successDonation.donorTempId}</code> kodini kiritishingiz mumkin.
@@ -519,9 +529,11 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                       size={140} 
                     />
                   </div>
-                  <span className="text-xs text-slate-400 font-medium">To‘lov sahifasi QR kodi</span>
+                  <span className="text-xs text-slate-400 font-medium text-center">To‘lov sahifasi QR kodi</span>
                 </div>
               </div>
+
+              <AcceptedBrandsBar className="mt-5" />
 
               <div className="mt-6 pt-4 border-t border-slate-800 flex justify-between items-center">
                 <button

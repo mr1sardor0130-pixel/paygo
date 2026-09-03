@@ -19,6 +19,7 @@ import {
   Download,
 } from 'lucide-react'
 import Link from 'next/link'
+import { HumoLogo, UzcardLogo, PaymentAppButtons, AcceptedBrandsBar } from '@/components/brand-logos'
 
 type PaymentData = {
   id: string
@@ -378,16 +379,17 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
 
               {/* SPECIAL FULL CARD CONTAINER */}
               <div className="mt-6 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#10223d] via-[#162a4a] to-[#0d1b32] p-6 text-white shadow-xl shadow-blue-950/15">
-                <div className="flex items-center justify-between opacity-80">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CreditCard size={18} className="text-[#60a5fa]" />
                     <span className="font-mono text-xs uppercase tracking-widest text-[#93c5fd]">
-                      HUMO CARD
+                      HUMO / UZCARD
                     </span>
                   </div>
-                  <span className="text-[11px] font-semibold text-[#94a3b8]">
-                    O‘zbekiston
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <HumoLogo className="h-5 w-auto" />
+                    <UzcardLogo className="h-5 w-auto" />
+                  </div>
                 </div>
 
                 {/* FULL 16-DIGIT CARD NUMBER DISPLAY */}
@@ -410,7 +412,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                   </div>
                   <div className="flex items-center gap-1 text-[11px] text-[#93c5fd]">
                     <Building2 size={13} />
-                    <span>HUMOCARD</span>
+                    <span>{data?.shop?.cardBank || 'HUMOCARD'}</span>
                   </div>
                 </div>
 
@@ -434,8 +436,11 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 </button>
               </div>
 
+              {/* Instant App Launch Buttons (Payme, Click, Uzum Bank) */}
+              <PaymentAppButtons cardNumber={cardNumber} amount={amountNumber} className="mt-6 p-4 rounded-2xl bg-white border border-[#e2e8f0] shadow-sm" />
+
               {/* Countdown timer (5 minutes limit) */}
-              <div className="mt-6 flex items-center justify-between rounded-xl bg-[#f8fafc] p-4 border border-[#e2e8f0]">
+              <div className="mt-4 flex items-center justify-between rounded-xl bg-[#f8fafc] p-4 border border-[#e2e8f0]">
                 <div className="flex items-center gap-2 text-xs font-medium text-[#64748b]">
                   <Clock3 size={17} className="text-[#2563eb]" /> To‘lov uchun
                   ajratilgan vaqt:
@@ -485,7 +490,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               <div className="mt-5 space-y-2 rounded-xl bg-[#f8fafc] p-4 text-xs leading-5 text-[#64748b] border border-[#e2e8f0]">
                 <p className="font-bold text-[#152238]">To‘lov bo‘yicha qo‘llanma:</p>
                 <p>
-                  1. <b>Payme, Click</b> yoki <b>bank ilovangizni</b> oching.
+                  1. <b>Payme, Click, Uzum Bank</b> tugmasini bosing yoki bank ilovangizni oching.
                 </p>
                 <p>
                   2. Yuqoridagi <b>{formattedCard}</b> kartasiga aynan{' '}
@@ -496,6 +501,8 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                   sahifa avtomatik ravishda tasdiqlanadi.
                 </p>
               </div>
+
+              <AcceptedBrandsBar className="mt-4" />
             </div>
           )}
         </div>
