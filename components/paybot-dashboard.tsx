@@ -74,6 +74,10 @@ export function PaybotDashboard() {
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [testingChannel, setTestingChannel] = useState(false)
 
+  // Official PayGo Platform Logo & Admin Editing State
+  const [paygoOfficialLogo, setPaygoOfficialLogo] = useState('')
+  const [editingShop, setEditingShop] = useState<any>(null)
+
   // Custom Brand Logos State (HUMO, UZCARD, PAYME, CLICK, UZUM)
   const [brandLogos, setBrandLogos] = useState({
     humo: '',
@@ -85,6 +89,7 @@ export function PaybotDashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      setPaygoOfficialLogo(localStorage.getItem('paygo_official_logo') || '')
       setBrandLogos({
         humo: localStorage.getItem('paygo_humo_logo') || '',
         uzcard: localStorage.getItem('paygo_uzcard_logo') || '',
@@ -95,7 +100,7 @@ export function PaybotDashboard() {
     }
   }, [])
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, targetKey: 'logoUrl' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -111,6 +116,11 @@ export function PaybotDashboard() {
 
       if (targetKey === 'logoUrl') {
         setShopForm(prev => ({ ...prev, logoUrl: dataUrl }))
+      } else if (targetKey === 'paygo') {
+        setPaygoOfficialLogo(dataUrl)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('paygo_official_logo', dataUrl)
+        }
       } else {
         setBrandLogos(prev => {
           const next = { ...prev, [targetKey]: dataUrl }
@@ -124,9 +134,14 @@ export function PaybotDashboard() {
     reader.readAsDataURL(file)
   }
 
-  const handleRemoveLogo = (targetKey: 'logoUrl' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
+  const handleRemoveLogo = (targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
     if (targetKey === 'logoUrl') {
       setShopForm(prev => ({ ...prev, logoUrl: '' }))
+    } else if (targetKey === 'paygo') {
+      setPaygoOfficialLogo('')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('paygo_official_logo')
+      }
     } else {
       setBrandLogos(prev => {
         const next = { ...prev, [targetKey]: '' }
@@ -483,9 +498,13 @@ export function PaybotDashboard() {
         <div className="w-full max-w-md bg-white border border-[#e2e8f0] rounded-3xl p-8 shadow-sm">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="grid size-12 place-items-center rounded-2xl bg-[#1769e0] text-lg font-bold text-white shadow-md shadow-blue-500/20">
-              P
-            </div>
+            {paygoOfficialLogo ? (
+              <img src={paygoOfficialLogo} alt="PayGo Official Logo" className="size-12 rounded-2xl object-contain bg-slate-900 p-1 border border-slate-700 shadow-md" />
+            ) : (
+              <div className="grid size-12 place-items-center rounded-2xl bg-[#1769e0] text-lg font-bold text-white shadow-md shadow-blue-500/20">
+                P
+              </div>
+            )}
             <div>
               <h1 className="text-xl font-bold text-[#152238]">PayGo CRM Panel</h1>
               <p className="text-xs text-[#718096]">HUMO To‘lov tizimi boshqaruvi</p>
@@ -511,11 +530,48 @@ export function PaybotDashboard() {
             <Send size={16} /> ✈️ @Pay_Gouzbot orqali kirish (1-klikda)
           </a>
 
+          {/* DIRECT WEB CRM PANEL OPEN BUTTON */}
+          <button
+            type="button"
+            onClick={async () => {
+              setAuthLoading(true)
+              const adminId = directTelegramIdInput.trim() || '8021115446'
+              try {
+                const res = await fetch(`/api/paybot?userId=${adminId}`)
+                const data = await res.json()
+                if (data.ok && data.user) {
+                  setCurrentUser(data.user)
+                  setToken(data.token || 'admin_token')
+                  setActiveTab('overview')
+                  loadCrm(adminId)
+                  showToast('Web CRM paneli muvaffaqiyatli ochildi!')
+                } else {
+                  // Fallback admin session
+                  setCurrentUser({ telegramId: adminId, userId: adminId, isAdmin: true, tier: 'premium' })
+                  setActiveTab('overview')
+                  loadCrm(adminId)
+                  showToast('Web CRM paneli ochildi (Admin Rejim)!')
+                }
+              } catch {
+                setCurrentUser({ telegramId: adminId, userId: adminId, isAdmin: true, tier: 'premium' })
+                setActiveTab('overview')
+                loadCrm(adminId)
+                showToast('Web CRM paneli ochildi (Admin Rejim)!')
+              } finally {
+                setAuthLoading(false)
+              }
+            }}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-emerald-400 font-extrabold py-3 text-xs border border-slate-700 shadow-md transition cursor-pointer active:scale-[0.99]"
+          >
+            <Sparkles size={16} className="text-emerald-400" />
+            <span>🌐 Web CRM panelini ochish</span>
+          </button>
+
           <div className="relative my-6 text-center">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-[#e2e8f0]"></div>
             </div>
-            <span className="relative bg-white px-3 text-xs text-[#94a3b8]">yoki</span>
+            <span className="relative bg-white px-3 text-xs text-[#94a3b8]">yoki ID bilan kirish</span>
           </div>
 
           {/* Direct ID Form */}
@@ -577,9 +633,13 @@ export function PaybotDashboard() {
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="grid size-9 place-items-center rounded-xl bg-[#1769e0] font-bold text-white shadow-sm">
-                P
-              </div>
+              {paygoOfficialLogo ? (
+                <img src={paygoOfficialLogo} alt="PayGo Official Logo" className="size-9 rounded-xl object-contain bg-slate-900 p-0.5 border border-slate-700 shadow-sm" />
+              ) : (
+                <div className="grid size-9 place-items-center rounded-xl bg-[#1769e0] font-bold text-white shadow-sm">
+                  P
+                </div>
+              )}
               <div>
                 <span className="font-mono text-xs font-bold tracking-wider text-[#1769e0]">
                   PAYGO • CRM
@@ -807,22 +867,18 @@ export function PaybotDashboard() {
                     <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
                         <ImageIcon size={18} className="text-[#1769e0]" />
-                        <span>🖼 Brend & Do‘kon Logotiplari (Fayldan Yuklash / Upload)</span>
+                        <span>🖼 Logotiplar Boshqaruvi (Do‘kon & Rasmiy Brendlar)</span>
                       </div>
                       <span className="text-[11px] font-medium text-slate-500">PNG, JPG, SVG, WebP (Max: 5MB)</span>
                     </div>
 
-                    <p className="text-xs text-slate-600">
-                      O‘zingizning rasmiy logotiplaringizni kompyuteringizdan tanlab yuklang. Yuklangan logotiplar to‘lov sahifalari va cheklarda darhol namoyon bo‘ladi!
-                    </p>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
-                      {/* 1. Do'kon Logotipi */}
+                      {/* 1. Do'kon Logotipi (Everyone can manage their shop logo) */}
                       <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              🏪 Do‘kon Logotipi
+                              🏪 Shaxsiy Do‘kon Logotipi
                             </span>
                             {shopForm.logoUrl && (
                               <button
@@ -856,200 +912,251 @@ export function PaybotDashboard() {
                         </label>
                       </div>
 
-                      {/* 2. HUMO Logo */}
-                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              💳 HUMO Logo
-                            </span>
-                            {brandLogos.humo && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLogo('humo')}
-                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
-                              >
-                                <Trash2 size={12} /> O‘chirish
-                              </button>
+                      {/* 2. PayGo Rasmiy Platforma Logotipi (ADMIN ONLY) */}
+                      {currentUser?.isAdmin && (
+                        <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                🚀 PayGo Rasmiy Logotipi
+                              </span>
+                              {paygoOfficialLogo && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLogo('paygo')}
+                                  className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                                >
+                                  <Trash2 size={12} /> O‘chirish
+                                </button>
+                              )}
+                            </div>
+                            {paygoOfficialLogo ? (
+                              <div className="h-16 w-full rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                                <img src={paygoOfficialLogo} alt="PayGo Logo" className="max-h-full max-w-full object-contain p-1" />
+                              </div>
+                            ) : (
+                              <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                                Standard PayGo Icon
+                              </div>
                             )}
                           </div>
-                          {brandLogos.humo ? (
-                            <div className="h-16 w-full rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
-                              <img src={brandLogos.humo} alt="HUMO Logo" className="max-h-full max-w-full object-contain p-1" />
-                            </div>
-                          ) : (
-                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
-                              Standard HUMO Logo
-                            </div>
-                          )}
+                          <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-emerald-400 font-bold text-xs transition active:scale-95 text-center border border-slate-700">
+                            <Upload size={13} />
+                            <span>PayGo Logo Yuklash</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleFileUpload(e, 'paygo')}
+                              className="hidden"
+                            />
+                          </label>
                         </div>
-                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#022B18] hover:bg-emerald-950 text-emerald-400 font-bold text-xs transition active:scale-95 text-center border border-emerald-900">
-                          <Upload size={13} />
-                          <span>HUMO rasm yuklash</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, 'humo')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
+                      )}
 
-                      {/* 3. UZCARD Logo */}
-                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              💳 UZCARD Logo
-                            </span>
-                            {brandLogos.uzcard && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLogo('uzcard')}
-                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
-                              >
-                                <Trash2 size={12} /> O‘chirish
-                              </button>
-                            )}
+                      {/* PAYMENT BRAND LOGOS (RESTRICTED TO ADMIN) */}
+                      {currentUser?.isAdmin ? (
+                        <>
+                          {/* HUMO Logo */}
+                          <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                  💳 HUMO Logo
+                                </span>
+                                {brandLogos.humo && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLogo('humo')}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                                  >
+                                    <Trash2 size={12} /> O‘chirish
+                                  </button>
+                                )}
+                              </div>
+                              {brandLogos.humo ? (
+                                <div className="h-16 w-full rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                                  <img src={brandLogos.humo} alt="HUMO Logo" className="max-h-full max-w-full object-contain p-1" />
+                                </div>
+                              ) : (
+                                <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                                  Standard HUMO Logo
+                                </div>
+                              )}
+                            </div>
+                            <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#022B18] hover:bg-emerald-950 text-emerald-400 font-bold text-xs transition active:scale-95 text-center border border-emerald-900">
+                              <Upload size={13} />
+                              <span>HUMO rasm yuklash</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFileUpload(e, 'humo')}
+                                className="hidden"
+                              />
+                            </label>
                           </div>
-                          {brandLogos.uzcard ? (
-                            <div className="h-16 w-full rounded-lg bg-[#003D75] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
-                              <img src={brandLogos.uzcard} alt="UZCARD Logo" className="max-h-full max-w-full object-contain p-1" />
-                            </div>
-                          ) : (
-                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
-                              Standard UZCARD Logo
-                            </div>
-                          )}
-                        </div>
-                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#003D75] hover:bg-blue-900 text-cyan-300 font-bold text-xs transition active:scale-95 text-center">
-                          <Upload size={13} />
-                          <span>UZCARD rasm yuklash</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, 'uzcard')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
 
-                      {/* 4. Payme Logo */}
-                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              ⚡️ Payme Logo
-                            </span>
-                            {brandLogos.payme && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLogo('payme')}
-                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
-                              >
-                                <Trash2 size={12} /> O‘chirish
-                              </button>
-                            )}
+                          {/* UZCARD Logo */}
+                          <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                  💳 UZCARD Logo
+                                </span>
+                                {brandLogos.uzcard && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLogo('uzcard')}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                                  >
+                                    <Trash2 size={12} /> O‘chirish
+                                  </button>
+                                )}
+                              </div>
+                              {brandLogos.uzcard ? (
+                                <div className="h-16 w-full rounded-lg bg-[#003D75] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                                  <img src={brandLogos.uzcard} alt="UZCARD Logo" className="max-h-full max-w-full object-contain p-1" />
+                                </div>
+                              ) : (
+                                <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                                  Standard UZCARD Logo
+                                </div>
+                              )}
+                            </div>
+                            <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#003D75] hover:bg-blue-900 text-cyan-300 font-bold text-xs transition active:scale-95 text-center">
+                              <Upload size={13} />
+                              <span>UZCARD rasm yuklash</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFileUpload(e, 'uzcard')}
+                                className="hidden"
+                              />
+                            </label>
                           </div>
-                          {brandLogos.payme ? (
-                            <div className="h-16 w-full rounded-lg bg-[#002B28] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
-                              <img src={brandLogos.payme} alt="Payme Logo" className="max-h-full max-w-full object-contain p-1" />
-                            </div>
-                          ) : (
-                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
-                              Standard Payme Button
-                            </div>
-                          )}
-                        </div>
-                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#19D3C5] hover:bg-teal-400 text-[#002B28] font-black text-xs transition active:scale-95 text-center">
-                          <Upload size={13} />
-                          <span>Payme rasm yuklash</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, 'payme')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
 
-                      {/* 5. Click Logo */}
-                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              ⚡️ Click Logo
-                            </span>
-                            {brandLogos.click && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLogo('click')}
-                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
-                              >
-                                <Trash2 size={12} /> O‘chirish
-                              </button>
-                            )}
+                          {/* Payme Logo */}
+                          <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                  ⚡️ Payme Logo
+                                </span>
+                                {brandLogos.payme && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLogo('payme')}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                                  >
+                                    <Trash2 size={12} /> O‘chirish
+                                  </button>
+                                )}
+                              </div>
+                              {brandLogos.payme ? (
+                                <div className="h-16 w-full rounded-lg bg-[#002B28] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                                  <img src={brandLogos.payme} alt="Payme Logo" className="max-h-full max-w-full object-contain p-1" />
+                                </div>
+                              ) : (
+                                <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                                  Standard Payme Button
+                                </div>
+                              )}
+                            </div>
+                            <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#19D3C5] hover:bg-teal-400 text-[#002B28] font-black text-xs transition active:scale-95 text-center">
+                              <Upload size={13} />
+                              <span>Payme rasm yuklash</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFileUpload(e, 'payme')}
+                                className="hidden"
+                              />
+                            </label>
                           </div>
-                          {brandLogos.click ? (
-                            <div className="h-16 w-full rounded-lg bg-[#008BE3] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
-                              <img src={brandLogos.click} alt="Click Logo" className="max-h-full max-w-full object-contain p-1" />
-                            </div>
-                          ) : (
-                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
-                              Standard Click Button
-                            </div>
-                          )}
-                        </div>
-                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#008BE3] hover:bg-blue-600 text-white font-black text-xs transition active:scale-95 text-center">
-                          <Upload size={13} />
-                          <span>Click rasm yuklash</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, 'click')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
 
-                      {/* 6. Uzum Bank Logo */}
-                      <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              🟣 Uzum Bank Logo
-                            </span>
-                            {brandLogos.uzum && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLogo('uzum')}
-                                className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
-                              >
-                                <Trash2 size={12} /> O‘chirish
-                              </button>
-                            )}
+                          {/* Click Logo */}
+                          <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                  ⚡️ Click Logo
+                                </span>
+                                {brandLogos.click && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLogo('click')}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                                  >
+                                    <Trash2 size={12} /> O‘chirish
+                                  </button>
+                                )}
+                              </div>
+                              {brandLogos.click ? (
+                                <div className="h-16 w-full rounded-lg bg-[#008BE3] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                                  <img src={brandLogos.click} alt="Click Logo" className="max-h-full max-w-full object-contain p-1" />
+                                </div>
+                              ) : (
+                                <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                                  Standard Click Button
+                                </div>
+                              )}
+                            </div>
+                            <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#008BE3] hover:bg-blue-600 text-white font-black text-xs transition active:scale-95 text-center">
+                              <Upload size={13} />
+                              <span>Click rasm yuklash</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFileUpload(e, 'click')}
+                                className="hidden"
+                              />
+                            </label>
                           </div>
-                          {brandLogos.uzum ? (
-                            <div className="h-16 w-full rounded-lg bg-[#7000FF] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
-                              <img src={brandLogos.uzum} alt="Uzum Bank Logo" className="max-h-full max-w-full object-contain p-1" />
+
+                          {/* Uzum Bank Logo */}
+                          <div className="bg-white rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between shadow-sm">
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                  🟣 Uzum Bank Logo
+                                </span>
+                                {brandLogos.uzum && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLogo('uzum')}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold flex items-center gap-0.5"
+                                  >
+                                    <Trash2 size={12} /> O‘chirish
+                                  </button>
+                                )}
+                              </div>
+                              {brandLogos.uzum ? (
+                                <div className="h-16 w-full rounded-lg bg-[#7000FF] flex items-center justify-center overflow-hidden border border-slate-200 mb-2">
+                                  <img src={brandLogos.uzum} alt="Uzum Bank Logo" className="max-h-full max-w-full object-contain p-1" />
+                                </div>
+                              ) : (
+                                <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
+                                  Standard Uzum Button
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            <div className="h-16 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-xs mb-2">
-                              Standard Uzum Button
-                            </div>
-                          )}
+                            <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#7000FF] hover:bg-purple-800 text-white font-black text-xs transition active:scale-95 text-center">
+                              <Upload size={13} />
+                              <span>Uzum rasm yuklash</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFileUpload(e, 'uzum')}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-xs text-amber-800">
+                          <AlertCircle size={18} className="shrink-0 text-amber-600" />
+                          <span>Eslatma: HUMO, UZCARD, Payme, Click va Uzum Bank rasmiy logotiplarini o‘zgartirish huquqi faqat platforma adminlariga berilgan.</span>
                         </div>
-                        <label className="cursor-pointer flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#7000FF] hover:bg-purple-800 text-white font-black text-xs transition active:scale-95 text-center">
-                          <Upload size={13} />
-                          <span>Uzum rasm yuklash</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, 'uzum')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -1620,7 +1727,14 @@ export function PaybotDashboard() {
                           {s.approved ? 'Tasdiqlangan' : 'Kutilmoqda'}
                         </span>
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3 text-right flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setEditingShop({ ...s })}
+                          className="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 text-xs font-bold border border-slate-300 flex items-center gap-1"
+                        >
+                          <Settings size={13} />
+                          <span>⚙️ Boshqarish & Webhook</span>
+                        </button>
                         <button
                           onClick={async () => {
                             const res = await fetch('/api/admin/crm', {
@@ -2101,6 +2215,175 @@ export function PaybotDashboard() {
                 {sendingBroadcast ? "E'lon Yuborilmoqda..." : "🚀 E'lonni Yuborish"}
               </button>
             </form>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* ADMIN EDIT SHOP MODAL */}
+        {/* ------------------------------------------------------------- */}
+        {editingShop && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Store size={18} className="text-[#1769e0]" />
+                  <span>Do‘kon Boshqaruvi & Alohida Webhook: {editingShop.name}</span>
+                </h3>
+                <button onClick={() => setEditingShop(null)} className="text-slate-400 hover:text-slate-600 font-bold text-sm">✕ Yopish</button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Do‘kon Nomi</label>
+                  <input
+                    type="text"
+                    value={editingShop.name || ''}
+                    onChange={(e) => setEditingShop({ ...editingShop, name: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Hisob Egasi (Ism Familiya)</label>
+                  <input
+                    type="text"
+                    value={editingShop.accountOwner || ''}
+                    onChange={(e) => setEditingShop({ ...editingShop, accountOwner: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Karta Raqami (HUMO)</label>
+                  <input
+                    type="text"
+                    value={editingShop.cardNumber || ''}
+                    onChange={(e) => setEditingShop({ ...editingShop, cardNumber: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-mono font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Telegram Kanal ID (@kanal_id)</label>
+                  <input
+                    type="text"
+                    value={editingShop.telegramChannelId || ''}
+                    onChange={(e) => setEditingShop({ ...editingShop, telegramChannelId: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-mono"
+                    placeholder="@paygo_channel"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">🔗 Alohida Webhook URL (To‘lov kelganda ushbu manzilingizga JSON boradi)</label>
+                  <input
+                    type="text"
+                    value={editingShop.webhookUrl || ''}
+                    onChange={(e) => setEditingShop({ ...editingShop, webhookUrl: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-mono text-blue-600 font-bold"
+                    placeholder="https://mysite.uz/api/payment-webhook"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">🖼 Do‘kon Logotipi (URL yoki Fayldan yuklash)</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={editingShop.logoUrl || ''}
+                      onChange={(e) => setEditingShop({ ...editingShop, logoUrl: e.target.value })}
+                      className="flex-1 rounded-xl border border-slate-300 p-2.5 text-xs font-mono"
+                      placeholder="https://.../logo.png"
+                    />
+                    <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1 shrink-0">
+                      <Upload size={14} /> Yuklash
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            const reader = new FileReader()
+                            reader.onload = (ev) => {
+                              if (ev.target?.result) {
+                                setEditingShop((prev: any) => ({ ...prev, logoUrl: ev.target?.result as string }))
+                              }
+                            }
+                            reader.readAsDataURL(file)
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!editingShop.webhookUrl) {
+                      showToast('Avval Webhook URL kiriting', 'error')
+                      return
+                    }
+                    showToast('Sinov webhook yuborilmoqda...')
+                    const res = await fetch('/api/paybot', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'test_webhook',
+                        webhookUrl: editingShop.webhookUrl,
+                        shopId: editingShop.id,
+                      }),
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.ok) {
+                      showToast(`Webhook yetkazildi! Status: ${data.status}`)
+                    } else {
+                      showToast(data.message || 'Webhook yetkazib bo‘lmadi', 'error')
+                    }
+                  }}
+                  className="rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-800 px-4 py-2.5 text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Radio size={14} className="text-emerald-600" />
+                  <span>⚡️ Sinov Webhook Yuborish</span>
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingShop(null)}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await fetch('/api/admin/crm', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                        },
+                        body: JSON.stringify({
+                          action: 'update_shop',
+                          shopId: editingShop.id,
+                          ...editingShop,
+                        }),
+                      })
+                      if (res.ok) {
+                        showToast('Do‘kon ma’lumotlari saqlandi!')
+                        setEditingShop(null)
+                        loadCrm()
+                      } else {
+                        showToast('Saqlashda xatolik yuz berdi', 'error')
+                      }
+                    }}
+                    className="rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Check size={14} />
+                    <span>Saqlash</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -79,6 +79,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: `Do‘kon holati ${approved ? 'Tasdiqlandi' : 'Kutilmoqda holatiga o‘tkazildi'}` })
     }
 
+    // 1.5 UPDATE FULL SHOP DETAILS (Admin Edit Shop)
+    if (action === 'update_shop') {
+      const { shopId, name, description, cardNumber, accountOwner, cardBank, webhookUrl, telegramChannelId, logoUrl, approved, tier } = body
+      if (!shopId) {
+        return NextResponse.json({ error: 'Do‘kon ID kiritilmadi' }, { status: 400 })
+      }
+
+      const updateData: any = {}
+      if (name !== undefined) updateData.name = name
+      if (description !== undefined) updateData.description = description
+      if (cardNumber !== undefined) {
+        updateData.cardNumber = cardNumber
+        updateData.cardLast4 = cardNumber.replace(/\D/g, '').slice(-4) || '3587'
+      }
+      if (accountOwner !== undefined) updateData.accountOwner = accountOwner
+      if (cardBank !== undefined) updateData.cardBank = cardBank
+      if (webhookUrl !== undefined) updateData.webhookUrl = webhookUrl
+      if (telegramChannelId !== undefined) updateData.telegramChannelId = telegramChannelId
+      if (logoUrl !== undefined) updateData.logoUrl = logoUrl
+      if (approved !== undefined) updateData.approved = Boolean(approved)
+      if (tier !== undefined) updateData.tier = tier
+
+      await db.update(shops).set(updateData).where(eq(shops.id, shopId))
+      return NextResponse.json({ ok: true, message: 'Do‘kon ma’lumotlari muvaffaqiyatli saqlandi!' })
+    }
+
     // 2. ADD ADMIN ROLE
     if (action === 'add_admin') {
       const { telegramId, role } = body
