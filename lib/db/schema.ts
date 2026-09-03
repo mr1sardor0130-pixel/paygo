@@ -316,6 +316,16 @@ export const systemSettings = pgTable('system_settings', {
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 })
 
+export const mandatoryChannels = pgTable('mandatory_channels', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  channelId: text('channelId').notNull(), // e.g. -1001234567890 or @username
+  inviteUrl: text('inviteUrl').notNull(), // e.g. https://t.me/channel
+  type: text('type').notNull().default('channel'), // channel, group
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
 // Relations
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),

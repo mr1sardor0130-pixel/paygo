@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-type TabType = 'overview' | 'shop_settings' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast'
+type TabType = 'overview' | 'shop_settings' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels'
 
 export function PaybotDashboard() {
   // Auth state
@@ -174,6 +174,26 @@ export function PaybotDashboard() {
   })
   const [adminModalOpen, setAdminModalOpen] = useState(false)
   const [newAdminTelegramId, setNewAdminTelegramId] = useState('')
+
+  // Official Channel & Mandatory Subscription State
+  const [officialForm, setOfficialForm] = useState({
+    officialChannel: '@Pay_Gouzbot',
+    officialGroup: '',
+    mandatorySubEnabled: false,
+  })
+  const [mandatoryChannelsList, setMandatoryChannelsList] = useState<any[]>([])
+  const [mChanModalOpen, setMChanModalOpen] = useState(false)
+  const [editingMChan, setEditingMChan] = useState<any>(null)
+  const [mChanForm, setMChanForm] = useState({
+    id: '',
+    name: '',
+    channelId: '',
+    inviteUrl: '',
+    type: 'channel',
+    active: true,
+  })
+  const [savingOfficial, setSavingOfficial] = useState(false)
+  const [savingMChan, setSavingMChan] = useState(false)
 
   // Broadcast & Users management state
   const [broadcastText, setBroadcastText] = useState('')
@@ -335,9 +355,189 @@ export function PaybotDashboard() {
       const data = await res.json()
       if (data.ok) {
         setCrmData(data)
+        if (data.officialSettings) {
+          setOfficialForm({
+            officialChannel: data.officialSettings.officialChannel || '@Pay_Gouzbot',
+            officialGroup: data.officialSettings.officialGroup || '',
+            mandatorySubEnabled: Boolean(data.officialSettings.mandatorySubEnabled),
+          })
+        }
+        if (data.mandatoryChannels) {
+          setMandatoryChannelsList(data.mandatoryChannels)
+        }
       }
     } catch {} finally {
       setLoading(false)
+    }
+  }
+
+  // Save Official Links & Mandatory Sub Switch
+  const handleSaveOfficialLinks = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingOfficial(true)
+    const adminId = currentUser?.telegramId || currentUser?.userId || '8021115446'
+    try {
+      const res = await fetch('/api/admin/crm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-user-id': adminId,
+        },
+        body: JSON.stringify({
+          action: 'save_official_links',
+          ...officialForm,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast('Rasmiy kanal va majburiy obuna sozlamalari saqlandi!')
+        loadCrm(adminId)
+      } else {
+        showToast(data.error || 'Saqlashda xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan bog‘lanib bo‘lmadi', 'error')
+    } finally {
+      setSavingOfficial(false)
+    }
+  }
+
+  // Toggle Mandatory Sub Switch directly
+  const handleToggleMandatorySub = async (newValue: boolean) => {
+    setOfficialForm((prev) => ({ ...prev, mandatorySubEnabled: newValue }))
+    const adminId = currentUser?.telegramId || currentUser?.userId || '8021115446'
+    try {
+      const res = await fetch('/api/admin/crm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-user-id': adminId,
+        },
+        body: JSON.stringify({
+          action: 'save_official_links',
+          officialChannel: officialForm.officialChannel,
+          officialGroup: officialForm.officialGroup,
+          mandatorySubEnabled: newValue,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast(newValue ? 'Majburiy obuna tizimi YOQILDI!' : 'Majburiy obuna tizimi O‘CHIRILDI!')
+      }
+    } catch {
+      showToast('Server bilan bog‘lanib bo‘lmadi', 'error')
+    }
+  }
+
+  // Open Mandatory Channel Modal (Add or Edit)
+  const handleOpenMChanModal = (mChan?: any) => {
+    if (mChan) {
+      setEditingMChan(mChan)
+      setMChanForm({
+        id: mChan.id,
+        name: mChan.name || '',
+        channelId: mChan.channelId || '',
+        inviteUrl: mChan.inviteUrl || '',
+        type: mChan.type || 'channel',
+        active: mChan.active !== undefined ? mChan.active : true,
+      })
+    } else {
+      setEditingMChan(null)
+      setMChanForm({
+        id: '',
+        name: '',
+        channelId: '',
+        inviteUrl: '',
+        type: 'channel',
+        active: true,
+      })
+    }
+    setMChanModalOpen(true)
+  }
+
+  // Save or Edit Mandatory Channel
+  const handleSaveMChan = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingMChan(true)
+    const adminId = currentUser?.telegramId || currentUser?.userId || '8021115446'
+    try {
+      const res = await fetch('/api/admin/crm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-user-id': adminId,
+        },
+        body: JSON.stringify({
+          action: 'save_mandatory_channel',
+          ...mChanForm,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast(data.message || 'Kanal muvaffaqiyatli saqlandi!')
+        setMChanModalOpen(false)
+        loadCrm(adminId)
+      } else {
+        showToast(data.error || 'Saqlashda xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan bog‘lanib bo‘lmadi', 'error')
+    } finally {
+      setSavingMChan(false)
+    }
+  }
+
+  // Delete Mandatory Channel
+  const handleDeleteMChan = async (channelId: string) => {
+    if (!confirm('Haqiqatan ham ushbu majburiy kanalni o‘chirmoqchimisiz?')) return
+    const adminId = currentUser?.telegramId || currentUser?.userId || '8021115446'
+    try {
+      const res = await fetch('/api/admin/crm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-user-id': adminId,
+        },
+        body: JSON.stringify({
+          action: 'delete_mandatory_channel',
+          channelId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast('Kanal o‘chirildi!')
+        loadCrm(adminId)
+      } else {
+        showToast(data.error || 'O‘chirishda xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan bog‘lanib bo‘lmadi', 'error')
+    }
+  }
+
+  // Toggle Active Status of Mandatory Channel
+  const handleToggleMChanActive = async (channelId: string, currentActive: boolean) => {
+    const adminId = currentUser?.telegramId || currentUser?.userId || '8021115446'
+    try {
+      const res = await fetch('/api/admin/crm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-user-id': adminId,
+        },
+        body: JSON.stringify({
+          action: 'toggle_mandatory_channel',
+          channelId,
+          active: !currentActive,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast(!currentActive ? 'Kanal faollashtirildi' : 'Kanal nofaol qilindi')
+        loadCrm(adminId)
+      }
+    } catch {
+      showToast('Server bilan bog‘lanib bo‘lmadi', 'error')
     }
   }
 
@@ -614,6 +814,76 @@ export function PaybotDashboard() {
     )
   }
 
+  // -------------------------------------------------------------
+  // MANDATORY SUBSCRIPTION LOCK SCREEN (Website enforcement)
+  // -------------------------------------------------------------
+  if (!authLoading && currentUser && currentUser.mandatorySubRequired && !currentUser.isAdmin) {
+    return (
+      <main className="min-h-screen bg-[#f8fafc] text-[#152238] flex flex-col justify-center items-center px-4 py-12">
+        <div className="w-full max-w-md bg-white border border-[#e2e8f0] rounded-3xl p-8 shadow-sm text-center">
+          <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-amber-500/10 text-amber-600 mb-5 border border-amber-500/20">
+            <Radio size={28} className="animate-pulse" />
+          </div>
+
+          <h2 className="text-xl font-bold text-[#152238]">Majburiy Obuna Talab Qilinadi</h2>
+          <p className="mt-2 text-xs text-[#718096] leading-relaxed">
+            PayGo boshqaruv panelidan to‘liq foydalanish uchun quyidagi rasmiy kanallarimizga obuna bo‘ling:
+          </p>
+
+          <div className="mt-6 space-y-3">
+            {currentUser.missingChannels && currentUser.missingChannels.length > 0 ? (
+              currentUser.missingChannels.map((ch: any) => (
+                <a
+                  key={ch.id || ch.channelId}
+                  href={ch.inviteUrl || `https://t.me/${ch.channelId.replace('@', '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-[#eff6ff] p-3.5 border border-[#bfdbfe] hover:bg-[#dbeafe] transition group text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-[#1769e0] text-white font-bold text-xs">
+                      📢
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#1e40af]">{ch.name}</div>
+                      <div className="text-[10px] text-[#3b82f6] font-mono">{ch.channelId}</div>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-1 rounded-xl bg-[#1769e0] px-3 py-1.5 text-xs font-bold text-white group-hover:bg-[#1254b7]">
+                    Obuna <ExternalLink size={12} />
+                  </span>
+                </a>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500">Rasmiy kanalga ulanish kutilmoqda...</p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              setAuthLoading(true)
+              await verifyUser(token, currentUser.telegramId || currentUser.userId)
+              setAuthLoading(false)
+              showToast('Obunalar tekshirilmoqda...')
+            }}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#16865b] py-3.5 text-sm font-bold text-white shadow-md hover:bg-[#136f4c] transition active:scale-[0.99]"
+          >
+            <RefreshCw size={16} /> ✅ Obunani tekshirish
+          </button>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="mt-3 text-xs text-[#64748b] hover:text-[#152238] font-medium"
+          >
+            Boshqa hisob bilan kirish (Chiqish)
+          </button>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-[#152238]">
       {/* Toast notification */}
@@ -779,6 +1049,17 @@ export function PaybotDashboard() {
                 }`}
               >
                 <Send size={15} /> 📢 E'lon Yuborish
+              </button>
+
+              <button
+                onClick={() => setActiveTab('official_channels')}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                  activeTab === 'official_channels'
+                    ? 'bg-[#1769e0] text-white shadow-sm'
+                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
+                }`}
+              >
+                <Radio size={15} /> 📣 Rasmiy Kanal & Majburiy Obuna ({mandatoryChannelsList.length})
               </button>
 
               <button
@@ -2215,6 +2496,357 @@ export function PaybotDashboard() {
                 {sendingBroadcast ? "E'lon Yuborilmoqda..." : "🚀 E'lonni Yuborish"}
               </button>
             </form>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: OFFICIAL CHANNELS & MANDATORY SUBSCRIPTION MANAGEMENT */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'official_channels' && currentUser?.isAdmin && (
+          <div className="space-y-8">
+            {/* Top Cards: Official Links & Mandatory Sub Switch */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 1. Official Telegram Channels / Groups */}
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-5 border-b border-[#f1f5f9] pb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-[#152238] flex items-center gap-2">
+                      <Radio className="text-[#1769e0] size-5" />
+                      <span>Rasmiy Resurslar Sozlamalari</span>
+                    </h2>
+                    <p className="text-xs text-[#718096] mt-0.5">
+                      Sayt, bot va to‘lov sahifalarida ko‘rinadigan rasmiy kanal va guruh manzili
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveOfficialLinks} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[#475569] mb-1">
+                      📢 Rasmiy Telegram Kanal (@kanal yoki havola)
+                    </label>
+                    <input
+                      type="text"
+                      value={officialForm.officialChannel}
+                      onChange={(e) => setOfficialForm({ ...officialForm, officialChannel: e.target.value })}
+                      placeholder="@Pay_Gouzbot yoki https://t.me/PayGoOfficial"
+                      className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#475569] mb-1">
+                      👥 Rasmiy Telegram Guruh / Chat (@guruh yoki havola)
+                    </label>
+                    <input
+                      type="text"
+                      value={officialForm.officialGroup}
+                      onChange={(e) => setOfficialForm({ ...officialForm, officialGroup: e.target.value })}
+                      placeholder="@PayGoChat yoki https://t.me/PayGoSupport"
+                      className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={savingOfficial}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1769e0] py-3 text-xs font-bold text-white shadow-sm hover:bg-[#1254b7] transition disabled:opacity-50"
+                  >
+                    {savingOfficial ? <RefreshCw className="animate-spin size-4" /> : <Check size={16} />}
+                    <span>💾 Rasmiy Manzillarni Saqlash</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* 2. Mandatory Subscription Switch & Stats */}
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4 border-b border-[#f1f5f9] pb-4">
+                    <div>
+                      <h2 className="text-base font-bold text-[#152238] flex items-center gap-2">
+                        <ShieldCheck className="text-emerald-600 size-5" />
+                        <span>Majburiy Obuna Tizimi (Force Sub)</span>
+                      </h2>
+                      <p className="text-xs text-[#718096] mt-0.5">
+                        Botga kirgan har bir foydalanuvchini kanallarga a’zo bo‘lishini majburiy tekshirish
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-3 mb-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700">Tizim holati:</span>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+                          officialForm.mandatorySubEnabled
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        <span
+                          className={`size-2 rounded-full ${
+                            officialForm.mandatorySubEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                          }`}
+                        />
+                        {officialForm.mandatorySubEnabled ? '🟢 Faol (Yoqilgan)' : '🔴 Nofaol (O‘chirilgan)'}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      {officialForm.mandatorySubEnabled
+                        ? '🔥 Majburiy obuna faol! Foydalanuvchi botga xabar yozganda yoki buyruq berganda, quyidagi barcha faol kanallarga a’zoligi tekshiriladi. Obuna bo‘lmaguncha botdan foydalana olmaydi.'
+                        : '⚠️ Majburiy obuna o‘chirilgan. Barcha foydalanuvchilar to‘g‘ridan-to‘g‘ri bot menyusidan erkin foydalanishi mumkin.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleMandatorySub(!officialForm.mandatorySubEnabled)}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-2xl py-3 text-xs font-bold transition shadow-sm ${
+                      officialForm.mandatorySubEnabled
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                  >
+                    <Radio size={16} />
+                    <span>
+                      {officialForm.mandatorySubEnabled
+                        ? '🔴 Majburiy Obunani O‘chirish'
+                        : '🟢 Majburiy Obunani Yoqish'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Table: Mandatory Channels Management */}
+            <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-[#f1f5f9] pb-4">
+                <div>
+                  <h2 className="text-base font-bold text-[#152238] flex items-center gap-2">
+                    <Users className="text-[#1769e0] size-5" />
+                    <span>Majburiy A’zolik Kanallari & Guruhlari ({mandatoryChannelsList.length} ta)</span>
+                  </h2>
+                  <p className="text-xs text-[#718096] mt-0.5">
+                    Foydalanuvchilar a’zo bo‘lishi shart bo‘lgan barcha Telegram kanallar va guruhlar ro‘yxati
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenMChanModal()}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#1769e0] hover:bg-[#1254b7] text-white px-4 py-2.5 text-xs font-bold shadow-sm transition active:scale-95"
+                >
+                  <Plus size={16} />
+                  <span>➕ Yangi Kanal / Guruh qo‘shish</span>
+                </button>
+              </div>
+
+              {mandatoryChannelsList.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                  <Radio size={32} className="mx-auto text-slate-400 mb-2" />
+                  <h3 className="text-sm font-bold text-slate-700">Hozircha majburiy kanallar qo‘shilmagan</h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Foydalanuvchilarni o‘z kanallaringizga a’zo qilish uchun yuqoridagi <b>"Yangi Kanal / Guruh qo‘shish"</b> tugmasini bosing.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold">
+                        <th className="py-3 px-4 rounded-l-xl">Kanal / Guruh Nomi</th>
+                        <th className="py-3 px-4">Turi</th>
+                        <th className="py-3 px-4">Telegram ID / Username</th>
+                        <th className="py-3 px-4">Havola</th>
+                        <th className="py-3 px-4">Holati</th>
+                        <th className="py-3 px-4 rounded-r-xl text-right">Amallar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {mandatoryChannelsList.map((ch) => (
+                        <tr key={ch.id} className="hover:bg-slate-50 transition">
+                          <td className="py-3.5 px-4 font-bold text-slate-800 flex items-center gap-2">
+                            <span className="size-2 rounded-full bg-blue-500" />
+                            <span>{ch.name}</span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                              {ch.type === 'group' ? '👥 Guruh' : '📢 Kanal'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-semibold text-blue-700">
+                            <code>{ch.channelId}</code>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <a
+                              href={ch.inviteUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:underline font-semibold"
+                            >
+                              <span>Ochish</span>
+                              <ExternalLink size={12} />
+                            </a>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMChanActive(ch.id, ch.active)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition ${
+                                ch.active
+                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                  : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                              }`}
+                            >
+                              <span className={`size-1.5 rounded-full ${ch.active ? 'bg-emerald-600' : 'bg-slate-400'}`} />
+                              <span>{ch.active ? '🟢 Faol' : '⚪️ Nofaol'}</span>
+                            </button>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenMChanModal(ch)}
+                                className="p-2 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition"
+                                title="Tahrirlash"
+                              >
+                                <Edit3 size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMChan(ch.id)}
+                                className="p-2 rounded-xl text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition"
+                                title="O‘chirish"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: ADD / EDIT MANDATORY CHANNEL */}
+        {/* ------------------------------------------------------------- */}
+        {mChanModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Radio size={18} className="text-[#1769e0]" />
+                  <span>{editingMChan ? 'Kanalni Tahrirlash' : 'Yangi Majburiy Kanal / Guruh'}</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setMChanModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+                >
+                  ✕ Yopish
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveMChan} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Kanal / Guruh Nomi:
+                  </label>
+                  <input
+                    type="text"
+                    value={mChanForm.name}
+                    onChange={(e) => setMChanForm({ ...mChanForm, name: e.target.value })}
+                    placeholder="Masalan: PayGo Rasmiy Yangiliklar"
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs outline-none focus:border-[#1769e0]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Telegram ID yoki Username:
+                  </label>
+                  <input
+                    type="text"
+                    value={mChanForm.channelId}
+                    onChange={(e) => setMChanForm({ ...mChanForm, channelId: e.target.value })}
+                    placeholder="Masalan: @PayGoOfficial yoki -1001928374829"
+                    className="w-full font-mono rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs outline-none focus:border-[#1769e0]"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    ⚠️ Bot ushbu kanalda <b>Administrator</b> bo‘lishi lozim (a’zolikni tekshirish huquqi uchun).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Taklif Havolasi (Invite Link / URL):
+                  </label>
+                  <input
+                    type="url"
+                    value={mChanForm.inviteUrl}
+                    onChange={(e) => setMChanForm({ ...mChanForm, inviteUrl: e.target.value })}
+                    placeholder="https://t.me/PayGoOfficial yoki https://t.me/+AbCdEf123"
+                    className="w-full font-mono rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs outline-none focus:border-[#1769e0]"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Turi:</label>
+                    <select
+                      value={mChanForm.type}
+                      onChange={(e) => setMChanForm({ ...mChanForm, type: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#1769e0]"
+                    >
+                      <option value="channel">📢 Telegram Kanal</option>
+                      <option value="group">👥 Telegram Guruh</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Holati:</label>
+                    <select
+                      value={mChanForm.active ? 'true' : 'false'}
+                      onChange={(e) => setMChanForm({ ...mChanForm, active: e.target.value === 'true' })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#1769e0]"
+                    >
+                      <option value="true">🟢 Faol</option>
+                      <option value="false">⚪️ Nofaol</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setMChanModalOpen(false)}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingMChan}
+                    className="rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    {savingMChan ? <RefreshCw className="animate-spin size-4" /> : <Check size={14} />}
+                    <span>Saqlash</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 

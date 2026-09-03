@@ -13,6 +13,7 @@ import {
   systemSettings,
   fundraisers,
   donations,
+  mandatoryChannels,
 } from '@/lib/db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
@@ -102,6 +103,9 @@ type Flow = {
   targetShopId?: string
   editTariffId?: string
   editTariffField?: string
+  mchanName?: string
+  mchanId?: string
+  mchanUrl?: string
 }
 
 const menu = {
@@ -124,10 +128,10 @@ const menu = {
 const adminMenu = {
   keyboard: [
     [{ text: '🏪 Do‘konlar boshqaruvi' }, { text: '💎 Tariflar boshqaruvi' }],
-    [{ text: '👥 Adminlar boshqaruvi' }, { text: '📊 Barcha statistika' }],
+    [{ text: '📣 Rasmiy Kanal & Majburiy Obuna' }, { text: '👥 Adminlar boshqaruvi' }],
     [{ text: '📢 Reklama & Broadcast' }, { text: '🛑 Faoliyat boshqaruvi' }],
-    [{ text: '🤖 Userbotlar holati' }, { text: '🌐 Web CRM Dashboard' }],
-    [{ text: '🏠 Asosiy menyuga qaytish' }, { text: '❌ Admin panelni yopish' }],
+    [{ text: '📊 Barcha statistika' }, { text: '🤖 Userbotlar holati' }],
+    [{ text: '🏠 Asosiy menyuga qaytish' }, { text: '🌐 Web CRM Dashboard' }],
   ],
   resize_keyboard: true,
   one_time_keyboard: true,
@@ -945,6 +949,131 @@ async function renderAdminTariffDetail(token: string, chatId: number | string, t
   await send(token, chatId, text, { inline_keyboard: buttons })
 }
 
+// Check Mandatory Subscription for User
+async function checkMandatorySubscription(token: string, userIdStr: string): Promise<{ ok: boolean; missingChannels: any[] }> {
+  try {
+    const isSubEnabledSetting = await db.select().from(systemSettings).where(eq(systemSettings.key, 'mandatory_sub_enabled')).limit(1)
+    const isEnabled = isSubEnabledSetting.length > 0 && isSubEnabledSetting[0].value === 'true'
+    if (!isEnabled) {
+      return { ok: true, missingChannels: [] }
+    }
+
+    const allChans = await db.select().from(mandatoryChannels).where(eq(mandatoryChannels.active, true))
+    if (!allChans.length) {
+      return { ok: true, missingChannels: [] }
+    }
+
+    const missingChannels: any[] = []
+
+    for (const ch of allChans) {
+      try {
+        const url = `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(ch.channelId)}&user_id=${userIdStr}`
+        const res = await fetch(url, { method: 'GET' })
+        const data = await res.json()
+        if (data.ok && data.result) {
+          const status = data.result.status
+          if (['creator', 'administrator', 'member', 'restricted'].includes(status)) {
+            // Subscribed!
+            continue
+          }
+        }
+        missingChannels.push(ch)
+      } catch (err) {
+        console.warn(`Error checking sub for ${ch.channelId}:`, err)
+        missingChannels.push(ch)
+      }
+    }
+
+    return {
+      ok: missingChannels.length === 0,
+      missingChannels,
+    }
+  } catch (e) {
+    console.error('checkMandatorySubscription error:', e)
+    return { ok: true, missingChannels: [] }
+  }
+}
+
+// Render Admin Official Channels & Mandatory Subscription Management
+async function renderAdminOfficialChannels(token: string, chatId: number | string) {
+  let offChan = '@Pay_Gouzbot'
+  let offGrp = ''
+  let isMandSub = false
+  let chans: any[] = []
+
+  try {
+    const sets = await db.select().from(systemSettings)
+    const offChanSet = sets.find((s) => s.key === 'official_channel')
+    if (offChanSet?.value) offChan = offChanSet.value
+    const offGrpSet = sets.find((s) => s.key === 'official_group')
+    if (offGrpSet?.value) offGrp = offGrpSet.value
+    const mandSubSet = sets.find((s) => s.key === 'mandatory_sub_enabled')
+    if (mandSubSet?.value === 'true') isMandSub = true
+
+    chans = await db.select().from(mandatoryChannels)
+  } catch {}
+
+  let chansListTxt = ''
+  if (chans.length === 0) {
+    chansListTxt = '<i>Hozircha majburiy kanallar qo‘shilmagan.</i>'
+  } else {
+    chansListTxt = chans
+      .map((c, idx) => {
+        const typeIcon = c.type === 'group' ? '👥 Guruh' : '📢 Kanal'
+        const statusIcon = c.active ? '🟢 Faol' : '⚪️ Nofaol'
+        return (
+          `<b>${idx + 1}️⃣ ${c.name}</b> (${typeIcon})\n` +
+          `• 🆔: <code>${c.channelId}</code>\n` +
+          `• 🔗: <a href="${c.inviteUrl}">${c.inviteUrl}</a>\n` +
+          `• Holat: <b>${statusIcon}</b>`
+        )
+      })
+      .join('\n\n')
+  }
+
+  const text =
+    `📣 <b>Rasmiy Resurslar va Majburiy Obuna Boshqaruvi</b>\n\n` +
+    `📢 <b>Rasmiy Kanal:</b> <code>${offChan}</code>\n` +
+    `👥 <b>Rasmiy Guruh:</b> <code>${offGrp || 'Mavjud emas'}</code>\n` +
+    `🛡 <b>Majburiy Obuna Holati:</b> ${isMandSub ? '🟢 <b>YOQILGAN (FAOL)</b>' : '🔴 <b>O‘CHIRILGAN</b>'}\n\n` +
+    `─────────────\n` +
+    `📋 <b>Majburiy Kanallar Ro‘yxati (${chans.length} ta):</b>\n\n` +
+    `${chansListTxt}\n\n` +
+    `ℹ️ <i>Bot barcha ko‘rsatilgan kanallarda <b>Administrator</b> bo‘lishi shart.</i>`
+
+  const inline_keyboard: any[] = [
+    [
+      {
+        text: isMandSub ? '🔴 Majburiy obunani o‘chirish' : '🟢 Majburiy obunani yoqish',
+        callback_data: 'adm_toggle_mand_sub',
+      },
+    ],
+    [
+      { text: '📢 Rasmiy kanalni o‘zgartirish', callback_data: 'adm_set_off_chan' },
+      { text: '👥 Rasmiy guruhni o‘zgartirish', callback_data: 'adm_set_off_grp' },
+    ],
+    [
+      { text: '➕ Yangi majburiy kanal qo‘shish', callback_data: 'adm_add_mchan' },
+    ],
+  ]
+
+  if (chans.length > 0) {
+    for (const c of chans) {
+      inline_keyboard.push([
+        { text: `${c.active ? '⚪️ O‘chirish (Faolsiz)' : '🟢 Yoqish'}: ${c.name}`, callback_data: `adm_tog_mchan_${c.id}` },
+        { text: `🗑 O‘chirish`, callback_data: `adm_del_mchan_${c.id}` },
+      ])
+    }
+  }
+
+  inline_keyboard.push([
+    { text: '🌐 Web CRM orqali boshqarish', url: `${APP_URL}/admin` },
+    { text: '🔙 Admin Menyuga qaytish', callback_data: 'admin_back_main' },
+  ])
+
+  await send(token, chatId, text, { inline_keyboard })
+}
+
 export async function GET() {
   return NextResponse.json({ ok: true, service: 'paygo-telegram-webhook', time: new Date().toISOString() })
 }
@@ -1741,6 +1870,117 @@ export async function POST(request: Request) {
         `Masalan:\n<code>9860 3501 2345 3587 | AZIZBEK ISMOILOV | HUMOCARD</code>`,
         back
       )
+      return NextResponse.json({ ok: true })
+    }
+
+    // -------------------------------------------------------------
+    // OFFICIAL CHANNELS & MANDATORY SUBSCRIPTION CALLBACKS
+    // -------------------------------------------------------------
+    if (data === 'check_mandatory_sub') {
+      const subCheck = await checkMandatorySubscription(token, userIdStr)
+      if (subCheck.ok) {
+        await answerCallback(token, cb.id, '✅ Barcha kanallarga obuna tasdiqlandi! Xush kelibsiz!', true)
+        await send(token, chatId, '✅ <b>Obuna muvaffaqiyatli tasdiqlandi!</b>\n\nPayGo tizimidan foydalanishingiz mumkin:', menu)
+      } else {
+        await answerCallback(token, cb.id, '❌ Hali barcha kanallarga a’zo bo‘lmadingiz!', true)
+        const buttons = subCheck.missingChannels.map((ch) => [
+          { text: `📢 ${ch.name}`, url: ch.inviteUrl },
+        ])
+        buttons.push([{ text: '✅ Obunani tekshirish', callback_data: 'check_mandatory_sub' }])
+        await send(
+          token,
+          chatId,
+          `⚠️ <b>Botdan to‘liq foydalanish uchun rasmiy kanallarimizga obuna bo‘ling:</b>\n\n` +
+          subCheck.missingChannels.map((c, i) => `${i + 1}. <b>${c.name}</b>`).join('\n') +
+          `\n\nObuna bo‘lgach, <b>"✅ Obunani tekshirish"</b> tugmasini bosing:`,
+          { inline_keyboard: buttons }
+        )
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'admin_official_channels') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await renderAdminOfficialChannels(token, chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'adm_toggle_mand_sub') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      try {
+        const cur = await db.select().from(systemSettings).where(eq(systemSettings.key, 'mandatory_sub_enabled')).limit(1)
+        const newVal = cur[0]?.value === 'true' ? 'false' : 'true'
+        await db.insert(systemSettings).values({ key: 'mandatory_sub_enabled', value: newVal }).onConflictDoUpdate({ target: systemSettings.key, set: { value: newVal, updatedAt: new Date() } })
+        await answerCallback(token, cb.id, newVal === 'true' ? '🟢 Majburiy obuna YOQILDI' : '🔴 Majburiy obuna O‘CHIRILDI', true)
+      } catch (err: any) {
+        console.error('Toggle mandatory sub err:', err)
+      }
+      await renderAdminOfficialChannels(token, chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'adm_set_off_chan') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await stateSet(chatId, { step: 'admin_set_off_chan' })
+      await send(token, chatId, '📢 <b>Rasmiy Telegram Kanalni Sozlash</b>\n\nKanal username yoki havolasini yuboring (masalan: <code>@Pay_Gouzbot</code> yoki <code>https://t.me/PayGoChannel</code>):', back)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'adm_set_off_grp') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await stateSet(chatId, { step: 'admin_set_off_grp' })
+      await send(token, chatId, '👥 <b>Rasmiy Telegram Guruhni Sozlash</b>\n\nGuruh username yoki havolasini yuboring (masalan: <code>@PayGoGroup</code> yoki <code>https://t.me/PayGoCommunity</code>):', back)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'adm_add_mchan') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await stateSet(chatId, { step: 'admin_add_mchan_name' })
+      await send(token, chatId, '➕ <b>Yangi Majburiy Kanal Qo‘shish (1/3)</b>\n\nKanal nomini kiriting (masalan: <i>PayGo Rasmiy Yangiliklar</i>):', back)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('adm_tog_mchan_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      const mId = data.replace('adm_tog_mchan_', '')
+      try {
+        const row = await db.select().from(mandatoryChannels).where(eq(mandatoryChannels.id, mId)).limit(1)
+        if (row.length) {
+          const newStatus = !row[0].active
+          await db.update(mandatoryChannels).set({ active: newStatus }).where(eq(mandatoryChannels.id, mId))
+          await answerCallback(token, cb.id, newStatus ? '🟢 Faollashtirildi' : '⚪️ Faolsizlantirildi')
+        }
+      } catch (err: any) {
+        console.error('adm_tog_mchan_ err:', err)
+      }
+      await renderAdminOfficialChannels(token, chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('adm_del_mchan_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      const mId = data.replace('adm_del_mchan_', '')
+      try {
+        await db.delete(mandatoryChannels).where(eq(mandatoryChannels.id, mId))
+        await answerCallback(token, cb.id, '🗑 O‘chirildi')
+      } catch (err: any) {
+        console.error('adm_del_mchan_ err:', err)
+      }
+      await renderAdminOfficialChannels(token, chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'admin_back_main') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await send(token, chatId, '🛠 <b>Admin Boshqaruv Paneli:</b>', adminMenu)
       return NextResponse.json({ ok: true })
     }
 
@@ -2600,6 +2840,27 @@ export async function POST(request: Request) {
     } catch {}
 
     if (accepted) {
+      const isSubAdmin = await isAdminTelegramId(userIdStr)
+      if (!isSubAdmin) {
+        const subCheck = await checkMandatorySubscription(token, userIdStr)
+        if (!subCheck.ok && subCheck.missingChannels.length > 0) {
+          const buttons = subCheck.missingChannels.map((ch) => [
+            { text: `📢 ${ch.name}`, url: ch.inviteUrl },
+          ])
+          buttons.push([{ text: '✅ Obunani tekshirish', callback_data: 'check_mandatory_sub' }])
+          await send(
+            token,
+            chatId,
+            `👋 <b>Xush kelibsiz, ${message.from?.first_name ?? 'foydalanuvchi'}!</b>\n\n` +
+            `⚠️ <b>Botdan to‘liq foydalanish uchun rasmiy kanallarimizga obuna bo‘ling:</b>\n\n` +
+            subCheck.missingChannels.map((c, i) => `${i + 1}. <b>${c.name}</b>`).join('\n') +
+            `\n\nObuna bo‘lgach, quyidagi tugmani bosing:`,
+            { inline_keyboard: buttons }
+          )
+          return NextResponse.json({ ok: true })
+        }
+      }
+
       await send(
         token,
         chatId,
@@ -2644,6 +2905,30 @@ export async function POST(request: Request) {
       remove_keyboard: true,
     })
     return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // MANDATORY SUBSCRIPTION GLOBAL GUARD FOR REGULAR COMMANDS
+  // -------------------------------------------------------------
+  const isGlobalAdmin = await isAdminTelegramId(userIdStr)
+  if (!isGlobalAdmin && !flow) {
+    const subCheck = await checkMandatorySubscription(token, userIdStr)
+    if (!subCheck.ok && subCheck.missingChannels.length > 0) {
+      const buttons = subCheck.missingChannels.map((ch) => [
+        { text: `📢 ${ch.name}`, url: ch.inviteUrl },
+      ])
+      buttons.push([{ text: '✅ Obunani tekshirish', callback_data: 'check_mandatory_sub' }])
+      await send(
+        token,
+        chatId,
+        `⚠️ <b>Hurmatli foydalanuvchi!</b>\n\n` +
+        `Bot xizmatlaridan foydalanish uchun quyidagi rasmiy kanallarimizga a’zo bo‘lishingiz lozim:\n\n` +
+        subCheck.missingChannels.map((c, i) => `${i + 1}. <b>${c.name}</b>`).join('\n') +
+        `\n\nObuna bo‘lgach, <b>"✅ Obunani tekshirish"</b> tugmasini bosing:`,
+        { inline_keyboard: buttons }
+      )
+      return NextResponse.json({ ok: true })
+    }
   }
 
   // -------------------------------------------------------------
@@ -3401,6 +3686,108 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------
+  // ADMIN OFFICIAL CHANNELS & MANDATORY SUBSCRIPTION STEPS
+  // -------------------------------------------------------------
+  if (flow?.step === 'admin_set_off_chan') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await stateDelete(chatId)
+      return NextResponse.json({ ok: true })
+    }
+    const val = raw.trim()
+    try {
+      await db.insert(systemSettings).values({ key: 'official_channel', value: val }).onConflictDoUpdate({ target: systemSettings.key, set: { value: val, updatedAt: new Date() } })
+    } catch (err) {
+      console.error('Save official_channel err:', err)
+    }
+    await stateDelete(chatId)
+    await send(token, chatId, `✅ <b>Rasmiy kanal saqlandi:</b> <code>${val}</code>`, adminMenu)
+    await renderAdminOfficialChannels(token, chatId)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'admin_set_off_grp') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await stateDelete(chatId)
+      return NextResponse.json({ ok: true })
+    }
+    const val = raw.trim()
+    try {
+      await db.insert(systemSettings).values({ key: 'official_group', value: val }).onConflictDoUpdate({ target: systemSettings.key, set: { value: val, updatedAt: new Date() } })
+    } catch (err) {
+      console.error('Save official_group err:', err)
+    }
+    await stateDelete(chatId)
+    await send(token, chatId, `✅ <b>Rasmiy guruh saqlandi:</b> <code>${val}</code>`, adminMenu)
+    await renderAdminOfficialChannels(token, chatId)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'admin_add_mchan_name') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await stateDelete(chatId)
+      return NextResponse.json({ ok: true })
+    }
+    const name = raw.trim()
+    if (!name) {
+      await send(token, chatId, '❗ Iltimos, kanal nomini kiriting:', back)
+      return NextResponse.json({ ok: true })
+    }
+    await stateSet(chatId, { step: 'admin_add_mchan_id', mchanName: name })
+    await send(token, chatId, `📢 <b>Kanal ID yoki Username (2/3)</b>\n\nKanal username (<code>@kanal</code>) yoki ID raqamini (<code>-100...</code>) yuboring:`, back)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'admin_add_mchan_id') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await stateDelete(chatId)
+      return NextResponse.json({ ok: true })
+    }
+    let chId = raw.trim()
+    if (!chId.startsWith('@') && !chId.startsWith('-100') && !/^\d+$/.test(chId)) {
+      chId = `@${chId}`
+    }
+    await stateSet(chatId, { step: 'admin_add_mchan_url', mchanName: flow.mchanName, mchanId: chId })
+    await send(token, chatId, `🔗 <b>Taklif havolasi (3/3)</b>\n\nFoydalanuvchilar obuna bo‘lishi uchun havola (URL) yuboring (masalan: <code>https://t.me/kanal_nomi</code>):`, back)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (flow?.step === 'admin_add_mchan_url') {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) {
+      await stateDelete(chatId)
+      return NextResponse.json({ ok: true })
+    }
+    let inviteUrl = raw.trim()
+    if (!inviteUrl.startsWith('http://') && !inviteUrl.startsWith('https://')) {
+      inviteUrl = `https://${inviteUrl}`
+    }
+    const mId = `mchan_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+    try {
+      await db.insert(mandatoryChannels).values({
+        id: mId,
+        name: flow.mchanName || 'Kanal',
+        channelId: flow.mchanId || '@channel',
+        inviteUrl,
+        type: 'channel',
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+    } catch (dbErr) {
+      console.error('Insert mandatory channel err:', dbErr)
+    }
+
+    await stateDelete(chatId)
+    await send(token, chatId, `🎉 <b>Yangi majburiy kanal muvaffaqiyatli qo‘shildi!</b>\n\n📌 <b>Nomi:</b> ${flow.mchanName}\n🆔 <b>ID:</b> <code>${flow.mchanId}</code>\n🔗 <b>Havola:</b> <a href="${inviteUrl}">${inviteUrl}</a>`, adminMenu)
+    await renderAdminOfficialChannels(token, chatId)
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
   // USERBOT ULASH OQIMI
   // -------------------------------------------------------------
   if (text === 'Userbot ulash' || raw === '/userbot') {
@@ -3708,6 +4095,18 @@ export async function POST(request: Request) {
     const isAdmin = await isAdminTelegramId(userIdStr)
     if (!isAdmin) return NextResponse.json({ ok: true })
     await renderAdminTariffManagement(token, chatId)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (
+    text === 'Rasmiy Kanal & Majburiy Obuna' ||
+    text === '📣 Rasmiy Kanal & Majburiy Obuna' ||
+    raw === '/official_channels' ||
+    raw === '/channels'
+  ) {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    await renderAdminOfficialChannels(token, chatId)
     return NextResponse.json({ ok: true })
   }
 

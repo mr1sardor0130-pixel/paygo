@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles } from '@/lib/db/schema'
+import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles, systemSettings, mandatoryChannels } from '@/lib/db/schema'
 import { eq, desc, sql } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
 import { sendTelegramMessage } from '@/lib/telegram-notifier'
@@ -15,7 +15,7 @@ async function checkAuth(request: Request) {
   return { ok, telegramId: String(telegramId || '') }
 }
 
-// GET: Fetch all shops, payments, tariffs, roles and statistics
+// GET: Fetch all shops, payments, tariffs, roles, mandatory channels and statistics
 export async function GET(request: Request) {
   const auth = await checkAuth(request)
   if (!auth.ok) {
@@ -31,6 +31,13 @@ export async function GET(request: Request) {
     const allTariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.createdAt))
     const allRoles = await db.select().from(systemRoles).orderBy(desc(systemRoles.createdAt))
     const allConnections = await db.select().from(userbotConnections).orderBy(desc(userbotConnections.createdAt))
+    const allMandatoryChannels = await db.select().from(mandatoryChannels).orderBy(desc(mandatoryChannels.createdAt))
+    const settingsRows = await db.select().from(systemSettings)
+
+    const settingsMap: Record<string, string> = {}
+    settingsRows.forEach((r) => {
+      settingsMap[r.key] = r.value
+    })
 
     const paidPayments = allPayments.filter((p) => p.status === 'paid')
     const totalVolume = paidPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
@@ -47,6 +54,7 @@ export async function GET(request: Request) {
         totalVolume,
         activeUserbots: allConnections.filter((c) => c.status === 'active').length,
         totalAdmins: allRoles.length,
+        mandatoryChannelsCount: allMandatoryChannels.length,
       },
       shops: allShops,
       payments: allPayments,
@@ -54,6 +62,12 @@ export async function GET(request: Request) {
       roles: allRoles,
       userbots: allConnections,
       users: allUsers,
+      mandatoryChannels: allMandatoryChannels,
+      officialSettings: {
+        officialChannel: settingsMap['official_channel'] || '@Pay_Gouzbot',
+        officialGroup: settingsMap['official_group'] || '',
+        mandatorySubEnabled: settingsMap['mandatory_sub_enabled'] === 'true',
+      },
     })
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Xatolik yuz berdi' }, { status: 500 })
@@ -320,6 +334,103 @@ export async function POST(request: Request) {
         message: `E’lon yuborildi! Muvaffaqiyatli: ${successCount} ta, Xatolik: ${failCount} ta`,
         stats: { total: targetUsers.length, success: successCount, failed: failCount },
       })
+    }
+
+    // 9. SAVE OFFICIAL CHANNELS & MANDATORY SUB SWITCH
+    if (action === 'save_official_links') {
+      const { officialChannel, officialGroup, mandatorySubEnabled } = body
+
+      if (officialChannel !== undefined) {
+        await db
+          .insert(systemSettings)
+          .values({ key: 'official_channel', value: String(officialChannel).trim() })
+          .onConflictDoUpdate({
+            target: systemSettings.key,
+            set: { value: String(officialChannel).trim(), updatedAt: new Date() },
+          })
+      }
+
+      if (officialGroup !== undefined) {
+        await db
+          .insert(systemSettings)
+          .values({ key: 'official_group', value: String(officialGroup).trim() })
+          .onConflictDoUpdate({
+            target: systemSettings.key,
+            set: { value: String(officialGroup).trim(), updatedAt: new Date() },
+          })
+      }
+
+      if (mandatorySubEnabled !== undefined) {
+        await db
+          .insert(systemSettings)
+          .values({ key: 'mandatory_sub_enabled', value: mandatorySubEnabled ? 'true' : 'false' })
+          .onConflictDoUpdate({
+            target: systemSettings.key,
+            set: { value: mandatorySubEnabled ? 'true' : 'false', updatedAt: new Date() },
+          })
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: 'Rasmiy kanal, guruh va majburiy obuna sozlamalari muvaffaqiyatli saqlandi!',
+      })
+    }
+
+    // 10. SAVE / ADD MANDATORY CHANNEL
+    if (action === 'save_mandatory_channel') {
+      const { id, name, channelId, inviteUrl, type, active } = body
+      if (!name || !channelId || !inviteUrl) {
+        return NextResponse.json({ error: 'Kanal nomi, ID si va taklif havolasi majburiy' }, { status: 400 })
+      }
+
+      const formattedChannelId = String(channelId).trim()
+      const formattedInvite = String(inviteUrl).trim()
+      const formattedName = String(name).trim()
+
+      if (id) {
+        await db
+          .update(mandatoryChannels)
+          .set({
+            name: formattedName,
+            channelId: formattedChannelId,
+            inviteUrl: formattedInvite,
+            type: type || 'channel',
+            active: active !== undefined ? Boolean(active) : true,
+          })
+          .where(eq(mandatoryChannels.id, id))
+
+        return NextResponse.json({ ok: true, message: 'Majburiy kanal/guruh muvaffaqiyatli tahrirlandi' })
+      } else {
+        const newId = `mchan_${randomUUID().slice(0, 8)}`
+        await db.insert(mandatoryChannels).values({
+          id: newId,
+          name: formattedName,
+          channelId: formattedChannelId,
+          inviteUrl: formattedInvite,
+          type: type || 'channel',
+          active: active !== undefined ? Boolean(active) : true,
+        })
+
+        return NextResponse.json({ ok: true, message: 'Yangi majburiy kanal/guruh muvaffaqiyatli qo‘shildi' })
+      }
+    }
+
+    // 11. DELETE MANDATORY CHANNEL
+    if (action === 'delete_mandatory_channel') {
+      const { channelId } = body
+      if (!channelId) return NextResponse.json({ error: 'Kanal identifikatori kiritilmadi' }, { status: 400 })
+
+      await db.delete(mandatoryChannels).where(eq(mandatoryChannels.id, channelId))
+      return NextResponse.json({ ok: true, message: 'Majburiy kanal/guruh o‘chirildi' })
+    }
+
+    // 12. TOGGLE MANDATORY CHANNEL ACTIVE
+    if (action === 'toggle_mandatory_channel') {
+      const { channelId, active } = body
+      if (!channelId) return NextResponse.json({ error: 'Kanal identifikatori kiritilmadi' }, { status: 400 })
+
+      await db.update(mandatoryChannels).set({ active: Boolean(active) }).where(eq(mandatoryChannels.id, channelId))
+      return NextResponse.json({ ok: true, message: `Kanal holati ${active ? 'faollashtirildi' : 'nofaol qilindi'}` })
     }
 
     return NextResponse.json({ error: 'Noma’lum amal' }, { status: 400 })

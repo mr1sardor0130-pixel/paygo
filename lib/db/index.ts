@@ -137,6 +137,16 @@ export async function ensureDbSchema() {
         "updatedAt" timestamp NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS "mandatory_channels" (
+        "id" text PRIMARY KEY,
+        "name" text NOT NULL,
+        "channelId" text NOT NULL,
+        "inviteUrl" text NOT NULL,
+        "type" text NOT NULL DEFAULT 'channel',
+        "active" boolean NOT NULL DEFAULT true,
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS "fundraisers" (
         "id" text PRIMARY KEY,
         "shopId" text NOT NULL,
