@@ -454,9 +454,16 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                 {/* QR Code */}
                 <div className="flex flex-col items-center justify-center p-4 bg-slate-900/60 border border-slate-800 rounded-2xl">
                   <div className="bg-white p-3 rounded-xl mb-3">
-                    <QRCodeSVG value={`https://paygo.uz/pay/${rawCard}`} size={140} />
+                    <QRCodeSVG 
+                      value={
+                        typeof window !== 'undefined'
+                          ? `${window.location.origin}/pay/pay_${successDonation.donation?.id}`
+                          : `https://paygo.uz/pay/pay_${successDonation.donation?.id}`
+                      } 
+                      size={140} 
+                    />
                   </div>
-                  <span className="text-xs text-slate-400 font-medium">To‘lov ilovalari uchun QR Code</span>
+                  <span className="text-xs text-slate-400 font-medium">To‘lov sahifasi QR kodi</span>
                 </div>
               </div>
 
