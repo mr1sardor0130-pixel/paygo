@@ -269,6 +269,47 @@ export const auditLogs = pgTable(
   ]
 )
 
+export const fundraisers = pgTable(
+  'fundraisers',
+  {
+    id: text('id').primaryKey(),
+    shopId: text('shopId').notNull(),
+    userId: text('userId').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    goalAmount: integer('goalAmount').notNull().default(0), // UZS, 0 = unlimited
+    collectedAmount: integer('collectedAmount').notNull().default(0), // UZS
+    donorCount: integer('donorCount').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  },
+  (table) => [
+    index('fundraisers_shopId_idx').on(table.shopId),
+    index('fundraisers_userId_idx').on(table.userId),
+  ]
+)
+
+export const donations = pgTable(
+  'donations',
+  {
+    id: text('id').primaryKey(),
+    fundraiserId: text('fundraiserId').notNull(),
+    donorTempId: text('donorTempId').notNull(), // e.g. DONOR-928135
+    donorName: text('donorName').notNull(), // Ism & Familiya
+    amount: integer('amount').notNull(), // UZS
+    comment: text('comment'), // Tilak / Izoh
+    status: text('status').notNull().default('pending'), // pending, paid, cancelled
+    paymentId: text('paymentId'), // Linked payment if matched via userbot
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+  },
+  (table) => [
+    index('donations_fundraiserId_idx').on(table.fundraiserId),
+    index('donations_donorTempId_idx').on(table.donorTempId),
+    index('donations_status_idx').on(table.status),
+  ]
+)
+
 export const systemSettings = pgTable('system_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),

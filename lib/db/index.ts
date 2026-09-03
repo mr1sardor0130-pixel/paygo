@@ -137,6 +137,32 @@ export async function ensureDbSchema() {
         "updatedAt" timestamp NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS "fundraisers" (
+        "id" text PRIMARY KEY,
+        "shopId" text NOT NULL,
+        "userId" text NOT NULL,
+        "title" text NOT NULL,
+        "description" text,
+        "goalAmount" integer NOT NULL DEFAULT 0,
+        "collectedAmount" integer NOT NULL DEFAULT 0,
+        "donorCount" integer NOT NULL DEFAULT 0,
+        "active" boolean NOT NULL DEFAULT true,
+        "createdAt" timestamp NOT NULL DEFAULT NOW(),
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "donations" (
+        "id" text PRIMARY KEY,
+        "fundraiserId" text NOT NULL,
+        "donorTempId" text NOT NULL,
+        "donorName" text NOT NULL,
+        "amount" integer NOT NULL,
+        "comment" text,
+        "status" text NOT NULL DEFAULT 'pending',
+        "paymentId" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
       -- Ensure default superadmin 8021115446 exists
       INSERT INTO "system_roles" ("id", "telegramId", "role", "addedBy")
       VALUES ('superadmin-8021115446', '8021115446', 'superadmin', 'system')
