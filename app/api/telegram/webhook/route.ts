@@ -2330,10 +2330,13 @@ export async function POST(request: Request) {
   // BOT HAQIDA & FAQ & QO‘LLAB-QUVVATLASH COMMANDS / BUTTONS
   // -------------------------------------------------------------
   if (
+    raw === '🤖 Bot haqida & FAQ' ||
+    text === 'Bot haqida & FAQ' ||
     text === '🤖 Bot haqida & FAQ' ||
+    norm.includes('bot haqida') ||
+    norm.includes('faq') ||
     raw === '/about' ||
-    raw === '/faq' ||
-    norm === 'bot haqida'
+    raw === '/faq'
   ) {
     const faqText = `🤖 <b>PayGo Bot Haqida va FAQ (Ko‘p beriladigan savollar)</b>\n\n` +
       `⚡️ <b>PayGo nima?</b>\n` +
@@ -2362,8 +2365,14 @@ export async function POST(request: Request) {
   }
 
   if (
+    raw === '❤️ Qo‘llab-quvvatlash (Ehson)' ||
+    raw === '❤️ Qo‘llab-quvvatlash' ||
+    text === 'Qo‘llab-quvvatlash (Ehson)' ||
+    text === 'Qo‘llab-quvvatlash' ||
     text === '❤️ Qo‘llab-quvvatlash (Ehson)' ||
-    text === '❤️ Qo‘llab-quvvatlash' ||
+    norm.includes('qollab quvvatlash') ||
+    norm.includes('qollab') ||
+    norm.includes('ehson') ||
     raw === '/fundraisers' ||
     raw === '/create_fund' ||
     raw === '/fund'
@@ -2410,7 +2419,7 @@ export async function POST(request: Request) {
   // -------------------------------------------------------------
   // WEBHOOK TESTER & LEADERBOARD & MY STATS
   // -------------------------------------------------------------
-  if (raw === '/test_webhook' || raw === '/test_wh' || text === '🧪 Webhook Test') {
+  if (raw === '/test_webhook' || raw === '/test_wh' || raw === '🧪 Webhook Test' || text === 'Webhook Test' || text === '🧪 Webhook Test' || norm.includes('webhook test')) {
     const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
     if (userShops.length === 0) {
       await send(token, chatId, '⚠️ Sizda hali do‘kon yo‘q. Webhook test qilish uchun avval "🛍 Do‘kon ochish" bo‘limidan do‘kon yarating.')
@@ -2454,7 +2463,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (raw === '/leaderboard' || text === '🏆 Liderlar') {
+  if (raw === '/leaderboard' || raw === '🏆 Liderlar' || text === 'Liderlar' || text === '🏆 Liderlar' || norm.includes('liderlar')) {
     const topUsers = await db.select()
       .from(userProfiles)
       .orderBy(desc(userProfiles.referralCount))
