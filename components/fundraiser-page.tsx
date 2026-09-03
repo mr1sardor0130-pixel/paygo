@@ -21,8 +21,28 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
   const [successDonation, setSuccessDonation] = useState<any>(null)
 
   const [copied, setCopied] = useState(false)
-
   const [verifying, setVerifying] = useState(false)
+
+  // 5-minute timer countdown state for active donation
+  const [donationSeconds, setDonationSeconds] = useState<number>(300)
+
+  useEffect(() => {
+    if (!successDonation || successDonation.donation?.status === 'paid') return
+
+    // Calculate expiry from server response or default to 5 minutes (300 seconds)
+    const expiryTime = successDonation.expiresAt
+      ? new Date(successDonation.expiresAt).getTime()
+      : Date.now() + 300 * 1000
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.floor((expiryTime - Date.now()) / 1000))
+      setDonationSeconds(remaining)
+    }
+
+    updateCountdown()
+    const timer = setInterval(updateCountdown, 1000)
+    return () => clearInterval(timer)
+  }, [successDonation])
 
   // Poll status of current pending donation
   useEffect(() => {
@@ -214,8 +234,20 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
 
             {/* Shop info badge */}
             <div className="shrink-0 bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center font-bold text-lg text-emerald-400 border border-slate-700">
-                {shop.name ? shop.name.charAt(0).toUpperCase() : '🏪'}
+              <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center font-bold text-lg text-emerald-400 border border-slate-700 overflow-hidden shrink-0">
+                {shop.logoUrl ? (
+                  <img
+                    src={shop.logoUrl}
+                    alt={shop.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to initial if image fails
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                ) : (
+                  shop.name ? shop.name.charAt(0).toUpperCase() : '🏪'
+                )}
               </div>
               <div>
                 <span className="text-xs text-slate-400 block">Kollaboratsiya do‘koni:</span>
@@ -372,6 +404,24 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                     Qabul Qilindi
                   </span>
                 </div>
+              ) : donationSeconds <= 0 ? (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center font-bold text-lg shrink-0">
+                      ⚠️
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-red-400 text-sm md:text-base">⌛ To‘lov muddati tugadi (5 daqiqa o‘tdi)</h4>
+                      <p className="text-xs text-slate-300">Ajratilgan 5 daqiqalik to‘lov vaqti tugadi. Qayta to‘lov qilish uchun yangi ehson so‘rovi kiriting.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSuccessDonation(null)}
+                    className="shrink-0 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                  >
+                    ← Qayta kiritish
+                  </button>
+                </div>
               ) : (
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -379,9 +429,15 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                       <Clock className="w-5 h-5 animate-pulse text-amber-400" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-amber-400 text-sm md:text-base">⏳ To‘lov Kutilmoqda...</h4>
-                      <p className="text-xs text-slate-300">
-                        Iltimos, pastdagi kartaga <b>{(successDonation.donation?.amount || 0).toLocaleString('uz-UZ')} UZS</b> o‘tkazma qiling. Userbot orqali xabar kelgach, avtomatik tasdiqlanadi.
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-amber-400 text-sm md:text-base">⏳ To‘lov Kutilmoqda...</h4>
+                        <span className="font-mono text-xs font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+                          {Math.floor(donationSeconds / 60).toString().padStart(2, '0')}:
+                          {(donationSeconds % 60).toString().padStart(2, '0')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        Iltimos, <b>5 daqiqa ichida</b> pastdagi kartaga <b>{(successDonation.donation?.amount || 0).toLocaleString('uz-UZ')} UZS</b> o‘tkazma qiling.
                       </p>
                     </div>
                   </div>

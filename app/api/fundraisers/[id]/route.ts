@@ -94,17 +94,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         amount: parsedAmount,
         currency: 'UZS',
         status: 'pending',
-        expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
         createdAt: new Date(),
       })
     } catch (e) {
       console.error('Failed to insert tracking payment record:', e)
     }
 
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+
     return NextResponse.json({
       ok: true,
       donation: newDonation,
       donorTempId,
+      expiresAt,
       message: 'Donat so‘rovi yaratildi. Kartaga o‘tkazma kutilmoqda.',
     })
   } catch (err: any) {
