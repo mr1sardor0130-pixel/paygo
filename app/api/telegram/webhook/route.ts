@@ -108,8 +108,8 @@ const adminMenu = {
   keyboard: [
     [{ text: '🏪 Do‘konlar boshqaruvi' }, { text: '💎 Tariflar boshqaruvi' }],
     [{ text: '👥 Adminlar boshqaruvi' }, { text: '📊 Barcha statistika' }],
-    [{ text: '📢 Reklama & Broadcast' }, { text: '🤖 Userbotlar holati' }],
-    [{ text: '🌐 Web CRM Dashboard' }],
+    [{ text: '📢 Reklama & Broadcast' }, { text: '🛑 Faoliyat boshqaruvi' }],
+    [{ text: '🤖 Userbotlar holati' }, { text: '🌐 Web CRM Dashboard' }],
     [{ text: '🏠 Asosiy menyuga qaytish' }, { text: '❌ Admin panelni yopish' }],
   ],
   resize_keyboard: true,
@@ -351,6 +351,21 @@ async function isMaintenanceMode(): Promise<boolean> {
       `)
     } catch {}
     return false
+  }
+}
+
+export async function getServiceShutdownData(): Promise<{ active: boolean; reason: string }> {
+  try {
+    const rows = await db.select().from(systemSettings).where(or(eq(systemSettings.key, 'service_shutdown_mode'), eq(systemSettings.key, 'service_shutdown_reason')))
+    let active = false
+    let reason = 'Muayyan sabablarga ko‘ra loyiha o‘z faoliyatini vaqtincha to‘xtatdi.'
+    for (const r of rows) {
+      if (r.key === 'service_shutdown_mode' && r.value === 'true') active = true
+      if (r.key === 'service_shutdown_reason' && r.value) reason = r.value
+    }
+    return { active, reason }
+  } catch {
+    return { active: false, reason: '' }
   }
 }
 
@@ -934,8 +949,23 @@ export async function POST(request: Request) {
   triggerAutoPromoIfNeeded(token).catch((err) => console.error('AutoPromo background trigger error:', err))
 
   const maintenance = await isMaintenanceMode()
+  const shutdownData = await getServiceShutdownData()
   const telegramId = update.message?.from?.id || update.callback_query?.from?.id
   const isAdmin = await isAdminTelegramId(telegramId)
+
+  if (shutdownData.active && !isAdmin) {
+    const chatId = update.message?.chat.id || update.callback_query?.message?.chat.id || update.callback_query?.from.id
+    if (chatId) {
+      await send(
+        token,
+        chatId,
+        '🛑 <b>Loyiha faoliyati vaqtincha to‘xtatilgan</b>\n\n' +
+        `<b>Sababi:</b>\n${shutdownData.reason}\n\n` +
+        'Keltirilgan noqulayliklar uchun chin dildan uzr so‘raymiz. Faoliyatimiz qayta tiklanishi bilanoq sizga e’lon qilinadi. 🙏'
+      )
+    }
+    return NextResponse.json({ ok: true })
+  }
 
   if (maintenance && !isAdmin) {
     const chatId = update.message?.chat.id || update.callback_query?.message?.chat.id || update.callback_query?.from.id
@@ -961,6 +991,81 @@ export async function POST(request: Request) {
     const data = cb.data || ''
 
     await answerCallback(token, cb.id)
+
+    // Admin inline button actions for shutdown and maintenance
+    if (data === 'admin_shutdown_on') {
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await stateSet(chatId, { step: 'awaiting_shutdown_reason' })
+      await send(
+        token,
+        chatId,
+        `🛑 <b>Loyiha Faoliyatini To‘xtatish Rejimi</b>\n\n` +
+        `Ushbu rejim yoqilganda bot oddiy foydalanuvchilar uchun yopiladi va barcha mijozlarga uzr so‘rash matni bilan e’lon yuboriladi.\n\n` +
+        `Iltimos, faoliyat to‘xtatilish sababini kiriting (masalan: <i>Profilaktika va server infratuzilmasini yangilash munosabati bilan...</i>):`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'admin_shutdown_off') {
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      try {
+        await ensureDbSchema()
+        await db.insert(systemSettings).values({ key: 'service_shutdown_mode', value: 'false' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
+        await stateDelete(chatId)
+
+        await send(token, chatId, `🟢 <b>Loyiha faoliyati qayta tiklandi!</b>\n\n📢 Barcha mijozlarga faoliyat tiklangani haqida xabar yuborilmoqda...`, adminMenu)
+
+        const resumeBroadcastMsg = `🟢 <b>Xushxabar! PayGo loyihasi o‘z faoliyatini to‘liq qayta tikladi!</b>\n\n` +
+          `Barcha xizmatlar, Webhooklar va to‘lov bildirishnomalari uzluksiz va to‘liq shtat rejimida ishlamoqda.\n\n` +
+          `Biz bilan birga ekanligingiz uchun tashakkur! Tizimdan foydalanish uchun menyuni bosing. 👇`
+
+        const broadcastRes = await broadcastToAllUsers(token, resumeBroadcastMsg)
+
+        await send(token, chatId, `📢 <b>Faoliyat tiklangani haqidagi xabar barcha mijozlarga yuborildi!</b>\n\n` +
+          `• Muvaffaqiyatli yetkazildi: <b>${broadcastRes.successCount}</b> ta\n` +
+          `• Xatolik: <b>${broadcastRes.failCount}</b> ta\n` +
+          `• Jami mijozlar: <b>${broadcastRes.total}</b> ta`, adminMenu)
+      } catch (err: any) {
+        await send(token, chatId, `⚠️ Xatolik: ${err?.message}`, adminMenu)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'admin_maint_on') {
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      try {
+        await ensureDbSchema()
+        await db.insert(systemSettings).values({ key: 'maintenance_mode', value: 'true' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'true', updatedAt: new Date() } })
+        await send(token, chatId, '✅ <b>Texnik holat yoqildi.</b>\n\nEndi bot faqat adminlar uchun ishlaydi.', adminMenu)
+      } catch (err: any) {
+        await send(token, chatId, `⚠️ Xatolik: ${err?.message}`, adminMenu)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'admin_maint_off') {
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      try {
+        await ensureDbSchema()
+        await db.insert(systemSettings).values({ key: 'maintenance_mode', value: 'false' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
+        await send(token, chatId, '❌ <b>Texnik holat o‘chirildi.</b>\n\n📢 Barcha mijozlarga xabarnoma yuborilmoqda...', adminMenu)
+
+        const maintenanceOffMsg = `🟢 <b>PayGo Botimiz Qayta Ishga Tushdi!</b>\n\n` +
+          `Texnik profilaktika va sozlash ishlari muvaffaqiyatli yakunlandi.\n\n` +
+          `⚡️ Endi barcha xizmatlar, Webhooklar va HUMO to‘lov xabarnomalaridan cheklovlarsiz va to‘liq tezlikda foydalanishingiz mumkin!`
+
+        const broadcastRes = await broadcastToAllUsers(token, maintenanceOffMsg)
+
+        await send(token, chatId, `📢 <b>Texnik holat tugagani haqidagi xabarnoma yuborildi!</b>\n\n` +
+          `• Muvaffaqiyatli yetkazildi: <b>${broadcastRes.successCount}</b> ta\n` +
+          `• Xatolik: <b>${broadcastRes.failCount}</b> ta\n` +
+          `• Jami mijozlar: <b>${broadcastRes.total}</b> ta`, adminMenu)
+      } catch (err: any) {
+        await send(token, chatId, `⚠️ Xatolik: ${err?.message}`, adminMenu)
+      }
+      return NextResponse.json({ ok: true })
+    }
 
     // Shop settings inline actions
     if (data.startsWith('edit_shop_name_')) {
@@ -1939,6 +2044,113 @@ export async function POST(request: Request) {
       `• <code>/broadcast xabar_matni</code> — Istalgan shaxsiy e’loningizni tarqatish`,
       adminMenu
     )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // SERVICE SHUTDOWN & MAINTENANCE MANAGEMENT (Admin)
+  // -------------------------------------------------------------
+  if (flow?.step === 'awaiting_shutdown_reason') {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    const reasonText = raw.trim()
+    if (!reasonText) {
+      await send(token, chatId, '⚠️ Iltimos, faoliyat to‘xtatilishining sababini matn ko‘rinishida kiriting:', back)
+      return NextResponse.json({ ok: true })
+    }
+
+    try {
+      await ensureDbSchema()
+      await db.insert(systemSettings).values({ key: 'service_shutdown_mode', value: 'true' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'true', updatedAt: new Date() } })
+      await db.insert(systemSettings).values({ key: 'service_shutdown_reason', value: reasonText }).onConflictDoUpdate({ target: systemSettings.key, set: { value: reasonText, updatedAt: new Date() } })
+      await stateDelete(chatId)
+
+      await send(token, chatId, `🛑 <b>Faoliyatni to‘xtatish rejimi yoqildi!</b>\n\n<b>Sababi:</b> ${reasonText}\n\n📢 <b>Barcha mijozlarga rasmiy e’lon va uzr so‘rash xabari yuborilmoqda...</b>`, adminMenu)
+
+      const shutdownBroadcastMsg = `🚫 <b>Hurmatli PayGo foydalanuvchilari!</b>\n\n` +
+        `Loyiha ma’muriyati shuni ma’lum qiladiki, xizmatimiz o‘z faoliyatini vaqtincha to‘xtatdi.\n\n` +
+        `<b>Sababi:</b>\n${reasonText}\n\n` +
+        `Keltirilgan noqulayliklar uchun barcha mijozlarimizdan samimiy uzr so‘raymiz! Faoliyatimiz qayta tiklanishi bilanoq sizga xabar beramiz. 🙏`
+
+      const broadcastRes = await broadcastToAllUsers(token, shutdownBroadcastMsg)
+
+      await send(token, chatId, `📢 <b>Faoliyat to‘xtatilgani haqidagi e’lon barcha mijozlarga yetkazildi!</b>\n\n` +
+        `• Muvaffaqiyatli yetkazildi: <b>${broadcastRes.successCount}</b> ta\n` +
+        `• Xatolik: <b>${broadcastRes.failCount}</b> ta\n` +
+        `• Jami mijozlar: <b>${broadcastRes.total}</b> ta`, adminMenu)
+    } catch (err: any) {
+      await send(token, chatId, `⚠️ Xatolik: ${err?.message}`, adminMenu)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/shutdown_on' || text === '🛑 Faoliyatni to‘xtatish') {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    await stateSet(chatId, { step: 'awaiting_shutdown_reason' })
+    await send(
+      token,
+      chatId,
+      `🛑 <b>Loyiha Faoliyatini To‘xtatish Rejimi</b>\n\n` +
+      `Ushbu rejim yoqilganda bot oddiy foydalanuvchilar uchun yopiladi va barcha mijozlarga uzr so‘rash matni bilan e’lon yuboriladi.\n\n` +
+      `Iltimos, faoliyat to‘xtatilish sababini kiriting (masalan: <i>Profilaktika va server infratuzilmasini yangilash munosabati bilan...</i>):`,
+      back
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/shutdown_off' || text === '🟢 Faoliyatni qayta tiklash') {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    try {
+      await ensureDbSchema()
+      await db.insert(systemSettings).values({ key: 'service_shutdown_mode', value: 'false' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
+      await stateDelete(chatId)
+
+      await send(token, chatId, `🟢 <b>Loyiha faoliyati qayta tiklandi!</b>\n\n📢 Barcha mijozlarga faoliyat tiklangani haqida xabar yuborilmoqda...`, adminMenu)
+
+      const resumeBroadcastMsg = `🟢 <b>Xushxabar! PayGo loyihasi o‘z faoliyatini to‘liq qayta tikladi!</b>\n\n` +
+        `Barcha xizmatlar, Webhooklar va to‘lov bildirishnomalari uzluksiz va to‘liq shtat rejimida ishlamoqda.\n\n` +
+        `Biz bilan birga ekanligingiz uchun tashakkur! Tizimdan foydalanish uchun menyuni bosing. 👇`
+
+      const broadcastRes = await broadcastToAllUsers(token, resumeBroadcastMsg)
+
+      await send(token, chatId, `📢 <b>Faoliyat tiklangani haqidagi xabar barcha mijozlarga yuborildi!</b>\n\n` +
+        `• Muvaffaqiyatli yetkazildi: <b>${broadcastRes.successCount}</b> ta\n` +
+        `• Xatolik: <b>${broadcastRes.failCount}</b> ta\n` +
+        `• Jami mijozlar: <b>${broadcastRes.total}</b> ta`, adminMenu)
+    } catch (err: any) {
+      await send(token, chatId, `⚠️ Xatolik: ${err?.message}`, adminMenu)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  if (raw === '/shutdown_status' || text === '🛑 Faoliyat boshqaruvi') {
+    if (!isAdmin) return NextResponse.json({ ok: true })
+    const shutdownData = await getServiceShutdownData()
+    const maintenanceActive = await isMaintenanceMode()
+
+    const shutdownStatusText = `🛠 <b>Loyiha va Texnik Rejim Boshqaruvi</b>\n\n` +
+      `1️⃣ <b>Faoliyat holati (Service Shutdown):</b> ${shutdownData.active ? '🔴 TO‘XTATILGAN' : '🟢 FAOL'}\n` +
+      `${shutdownData.active ? `<b>Sababi:</b> ${shutdownData.reason}\n` : ''}\n` +
+      `2️⃣ <b>Texnik rejim (Maintenance Mode):</b> ${maintenanceActive ? '🔴 YOQILGAN' : '🟢 O‘CHIRILGAN'}\n\n` +
+      `<b>Buyruqlar va boshqaruv:</b>\n` +
+      `• <code>/shutdown_on</code> — Faoliyatni to‘xtatish (sabab so‘raydi va hammaga uzrli e’lon yuboradi)\n` +
+      `• <code>/shutdown_off</code> — Faoliyatni qayta tiklash (hammaga qayta ishga tushganini xabar qiladi)\n` +
+      `• <code>/maintenance_on</code> — Texnik rejimni yoqish\n` +
+      `• <code>/maintenance_off</code> — Texnik rejimni o‘chirish (hammaga xabar yuboradi)`
+
+    await send(token, chatId, shutdownStatusText, {
+      inline_keyboard: [
+        [
+          shutdownData.active
+            ? { text: '🟢 Faoliyatni qayta tiklash', callback_data: 'admin_shutdown_off' }
+            : { text: '🛑 Faoliyatni to‘xtatish', callback_data: 'admin_shutdown_on' }
+        ],
+        [
+          maintenanceActive
+            ? { text: '❌ Texnik rejimni o‘chirish', callback_data: 'admin_maint_off' }
+            : { text: '🚧 Texnik rejimni yoqish', callback_data: 'admin_maint_on' }
+        ]
+      ]
+    })
     return NextResponse.json({ ok: true })
   }
 
