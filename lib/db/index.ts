@@ -144,8 +144,8 @@ export async function ensureDbSchema() {
       );
 
       ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "features" text;
-      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardNumber" text DEFAULT '9860350123453587';
-      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardOwner" text DEFAULT 'AZizbek I';
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardNumber" text DEFAULT '9860166655238557';
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardOwner" text DEFAULT 'Sardor Tuyginov';
       ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardBank" text DEFAULT 'HUMOCARD';
       ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "active" boolean DEFAULT true;
       ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "period" text DEFAULT 'month';
@@ -153,8 +153,8 @@ export async function ensureDbSchema() {
       ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "updatedAt" timestamp DEFAULT NOW();
 
       UPDATE "system_tariffs" SET "active" = true WHERE "active" IS NULL;
-      UPDATE "system_tariffs" SET "cardNumber" = '9860350123453587' WHERE "cardNumber" IS NULL OR "cardNumber" = '';
-      UPDATE "system_tariffs" SET "cardOwner" = 'AZizbek I' WHERE "cardOwner" IS NULL OR "cardOwner" = '';
+      UPDATE "system_tariffs" SET "cardNumber" = '9860166655238557' WHERE "cardNumber" IS NULL OR "cardNumber" = '' OR "cardNumber" = '9860350123453587';
+      UPDATE "system_tariffs" SET "cardOwner" = 'Sardor Tuyginov' WHERE "cardOwner" IS NULL OR "cardOwner" = '' OR "cardOwner" = 'AZizbek I';
       UPDATE "system_tariffs" SET "cardBank" = 'HUMOCARD' WHERE "cardBank" IS NULL OR "cardBank" = '';
 
       CREATE TABLE IF NOT EXISTS "system_settings" (

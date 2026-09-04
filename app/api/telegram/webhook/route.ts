@@ -340,48 +340,7 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
     }
   } catch {}
 
-  let tariffs: any[] = []
-  try {
-    tariffs = await db.select().from(systemTariffs).where(eq(systemTariffs.active, true)).orderBy(desc(systemTariffs.price))
-  } catch {}
-
-  if (!tariffs.length) {
-    tariffs = [
-      {
-        id: 'tariff-daily',
-        name: 'Kunlik',
-        price: 1000,
-        period: 'day',
-        description: '1 kunlik sinov, avto-to‘lov va monitoring',
-        cardNumber: '9860350123453587',
-        cardOwner: 'AZizbek I',
-        cardBank: 'HUMOCARD',
-        features: '["⚡️ @humocardbot orqali 1 soniyada avto-to‘lov", "🏪 3 tagacha do‘kon ochish", "🔗 Har bir do‘kon uchun alohida Webhook & Kanal", "👥 1 ta VIP Guruh (Pullik yozish / kirish)", "🎁 1 ta Donate / Ehson yig‘ish kampaniyasi", "🛡 0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga", "📄 PDF cheklar generatsiyasi"]',
-      },
-      {
-        id: 'tariff-weekly',
-        name: 'Haftalik',
-        price: 6500,
-        period: 'week',
-        description: '7 kunlik biznes va faol savdo imkoniyati',
-        cardNumber: '9860350123453587',
-        cardOwner: 'AZizbek I',
-        cardBank: 'HUMOCARD',
-        features: '["⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)", "🏪 10 tagacha mustaqil do‘konlar", "🔗 Har bir do‘kon uchun maxsus Webhook & Kanal", "👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)", "🎁 Cheksiz Donate & Xayriya yig‘ish havolalari", "🛡 0% komissiya va 24/7 avtomatik monitoring", "📄 QR-kodli rasmiy PDF kvitansiyalar", "🛠 Dasturchilar uchun REST API & SDK"]',
-      },
-      {
-        id: 'tariff-monthly',
-        name: 'Oylik VIP',
-        price: 27858,
-        period: 'month',
-        description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
-        cardNumber: '9860350123453587',
-        cardOwner: 'AZizbek I',
-        cardBank: 'HUMOCARD',
-        features: '["⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)", "🏪 CHEKSIZ do‘konlar yaratish va ulash", "🔗 Har bir do‘konga individual Webhook & Kanal", "👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi", "🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari", "💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash", "🛡 0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga", "📄 Brendlangan PDF cheklar va to‘lov tahlillari", "🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash"]',
-      },
-    ]
-  }
+  const tariffs = await getSystemTariffs()
 
   const text =
     `💎 <b>PayGo Mukammal Premium Obunalar</b>\n\n` +
@@ -398,8 +357,8 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
           `💎 <b>${t.name}</b> — <code>${Number(t.price).toLocaleString('uz-UZ')}</code> UZS / ${t.period}\n` +
           `📝 <i>${t.description || 'Cheksiz to‘lovlar va to‘liq monitoring'}</i>\n` +
           (featText ? `✨ <b>Imkoniyatlar:</b>\n${featText}\n` : '') +
-          `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
-          `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})`
+          `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860166655238557')}</code>\n` +
+          `👤 <b>Egasi:</b> ${t.cardOwner || 'Sardor Tuyginov'} (${t.cardBank || 'HUMOCARD'})`
         )
       })
       .join('\n\n─────────────\n\n') +
@@ -689,8 +648,8 @@ async function activateTariffForUser(
       paymentId: payment.id,
       title: `PayGo Premium - ${name}`,
       amount: payment.amount,
-      cardNumber: '9860350123453587',
-      cardOwner: 'AZizbek I',
+      cardNumber: '9860166655238557',
+      cardOwner: 'Sardor Tuyginov',
       date: new Date().toLocaleString('uz-UZ'),
       userId: userIdStr,
       status: 'PAID',
@@ -930,8 +889,8 @@ async function renderAdminTariffManagement(token: string, chatId: number | strin
       return (
         `<b>${idx + 1}️⃣ ${t.name}</b> ${t.active !== false ? '🟢 (Faol)' : '🔴 (Nofaol)'} (ID: <code>${t.id}</code>)\n` +
         `💰 <b>Narxi:</b> <code>${Number(t.price).toLocaleString('uz-UZ')}</code> UZS / ${t.period}\n` +
-        `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
-        `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})\n` +
+        `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860166655238557')}</code>\n` +
+        `👤 <b>Egasi:</b> ${t.cardOwner || 'Sardor Tuyginov'} (${t.cardBank || 'HUMOCARD'})\n` +
         `📝 <b>Tavsif:</b> ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}\n` +
         (featText ? `✨ <b>Xususiyatlar:</b>\n${featText}` : '')
       )
@@ -2093,7 +2052,7 @@ export async function POST(request: Request) {
         console.error('Tariff payment insert error:', insertErr)
       }
 
-      const cardFormatted = formatCard(tariff.cardNumber || '9860350123453587')
+      const cardFormatted = formatCard(tariff.cardNumber || '9860166655238557')
 
       await send(
         token,
@@ -2102,7 +2061,7 @@ export async function POST(request: Request) {
         `📦 <b>Tarif:</b> ${tariff.name}\n` +
         `💰 <b>To‘lov summasi:</b> <code>${Number(tariff.price).toLocaleString('uz-UZ')}</code> UZS\n` +
         `💳 <b>To‘lov kartasi:</b> <code>${cardFormatted}</code>\n` +
-        `👤 <b>Karta egasi:</b> ${tariff.cardOwner || 'AZizbek I'}\n` +
+        `👤 <b>Karta egasi:</b> ${tariff.cardOwner || 'Sardor Tuyginov'}\n` +
         `🏦 <b>Bank:</b> ${tariff.cardBank || 'HUMOCARD'}\n\n` +
         `⏱ <i>To‘lov kutilmoqda: <b>5 daqiqa (300 soniya)</b></i>\n` +
         `🆔 <b>Buyurtma ID:</b> <code>${paymentId}</code>\n\n` +
@@ -4169,11 +4128,11 @@ export async function POST(request: Request) {
       } else {
         await db.insert(systemTariffs).values({
           id: tariffId,
-          name: tariffId.includes('daily') ? 'Kunlik Sinov' : tariffId.includes('weekly') ? 'Haftalik Standart' : 'Oylik VIP',
-          price: 5000,
-          period: 'oy',
-          cardNumber: '9860350123453587',
-          cardOwner: 'AZizbek I',
+          name: tariffId.includes('daily') ? 'Kunlik' : tariffId.includes('weekly') ? 'Haftalik' : 'Oylik VIP',
+          price: tariffId.includes('daily') ? 1000 : tariffId.includes('weekly') ? 6500 : 27858,
+          period: tariffId.includes('daily') ? 'kun' : tariffId.includes('weekly') ? 'hafta' : 'oy',
+          cardNumber: '9860166655238557',
+          cardOwner: 'Sardor Tuyginov',
           cardBank: 'HUMOCARD',
           active: true,
           ...updateData,
@@ -4605,8 +4564,8 @@ export async function POST(request: Request) {
         return (
           `💎 <b>${t.name}</b> — <b>${Number(t.price).toLocaleString('uz-UZ')} UZS</b> / ${t.period}\n` +
           `📝 ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}\n` +
-          `💳 <b>To‘lov kartasi:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
-          `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})\n` +
+          `💳 <b>To‘lov kartasi:</b> <code>${formatCard(t.cardNumber || '9860166655238557')}</code>\n` +
+          `👤 <b>Egasi:</b> ${t.cardOwner || 'Sardor Tuyginov'} (${t.cardBank || 'HUMOCARD'})\n` +
           (featText ? `✨ <b>Imkoniyatlari:</b>\n${featText}` : '')
         )
       })
