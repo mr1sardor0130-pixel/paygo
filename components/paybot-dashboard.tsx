@@ -1512,20 +1512,12 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             <FileCode size={15} /> 📚 Webhook Doksi (JSON)
           </button>
 
-          <button
-            onClick={() => {
-              setActiveTab('tariffs')
-              loadTariffs()
-              if (currentUser?.isAdmin && !crmData) loadCrm()
-            }}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-              activeTab === 'tariffs'
-                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-sm'
-                : 'bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100/70'
-            }`}
+          <Link
+            href="/tariffs"
+            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition bg-amber-50/90 text-amber-900 border border-amber-300 hover:bg-amber-100 hover:border-amber-400 shadow-sm"
           >
-            <Crown size={15} className={activeTab === 'tariffs' ? 'text-white' : 'text-amber-600'} /> 💎 Tariflar & Premium
-          </button>
+            <Crown size={15} className="text-amber-600" /> 💎 Tariflar & Premium (/tariffs)
+          </Link>
 
           {currentUser?.isAdmin && (
             <>
@@ -1554,16 +1546,12 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                 <Store size={15} /> 🏪 Jami Do‘konlar ({crmData?.shops?.length || 0})
               </button>
 
-              <button
-                onClick={() => setActiveTab('tariffs')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'tariffs'
-                    ? 'bg-[#1769e0] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-                }`}
+              <Link
+                href="/admin/tariffs"
+                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 shadow-sm"
               >
-                <CreditCard size={15} /> 💎 Tariflar Boshqaruvi
-              </button>
+                <CreditCard size={15} className="text-blue-600" /> 💎 Tariflar Boshqaruvi (/admin/tariffs)
+              </Link>
 
               <button
                 onClick={() => setActiveTab('users')}
