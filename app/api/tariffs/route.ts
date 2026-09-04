@@ -4,6 +4,7 @@ import { systemTariffs, payments, userProfiles, shops, authSessions } from '@/li
 import { eq, desc } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { isAdminTelegramId } from '@/lib/admin'
+import { getSystemTariffs, getTariffById, DEFAULT_TARIFFS } from '@/lib/tariffs'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,106 +57,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const defaultTariffsData = [
-    {
-      id: 'tariff-daily',
-      name: 'Kunlik Sinov',
-      description: '1 kunlik sinov, avto-to‘lov va monitoring',
-      features: JSON.stringify([
-        '⚡️ @humocardbot orqali 1 soniyada avto-to‘lov',
-        '🏪 3 tagacha do‘kon ochish',
-        '🔗 Har bir do‘kon uchun alohida Webhook & Kanal',
-        '👥 1 ta VIP Guruh (Pullik yozish / kirish)',
-        '🎁 1 ta Donate / Ehson yig‘ish kampaniyasi',
-        '0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga',
-        '📄 PDF cheklar generatsiyasi',
-      ]),
-      price: 5000,
-      period: 'kun',
-      cardNumber: '9860350123453587',
-      cardOwner: 'AZizbek I',
-      cardBank: 'HUMOCARD',
-      active: true,
-    },
-    {
-      id: 'tariff-weekly',
-      name: 'Haftalik Standart',
-      description: '7 kunlik biznes va faol savdo imkoniyati',
-      features: JSON.stringify([
-        '⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)',
-        '🏪 10 tagacha mustaqil do‘konlar',
-        '🔗 Har bir do‘kon uchun maxsus Webhook & Kanal',
-        '👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)',
-        '🎁 Cheksiz Donate & Xayriya yig‘ish havolalari',
-        '0% komissiya va 24/7 avtomatik monitoring',
-        '📄 QR-kodli rasmiy PDF kvitansiyalar',
-        '🛠 Dasturchilar uchun REST API & SDK',
-      ]),
-      price: 25000,
-      period: 'hafta',
-      cardNumber: '9860350123453587',
-      cardOwner: 'AZizbek I',
-      cardBank: 'HUMOCARD',
-      active: true,
-    },
-    {
-      id: 'tariff-monthly',
-      name: 'Oylik VIP (Cheksiz)',
-      description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
-      features: JSON.stringify([
-        '⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)',
-        '🏪 CHEKSIZ do‘konlar yaratish va ulash',
-        '🔗 Har bir do‘konga individual Webhook & Kanal',
-        '👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi',
-        '🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari',
-        '💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash',
-        '0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga',
-        '📄 Brendlangan PDF cheklar va to‘lov tahlillari',
-        '🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash',
-      ]),
-      price: 79000,
-      period: 'oy',
-      cardNumber: '9860350123453587',
-      cardOwner: 'AZizbek I',
-      cardBank: 'HUMOCARD',
-      active: true,
-    },
-  ]
-
-  let tariffs: any[] = []
-  try {
-    const dbTariffs = await db
-      .select()
-      .from(systemTariffs)
-      .orderBy(systemTariffs.price)
-
-    if (dbTariffs && dbTariffs.length > 0) {
-      tariffs = dbTariffs.filter((t) => t.active !== false)
-    }
-
-    if (!tariffs.length) {
-      for (const item of defaultTariffsData) {
-        await db
-          .insert(systemTariffs)
-          .values(item)
-          .onConflictDoUpdate({
-            target: systemTariffs.id,
-            set: { active: true },
-          })
-      }
-      const refreshed = await db
-        .select()
-        .from(systemTariffs)
-        .orderBy(systemTariffs.price)
-      tariffs = refreshed.filter((t) => t.active !== false)
-    }
-  } catch (e) {
-    console.warn('Get tariffs db err:', e)
-  }
-
-  if (!tariffs || tariffs.length === 0) {
-    tariffs = defaultTariffsData
-  }
+  const tariffs = await getSystemTariffs()
 
   let userProfile: any = null
   if (telegramId) {

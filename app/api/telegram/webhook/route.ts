@@ -19,6 +19,7 @@ import {
 } from '@/lib/db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
+import { getSystemTariffs, getTariffById, DEFAULT_TARIFFS } from '@/lib/tariffs'
 import {
   beginOnboarding,
   getOnboarding,
@@ -921,60 +922,13 @@ async function notifyAdminNewShop(token: string, shop: any) {
 }
 
 async function renderAdminTariffManagement(token: string, chatId: number | string) {
-  let tariffs: any[] = []
-  try {
-    tariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.price))
-  } catch {}
-
-  if (!tariffs.length) {
-    try {
-      await db.insert(systemTariffs).values([
-        {
-          id: 'tariff-daily',
-          name: 'Kunlik Sinov',
-          description: '1 kunlik sinov, avto-to‘lov va monitoring',
-          features: '["⚡️ @humocardbot orqali 1 soniyada avto-to‘lov", "🏪 3 tagacha do‘kon ochish", "🔗 Har bir do‘kon uchun alohida Webhook & Kanal", "👥 1 ta VIP Guruh (Pullik yozish / kirish)", "🎁 1 ta Donate / Ehson yig‘ish kampaniyasi", "0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga", "📄 PDF cheklar generatsiyasi"]',
-          price: 5000,
-          period: 'kun',
-          cardNumber: '9860350123453587',
-          cardOwner: 'AZizbek I',
-          cardBank: 'HUMOCARD',
-          active: true,
-        },
-        {
-          id: 'tariff-weekly',
-          name: 'Haftalik Standart',
-          description: '7 kunlik biznes va faol savdo imkoniyati',
-          features: '["⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)", "🏪 10 tagacha mustaqil do‘konlar", "🔗 Har bir do‘kon uchun maxsus Webhook & Kanal", "👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)", "🎁 Cheksiz Donate & Xayriya yig‘ish havolalari", "0% komissiya va 24/7 avtomatik monitoring", "📄 QR-kodli rasmiy PDF kvitansiyalar", "🛠 Dasturchilar uchun REST API & SDK"]',
-          price: 25000,
-          period: 'hafta',
-          cardNumber: '9860350123453587',
-          cardOwner: 'AZizbek I',
-          cardBank: 'HUMOCARD',
-          active: true,
-        },
-        {
-          id: 'tariff-monthly',
-          name: 'Oylik VIP (Cheksiz)',
-          description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
-          features: '["⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)", "🏪 CHEKSIZ do‘konlar yaratish va ulash", "🔗 Har bir do‘konga individual Webhook & Kanal", "👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi", "🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari", "💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash", "0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga", "📄 Brendlangan PDF cheklar va to‘lov tahlillari", "🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash"]',
-          price: 79000,
-          period: 'oy',
-          cardNumber: '9860350123453587',
-          cardOwner: 'AZizbek I',
-          cardBank: 'HUMOCARD',
-          active: true,
-        },
-      ]).onConflictDoNothing()
-      tariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.price))
-    } catch {}
-  }
+  const tariffs = await getSystemTariffs()
 
   const listText = tariffs
     .map((t, idx) => {
       const featText = formatTariffFeatures(t.features)
       return (
-        `<b>${idx + 1}️⃣ ${t.name}</b> ${t.active ? '🟢 (Faol)' : '🔴 (Nofaol)'} (ID: <code>${t.id}</code>)\n` +
+        `<b>${idx + 1}️⃣ ${t.name}</b> ${t.active !== false ? '🟢 (Faol)' : '🔴 (Nofaol)'} (ID: <code>${t.id}</code>)\n` +
         `💰 <b>Narxi:</b> <code>${Number(t.price).toLocaleString('uz-UZ')}</code> UZS / ${t.period}\n` +
         `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
         `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})\n` +
@@ -1008,11 +962,7 @@ async function renderAdminTariffManagement(token: string, chatId: number | strin
 }
 
 async function renderAdminTariffDetail(token: string, chatId: number | string, tariffId: string) {
-  let tariff: any = null
-  try {
-    const list = await db.select().from(systemTariffs).where(eq(systemTariffs.id, tariffId)).limit(1)
-    tariff = list[0]
-  } catch {}
+  const tariff = await getTariffById(tariffId)
 
   if (!tariff) {
     await send(token, chatId, '⚠️ Tarif topilmadi.')
@@ -2123,22 +2073,7 @@ export async function POST(request: Request) {
 
     if (data.startsWith('buy_tariff_')) {
       const tariffId = data.replace('buy_tariff_', '')
-
-      let tariff: any = null
-      try {
-        const tariffs = await db.select().from(systemTariffs).where(eq(systemTariffs.id, tariffId)).limit(1)
-        tariff = tariffs[0]
-      } catch {}
-
-      if (!tariff) {
-        if (tariffId.includes('daily') || tariffId.includes('kun')) {
-          tariff = { id: 'tariff-daily', name: 'Kunlik', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' }
-        } else if (tariffId.includes('weekly') || tariffId.includes('hafta')) {
-          tariff = { id: 'tariff-weekly', name: 'Haftalik', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' }
-        } else {
-          tariff = { id: 'tariff-monthly', name: 'Oylik VIP', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD' }
-        }
-      }
+      const tariff = (await getTariffById(tariffId)) || DEFAULT_TARIFFS[0]
 
       const paymentId = `pay_tariff_${randomUUID().replace(/-/g, '').slice(0, 10)}`
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
@@ -4662,28 +4597,23 @@ export async function POST(request: Request) {
   // TARIFLAR
   // -------------------------------------------------------------
   if (text === 'Tariflar' || text === 'Premium' || text === '💎 Tariflar' || raw === '/tariffs') {
-    let tariffList: any[] = []
-    try {
-      tariffList = await db.select().from(systemTariffs).where(eq(systemTariffs.active, true))
-    } catch {}
+    const tariffList = await getSystemTariffs()
 
-    if (!tariffList.length) {
-      tariffList = [
-        { id: 'tariff-daily', name: 'Kunlik', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', description: '1 kunlik sinov va faol monitoring' },
-        { id: 'tariff-weekly', name: 'Haftalik', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', description: '7 kunlik do‘kon integratsiyasi' },
-        { id: 'tariff-monthly', name: 'Oylik VIP', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', description: '30 kunlik to‘liq cheksiz imkoniyat' },
-      ]
-    }
-
-    const tTxt = tariffList.map((t) =>
-      `💎 <b>${t.name}</b> — <b>${Number(t.price).toLocaleString('uz-UZ')} UZS</b> / ${t.period}\n` +
-      `📝 ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}\n` +
-      `💳 <b>To‘lov kartasi:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
-      `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'}`
-    ).join('\n\n─────────────\n\n')
+    const tTxt = tariffList
+      .map((t) => {
+        const featText = formatTariffFeatures(t.features)
+        return (
+          `💎 <b>${t.name}</b> — <b>${Number(t.price).toLocaleString('uz-UZ')} UZS</b> / ${t.period}\n` +
+          `📝 ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}\n` +
+          `💳 <b>To‘lov kartasi:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
+          `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})\n` +
+          (featText ? `✨ <b>Imkoniyatlari:</b>\n${featText}` : '')
+        )
+      })
+      .join('\n\n─────────────\n\n')
 
     const inlineButtons = tariffList.map((t) => [
-      { text: `💳 ${t.name} (${Number(t.price).toLocaleString('uz-UZ')} UZS) — To‘lov yaratish`, callback_data: `buy_tariff_${t.id}` }
+      { text: `💳 ${t.name} (${Number(t.price).toLocaleString('uz-UZ')} UZS) — To‘lov yaratish`, callback_data: `buy_tariff_${t.id}` },
     ])
 
     try {
