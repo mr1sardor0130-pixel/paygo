@@ -188,12 +188,13 @@ export async function POST(request: Request) {
 
     // 4. CREATE / UPDATE TARIFF
     if (action === 'save_tariff') {
-      const { id, name, description, features, price, period, cardNumber, cardOwner, cardBank, active } = body
+      const t = body.tariff || body
+      const { id, name, description, features, price, period, cardNumber, cardOwner, cardBank, active } = t
       if (!name || price === undefined || price === null || price === '') {
         return NextResponse.json({ error: 'Tarif nomi va narxi majburiy' }, { status: 400 })
       }
 
-      const numPrice = Number(price)
+      const numPrice = Number(String(price).replace(/\s+/g, ''))
       if (isNaN(numPrice) || numPrice < 0) {
         return NextResponse.json({ error: 'Tarif narxi musbat son bo‘lishi kerak' }, { status: 400 })
       }
@@ -237,6 +238,92 @@ export async function POST(request: Request) {
         })
         return NextResponse.json({ ok: true, message: 'Yangi tarif muvaffaqiyatli yaratildi!' })
       }
+    }
+
+    // 4.1 DELETE TARIFF
+    if (action === 'delete_tariff') {
+      const id = body.id || body.tariffId
+      if (!id) return NextResponse.json({ error: 'Tarif ID ko‘rsatilmadi' }, { status: 400 })
+      await db.delete(systemTariffs).where(eq(systemTariffs.id, id))
+      return NextResponse.json({ ok: true, message: 'Tarif o‘chirildi!' })
+    }
+
+    // 4.2 RESET DEFAULT TARIFFS
+    if (action === 'reset_default_tariffs') {
+      const defaults = [
+        {
+          id: 'tariff-daily',
+          name: 'Kunlik Sinov',
+          description: '1 kunlik sinov, avto-to‘lov va monitoring',
+          features: JSON.stringify([
+            '⚡️ @humocardbot orqali 1 soniyada avto-to‘lov',
+            '🏪 3 tagacha do‘kon ochish',
+            '🔗 Har bir do‘kon uchun alohida Webhook & Kanal',
+            '👥 1 ta VIP Guruh (Pullik yozish / kirish)',
+            '🎁 1 ta Donate / Ehson yig‘ish kampaniyasi',
+            '🛡 0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga',
+            '📄 PDF cheklar generatsiyasi',
+          ]),
+          price: 1000,
+          period: 'kun',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+        {
+          id: 'tariff-weekly',
+          name: 'Haftalik Standart',
+          description: '7 kunlik biznes va faol savdo imkoniyati',
+          features: JSON.stringify([
+            '⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)',
+            '🏪 10 tagacha mustaqil do‘konlar',
+            '🔗 Har bir do‘kon uchun maxsus Webhook & Kanal',
+            '👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)',
+            '🎁 Cheksiz Donate & Xayriya yig‘ish havolalari',
+            '🛡 0% komissiya va 24/7 avtomatik monitoring',
+            '📄 QR-kodli rasmiy PDF kvitansiyalar',
+            '🛠 Dasturchilar uchun REST API & SDK',
+          ]),
+          price: 6500,
+          period: 'hafta',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+        {
+          id: 'tariff-monthly',
+          name: 'Oylik VIP (Cheksiz)',
+          description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
+          features: JSON.stringify([
+            '⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)',
+            '🏪 CHEKSIZ do‘konlar yaratish va ulash',
+            '🔗 Har bir do‘konga individual Webhook & Kanal',
+            '👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi',
+            '🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari',
+            '💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash',
+            '🛡 0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga',
+            '📄 Brendlangan PDF cheklar va to‘lov tahlillari',
+            '🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash',
+          ]),
+          price: 27858,
+          period: 'oy',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+      ]
+
+      for (const d of defaults) {
+        await db.insert(systemTariffs).values(d).onConflictDoUpdate({
+          target: systemTariffs.id,
+          set: d,
+        })
+      }
+
+      return NextResponse.json({ ok: true, message: 'Tariflar birlamchi holatga keltirildi!' })
     }
 
     // 4.5 BULK UPDATE TARIFF CARDS

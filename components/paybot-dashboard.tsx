@@ -38,6 +38,12 @@ import {
   FileText,
   Upload,
   Image as ImageIcon,
+  Crown,
+  Zap,
+  HeartHandshake,
+  Layers,
+  HelpCircle,
+  Filter,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -70,9 +76,13 @@ export function PaybotDashboard() {
     cardNumber: '9860350123453587',
     accountOwner: 'Hisob egasi',
     cardBank: 'HUMOCARD',
+    logoUrl: '',
     webhookUrl: '',
     telegramChannelId: '',
   })
+  const [logoModalShop, setLogoModalShop] = useState<any>(null)
+  const [logoInputUrl, setLogoInputUrl] = useState<string>('')
+  const [savingShopLogo, setSavingShopLogo] = useState(false)
 
   const [shopForm, setShopForm] = useState({
     name: '',
@@ -130,6 +140,39 @@ export function PaybotDashboard() {
     uzum: '',
   })
 
+  // Tariffs & Premium State
+  const [tariffList, setTariffList] = useState<any[]>([])
+  const [editingTariff, setEditingTariff] = useState<any | null>(null)
+  const [isAddingTariff, setIsAddingTariff] = useState(false)
+  const [savingTariff, setSavingTariff] = useState(false)
+  const [bulkCardModal, setBulkCardModal] = useState(false)
+  const [bulkCardForm, setBulkCardForm] = useState({
+    cardNumber: '9860350123453587',
+    cardOwner: 'AZizbek I',
+    cardBank: 'HUMOCARD',
+  })
+  const [savingBulkCard, setSavingBulkCard] = useState(false)
+  const [tariffPayModal, setTariffPayModal] = useState<any | null>(null)
+  const [tariffPayCountdown, setTariffPayCountdown] = useState(300)
+  const [tariffPayChecking, setTariffPayChecking] = useState(false)
+
+  // Shop filter & search states
+  const [shopSearchQuery, setShopSearchQuery] = useState('')
+  const [shopStatusFilter, setShopStatusFilter] = useState<'all' | 'approved' | 'pending'>('all')
+
+  // Load Tariffs
+  const loadTariffs = async () => {
+    try {
+      const res = await fetch('/api/tariffs')
+      const data = await res.json()
+      if (data.ok && Array.isArray(data.tariffs) && data.tariffs.length > 0) {
+        setTariffList(data.tariffs)
+      }
+    } catch (e) {
+      console.error('Failed to load tariffs', e)
+    }
+  }
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setPaygoOfficialLogo(localStorage.getItem('paygo_official_logo') || '')
@@ -140,8 +183,22 @@ export function PaybotDashboard() {
         click: localStorage.getItem('paygo_click_logo') || '',
         uzum: localStorage.getItem('paygo_uzum_logo') || '',
       })
+      loadTariffs()
     }
   }, [])
+
+  useEffect(() => {
+    let timer: any = null
+    if (tariffPayModal) {
+      setTariffPayCountdown(300)
+      timer = setInterval(() => {
+        setTariffPayCountdown((prev) => (prev > 0 ? prev - 1 : 0))
+      }, 1000)
+    }
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [tariffPayModal])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
     const file = e.target.files?.[0]
@@ -204,7 +261,6 @@ export function PaybotDashboard() {
   // Admin CRM Data
   const [crmData, setCrmData] = useState<any>(null)
   const [tariffModalOpen, setTariffModalOpen] = useState(false)
-  const [editingTariff, setEditingTariff] = useState<any>(null)
   const [tariffForm, setTariffForm] = useState({
     name: '',
     description: '',
@@ -1417,6 +1473,21 @@ export function PaybotDashboard() {
             <FileCode size={15} /> 📚 Webhook Doksi (JSON)
           </button>
 
+          <button
+            onClick={() => {
+              setActiveTab('tariffs')
+              loadTariffs()
+              if (currentUser?.isAdmin && !crmData) loadCrm()
+            }}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === 'tariffs'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-sm'
+                : 'bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100/70'
+            }`}
+          >
+            <Crown size={15} className={activeTab === 'tariffs' ? 'text-white' : 'text-amber-600'} /> 💎 Tariflar & Premium
+          </button>
+
           {currentUser?.isAdmin && (
             <>
               <button
@@ -1431,14 +1502,17 @@ export function PaybotDashboard() {
               </button>
 
               <button
-                onClick={() => setActiveTab('shops')}
+                onClick={() => {
+                  setActiveTab('shops')
+                  if (!crmData) loadCrm()
+                }}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'shops'
                     ? 'bg-[#1769e0] text-white shadow-sm'
                     : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
                 }`}
               >
-                <Store size={15} /> 🏪 Barcha Do‘konlar ({crmData?.shops?.length || 0})
+                <Store size={15} /> 🏪 Jami Do‘konlar ({crmData?.shops?.length || 0})
               </button>
 
               <button
@@ -2143,17 +2217,29 @@ export function PaybotDashboard() {
                         {/* Header */}
                         <div className="flex items-start justify-between gap-3 mb-4">
                           <div className="flex items-center gap-3">
-                            {shop.logoUrl ? (
-                              <img
-                                src={shop.logoUrl}
-                                alt={shop.name}
-                                className="size-12 rounded-2xl object-cover border border-slate-100 shadow-sm"
-                              />
-                            ) : (
-                              <div className="grid size-12 place-items-center rounded-2xl bg-blue-50 text-[#1769e0] font-bold text-lg">
-                                🏪
+                            <div
+                              onClick={() => {
+                                setLogoModalShop(shop)
+                                setLogoInputUrl(shop.logoUrl || '')
+                              }}
+                              className="relative group cursor-pointer shrink-0"
+                              title="Do‘kon logotipini o‘zgartirish"
+                            >
+                              {shop.logoUrl ? (
+                                <img
+                                  src={shop.logoUrl}
+                                  alt={shop.name}
+                                  className="size-12 rounded-2xl object-cover border border-slate-100 shadow-sm group-hover:opacity-85 transition"
+                                />
+                              ) : (
+                                <div className="grid size-12 place-items-center rounded-2xl bg-blue-50 text-[#1769e0] font-bold text-lg group-hover:bg-blue-100 transition">
+                                  🏪
+                                </div>
+                              )}
+                              <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-white shadow border border-slate-200 grid place-items-center text-slate-500 group-hover:text-[#1769e0] group-hover:scale-110 transition">
+                                <ImageIcon size={10} />
                               </div>
-                            )}
+                            </div>
                             <div>
                               <h3 className="text-base font-bold text-slate-900 line-clamp-1">{shop.name}</h3>
                               <span className="font-mono text-[10px] text-slate-400">/{shop.slug}</span>
@@ -2222,6 +2308,19 @@ export function PaybotDashboard() {
                             ⚙️ Sozlamalar
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogoModalShop(shop)
+                            setLogoInputUrl(shop.logoUrl || '')
+                          }}
+                          title="Do‘kon logotipini o‘zgartirish"
+                          className="rounded-xl border border-slate-200 px-2.5 py-2 text-slate-600 hover:bg-slate-50 hover:text-[#1769e0] transition flex items-center gap-1 text-xs font-semibold"
+                        >
+                          <ImageIcon size={14} className="text-[#1769e0]" />
+                          <span>Logo</span>
+                        </button>
 
                         <button
                           type="button"
@@ -2791,18 +2890,25 @@ export function PaybotDashboard() {
                 <p className="mt-1 text-[11px] text-[#718096]">Botdan foydalanmoqda</p>
               </div>
 
-              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm">
+              <div 
+                onClick={() => {
+                  setActiveTab('shops')
+                  if (!crmData) loadCrm()
+                }}
+                className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group"
+              >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#64748b]">Jami Do‘konlar</span>
-                  <div className="grid size-8 place-items-center rounded-xl bg-[#eff6ff] text-[#1769e0]">
+                  <span className="text-xs font-semibold text-[#64748b] group-hover:text-blue-600 transition">Jami Do‘konlar</span>
+                  <div className="grid size-8 place-items-center rounded-xl bg-[#eff6ff] text-[#1769e0] group-hover:scale-105 transition">
                     <Store size={16} />
                   </div>
                 </div>
                 <p className="mt-3 text-2xl font-bold text-[#152238]">
                   {crmData?.stats?.totalShops || 0} ta
                 </p>
-                <p className="mt-1 text-[11px] text-[#718096]">
-                  {crmData?.stats?.pendingShops || 0} ta kutilmoqda
+                <p className="mt-1 text-[11px] text-[#718096] flex items-center justify-between">
+                  <span>{crmData?.stats?.pendingShops || 0} ta kutilmoqda</span>
+                  <span className="text-blue-600 font-bold group-hover:underline">Barchasi →</span>
                 </p>
               </div>
 
@@ -2890,119 +2996,1223 @@ export function PaybotDashboard() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB: ADMIN SHOPS LIST */}
+        {/* TAB: ADMIN SHOPS LIST (JAMI DO‘KONLAR) */}
         {/* ------------------------------------------------------------- */}
-        {activeTab === 'shops' && currentUser?.isAdmin && crmData && (
-          <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
-            <h2 className="text-lg font-bold text-[#152238] mb-6">
-              Barcha Do‘konlar Boshqaruvi ({crmData?.shops?.length || 0} ta)
-            </h2>
+        {activeTab === 'shops' && (
+          <div className="space-y-6">
+            {!currentUser?.isAdmin ? (
+              <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center max-w-2xl mx-auto shadow-sm">
+                <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-amber-100 text-amber-700 mb-4">
+                  <ShieldCheck size={24} />
+                </div>
+                <h3 className="text-lg font-bold text-amber-950 mb-2">Faqat Adminlar Uchun</h3>
+                <p className="text-xs text-amber-800 mb-6">
+                  Ushbu sahifa barcha PayGo tizimidagi do‘konlarni monitoring va nazorat qilish uchun mo‘ljallangan. O‘z do‘konlaringizni boshqarish uchun quyidagi tugmani bosing:
+                </p>
+                <button
+                  onClick={() => setActiveTab('my_shops')}
+                  className="rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-bold transition shadow-sm"
+                >
+                  🏪 Mening Do‘konlarimga O‘tish
+                </button>
+              </div>
+            ) : !crmData ? (
+              <div className="rounded-3xl border border-[#e2e8f0] bg-white p-12 text-center shadow-sm">
+                <div className="mx-auto size-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mb-4" />
+                <h3 className="text-base font-bold text-[#152238] mb-1">Do‘konlar ma’lumotlari yuklanmoqda...</h3>
+                <p className="text-xs text-[#64748b] mb-4">Iltimos kuting, baza bilan sinxronizatsiya qilinmoqda.</p>
+                <button
+                  onClick={() => loadCrm()}
+                  className="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 text-xs font-bold transition border border-slate-300 inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw size={13} /> Qayta urinish
+                </button>
+              </div>
+            ) : (
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
+                {/* Header with Stats & Refresh */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#f1f5f9] pb-6 mb-6">
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="text-xl font-bold text-[#152238]">
+                        🏪 Jami Do‘konlar Boshqaruvi
+                      </h2>
+                      <span className="rounded-full bg-blue-100 px-3 py-0.5 text-xs font-bold text-blue-700">
+                        {crmData?.shops?.length || 0} ta
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#64748b] mt-1">
+                      PayGo platformasidagi barcha savdogarlar va ularning integratsiyalari nazorati
+                    </p>
+                  </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-[#64748b]">
-                <thead className="bg-[#f8fafc] text-[#475569] font-bold border-b border-[#e2e8f0]">
-                  <tr>
-                    <th className="p-3">Do‘kon</th>
-                    <th className="p-3">Karta (HUMO)</th>
-                    <th className="p-3">Hisob Egasi</th>
-                    <th className="p-3">Telegram User ID</th>
-                    <th className="p-3">Holat</th>
-                    <th className="p-3 text-right">Amal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#f1f5f9]">
-                  {crmData?.shops?.map((s: any) => (
-                    <tr key={s.id} className="hover:bg-[#f8fafc]">
-                      <td className="p-3 font-bold text-[#152238]">{s.name}</td>
-                      <td className="p-3 font-mono text-[#1769e0]">{s.cardNumber || s.cardLast4}</td>
-                      <td className="p-3">{s.accountOwner || '—'}</td>
-                      <td className="p-3 font-mono">
-                        <a href={`tg://user?id=${s.userId}`} className="text-blue-600 hover:underline flex items-center gap-1" title="Telegramda yozish">
-                          {s.userId}
-                          <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                        </a>
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                            s.approved
-                              ? 'bg-[#eaf8f1] text-[#16865b]'
-                              : 'bg-[#fff4df] text-[#ae7212]'
-                          }`}
-                        >
-                          {s.approved ? 'Tasdiqlangan' : 'Kutilmoqda'}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => loadCrm()}
+                      className="rounded-xl border border-[#e2e8f0] bg-white hover:bg-slate-50 px-3.5 py-2 text-xs font-semibold text-[#475569] flex items-center gap-1.5 transition"
+                      title="Qayta yuklash"
+                    >
+                      <RefreshCw size={13} /> Yangilash
+                    </button>
+                    <button
+                      onClick={() => setIsNewShopModalOpen(true)}
+                      className="rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+                    >
+                      <Plus size={14} /> Yangi do‘kon
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
+                  <div className="relative flex-1 max-w-md">
+                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Do‘kon nomi, karta raqami yoki Telegram ID bo‘yicha qidiruv..."
+                      value={shopSearchQuery}
+                      onChange={(e) => setShopSearchQuery(e.target.value)}
+                      className="w-full rounded-2xl border border-[#e2e8f0] bg-[#f8fafc] pl-10 pr-4 py-2.5 text-xs text-[#152238] placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:outline-none transition"
+                    />
+                    {shopSearchQuery && (
+                      <button
+                        onClick={() => setShopSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-[#f1f5f9] p-1 rounded-2xl">
+                    <button
+                      onClick={() => setShopStatusFilter('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                        shopStatusFilter === 'all'
+                          ? 'bg-white text-[#152238] shadow-sm'
+                          : 'text-[#64748b] hover:text-[#152238]'
+                      }`}
+                    >
+                      Barchasi ({crmData?.shops?.length || 0})
+                    </button>
+                    <button
+                      onClick={() => setShopStatusFilter('approved')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                        shopStatusFilter === 'approved'
+                          ? 'bg-white text-[#16865b] shadow-sm'
+                          : 'text-[#64748b] hover:text-[#16865b]'
+                      }`}
+                    >
+                      Faol ({crmData?.shops?.filter((s: any) => s.approved)?.length || 0})
+                    </button>
+                    <button
+                      onClick={() => setShopStatusFilter('pending')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                        shopStatusFilter === 'pending'
+                          ? 'bg-white text-[#ae7212] shadow-sm'
+                          : 'text-[#64748b] hover:text-[#ae7212]'
+                      }`}
+                    >
+                      Kutilmoqda ({crmData?.shops?.filter((s: any) => !s.approved)?.length || 0})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table of Shops */}
+                {(() => {
+                  const filteredShops = (crmData?.shops || []).filter((s: any) => {
+                    const q = shopSearchQuery.toLowerCase().trim()
+                    const matchesQ =
+                      !q ||
+                      s.name?.toLowerCase().includes(q) ||
+                      s.cardNumber?.includes(q) ||
+                      s.cardLast4?.includes(q) ||
+                      String(s.userId || '').includes(q) ||
+                      s.accountOwner?.toLowerCase().includes(q) ||
+                      s.cardBank?.toLowerCase().includes(q)
+                    if (!matchesQ) return false
+                    if (shopStatusFilter === 'approved') return s.approved
+                    if (shopStatusFilter === 'pending') return !s.approved
+                    return true
+                  })
+
+                  if (filteredShops.length === 0) {
+                    return (
+                      <div className="py-12 text-center border border-dashed border-[#e2e8f0] rounded-2xl bg-[#fafafa]">
+                        <Store size={32} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm font-bold text-[#475569]">Qidiruv bo‘yicha hech qanday do‘kon topilmadi</p>
+                        <p className="text-xs text-[#94a3b8] mt-1">Qidiruv so‘zini o‘zgartiring yoki filtrlarni tozalang.</p>
+                        {shopSearchQuery && (
+                          <button
+                            onClick={() => setShopSearchQuery('')}
+                            className="mt-3 text-xs font-bold text-blue-600 hover:underline"
+                          >
+                            Filtrni tozalash
+                          </button>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="overflow-x-auto rounded-2xl border border-[#e2e8f0]">
+                      <table className="w-full text-left text-xs text-[#64748b]">
+                        <thead className="bg-[#f8fafc] text-[#475569] font-bold border-b border-[#e2e8f0]">
+                          <tr>
+                            <th className="p-3.5">Do‘kon</th>
+                            <th className="p-3.5">Karta (HUMO)</th>
+                            <th className="p-3.5">Hisob Egasi & Bank</th>
+                            <th className="p-3.5">Telegram User ID</th>
+                            <th className="p-3.5">Holat</th>
+                            <th className="p-3.5 text-right">Boshqaruv</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#f1f5f9]">
+                          {filteredShops.map((s: any) => {
+                            const cardDisplay = s.cardNumber
+                              ? s.cardNumber.replace(/(\d{4})(?=\d)/g, '$1 ')
+                              : `•••• ${s.cardLast4 || '3587'}`
+                            return (
+                              <tr key={s.id} className="hover:bg-[#f8fafc]/80 transition">
+                                <td className="p-3.5">
+                                  <div className="flex items-center gap-2.5">
+                                    {s.logoUrl ? (
+                                      <img src={s.logoUrl} alt={s.name} className="size-8 rounded-xl object-contain border border-slate-200" />
+                                    ) : (
+                                      <div className="grid size-8 place-items-center rounded-xl bg-blue-50 text-blue-700 font-bold text-xs border border-blue-100">
+                                        {s.name?.charAt(0) || 'D'}
+                                      </div>
+                                    )}
+                                    <div>
+                                      <p className="font-bold text-[#152238]">{s.name}</p>
+                                      {s.webhookUrl && (
+                                        <p className="text-[10px] text-slate-400 truncate max-w-[140px]" title={s.webhookUrl}>
+                                          🔗 {s.webhookUrl}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-3.5 font-mono text-[#1769e0]">
+                                  <div className="flex items-center gap-1">
+                                    <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">HUMO</span>
+                                    <span>{cardDisplay}</span>
+                                    {s.cardNumber && (
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(s.cardNumber.replace(/\s+/g, ''))
+                                          showToast('Karta nusxalandi!')
+                                        }}
+                                        title="Nusxa olish"
+                                        className="text-slate-400 hover:text-slate-600 ml-1"
+                                      >
+                                        <Copy size={11} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-3.5">
+                                  <p className="font-medium text-[#152238]">{s.accountOwner || '—'}</p>
+                                  <p className="text-[10px] text-slate-400">{s.cardBank || 'HUMOCARD'}</p>
+                                </td>
+                                <td className="p-3.5 font-mono">
+                                  <a
+                                    href={`tg://user?id=${s.userId}`}
+                                    className="text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold"
+                                    title="Telegramda xabar yozish"
+                                  >
+                                    {s.userId}
+                                    <ExternalLink size={11} />
+                                  </a>
+                                </td>
+                                <td className="p-3.5">
+                                  <span
+                                    className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                      s.approved
+                                        ? 'bg-[#eaf8f1] text-[#16865b]'
+                                        : 'bg-[#fff4df] text-[#ae7212]'
+                                    }`}
+                                  >
+                                    {s.approved ? 'Tasdiqlangan' : 'Kutilmoqda'}
+                                  </span>
+                                </td>
+                                <td className="p-3.5 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => setEditingShop({ ...s })}
+                                      className="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 text-xs font-bold border border-slate-300 flex items-center gap-1 transition"
+                                      title="Do‘kon sozlamalari va webhook"
+                                    >
+                                      <Settings2 size={13} />
+                                      <span>Sozlash</span>
+                                    </button>
+
+                                    <button
+                                      onClick={async () => {
+                                        const res = await fetch('/api/admin/crm', {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                          },
+                                          body: JSON.stringify({
+                                            action: 'approve_shop',
+                                            shopId: s.id,
+                                            approved: !s.approved,
+                                          }),
+                                        })
+                                        if (res.ok) {
+                                          showToast(s.approved ? 'Do‘kon to‘xtatildi' : 'Do‘kon tasdiqlandi!')
+                                          loadCrm()
+                                        } else {
+                                          showToast('Xatolik yuz berdi', 'error')
+                                        }
+                                      }}
+                                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                                        s.approved
+                                          ? 'bg-[#fee2e2] text-[#dc2626] hover:bg-[#fecaca]'
+                                          : 'bg-[#16865b] text-white hover:bg-[#126b48]'
+                                      }`}
+                                    >
+                                      {s.approved ? 'To‘xtatish' : 'Tasdiqlash'}
+                                    </button>
+
+                                    <button
+                                      onClick={async () => {
+                                        if (!confirm(`"${s.name}" do‘konini butunlay o‘chirmoqchimisiz?`)) return
+                                        const res = await fetch('/api/admin/crm', {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                          },
+                                          body: JSON.stringify({
+                                            action: 'delete_shop',
+                                            shopId: s.id,
+                                          }),
+                                        })
+                                        if (res.ok) {
+                                          showToast('Do‘kon o‘chirildi')
+                                          loadCrm()
+                                        } else {
+                                          showToast('O‘chirishda xatolik', 'error')
+                                        }
+                                      }}
+                                      className="rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 p-1.5 transition"
+                                      title="Do‘konni o‘chirish"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: MUKAMMAL PREMIUM & TARIFLAR */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'tariffs' && (
+          <div className="space-y-8">
+            {/* User Premium Status Banner */}
+            <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 p-6 sm:p-8 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-start gap-4">
+                  <div className="grid size-12 place-items-center rounded-2xl bg-amber-500 text-white shadow-md shadow-amber-500/20 shrink-0">
+                    <Crown size={26} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-amber-950">
+                        PayGo Mukammal Premium Imkoniyatlari
+                      </h2>
+                      {currentUser?.tier === 'premium' ? (
+                        <span className="rounded-full bg-emerald-500 text-white text-[11px] font-extrabold px-2.5 py-0.5 shadow-sm">
+                          💎 VIP FAOL
                         </span>
-                      </td>
-                      <td className="p-3 text-right flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => setEditingShop({ ...s })}
-                          className="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 text-xs font-bold border border-slate-300 flex items-center gap-1"
-                        >
-                          <Settings size={13} />
-                          <span>⚙️ Boshqarish & Webhook</span>
-                        </button>
-                        <button
-                          onClick={async () => {
-                            const res = await fetch('/api/admin/crm', {
-                              method: 'POST',
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'x-telegram-user-id': currentUser?.telegramId || '8021115446',
-                              },
-                              body: JSON.stringify({
-                                action: 'approve_shop',
-                                shopId: s.id,
-                                approved: !s.approved,
-                              }),
-                            })
-                            if (res.ok) {
-                              showToast(s.approved ? 'Do‘kon to‘xtatildi' : 'Do‘kon tasdiqlandi!')
-                              loadCrm()
-                            }
-                          }}
-                          className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
-                            s.approved
-                              ? 'bg-[#fee2e2] text-[#dc2626] hover:bg-[#fecaca]'
-                              : 'bg-[#16865b] text-white hover:bg-[#126b48]'
+                      ) : (
+                        <span className="rounded-full bg-amber-200 text-amber-900 text-[11px] font-bold px-2.5 py-0.5">
+                          Oddiy Bepul
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-amber-900/80 mt-1 max-w-2xl leading-relaxed">
+                      Avtomatlashtirilgan 1 soniyalik to‘lovlar (@humocardbot), Donate jamg‘arma kampaniyalari, VIP Guruhlar (Pullik yozish va obuna) hamda cheksiz mustaqil do‘konlar tizimi!
+                    </p>
+                    {currentUser?.premiumEndsAt && new Date(currentUser.premiumEndsAt) > new Date() && (
+                      <p className="text-xs font-semibold text-emerald-800 mt-2 flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="text-emerald-600" />
+                        Amal qilish muddati: <b>{new Date(currentUser.premiumEndsAt).toLocaleDateString('uz-UZ')}</b> gacha faol
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {currentUser?.isAdmin && (
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        setIsAddingTariff(true)
+                        setEditingTariff({
+                          id: `tariff-${Date.now().toString(36)}`,
+                          name: '',
+                          price: 50000,
+                          period: 'oy',
+                          description: '',
+                          cardNumber: '9860350123453587',
+                          cardOwner: 'AZizbek I',
+                          cardBank: 'HUMOCARD',
+                          featuresText: '⚡️ @humocardbot orqali 1 soniyada avto-to‘lov\n🏪 Cheksiz do‘kon ochish\n🔗 Har bir do‘konga individual Webhook & Kanal\n👥 VIP Guruhlar (Pullik yozish huquqi)\n🎁 Donate & Ehson yig‘ish kampaniyalari\n📄 QR-kodli rasmiy PDF cheklar\n0% komissiya, 100% to‘g‘ridan-to‘g‘ri kartangizga',
+                          active: true,
+                        })
+                      }}
+                      className="rounded-2xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+                    >
+                      <Plus size={14} /> Yangi Tarif Qo‘shish
+                    </button>
+                    <button
+                      onClick={() => setBulkCardModal(true)}
+                      className="rounded-2xl bg-white border border-amber-300 text-amber-900 hover:bg-amber-100/50 px-3.5 py-2.5 text-xs font-bold flex items-center gap-1.5 transition"
+                    >
+                      <CreditCard size={14} /> Barcha Kartalarni Yangilash
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Core Capabilities Showcase */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-5 shadow-sm">
+                <div className="grid size-10 place-items-center rounded-2xl bg-blue-50 text-blue-600 mb-3">
+                  <Zap size={20} />
+                </div>
+                <h3 className="text-sm font-bold text-[#152238] mb-1">⚡️ 1 Soniyada Avto-to‘lov</h3>
+                <p className="text-xs text-[#64748b] leading-relaxed">
+                  @humocardbot orqali to‘lov xabarnomasi lahzada aniqlanadi va botingiz yoki saytingizga webhook yuboriladi.
+                </p>
+              </div>
+
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-5 shadow-sm">
+                <div className="grid size-10 place-items-center rounded-2xl bg-rose-50 text-rose-600 mb-3">
+                  <HeartHandshake size={20} />
+                </div>
+                <h3 className="text-sm font-bold text-[#152238] mb-1">🎁 Donate & Ehson Sahifasi</h3>
+                <p className="text-xs text-[#64748b] leading-relaxed">
+                  O‘z loyihangiz yoki jamoangiz uchun xayriya va yig‘im kampaniyalarini ochib, to‘g‘ridan-to‘g‘ri kartangizga mablag‘ yig‘ing.
+                </p>
+              </div>
+
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-5 shadow-sm">
+                <div className="grid size-10 place-items-center rounded-2xl bg-purple-50 text-purple-600 mb-3">
+                  <Lock size={20} />
+                </div>
+                <h3 className="text-sm font-bold text-[#152238] mb-1">👥 VIP Guruh (Pullik yozish)</h3>
+                <p className="text-xs text-[#64748b] leading-relaxed">
+                  Telegram guruh yoki kanallarga obuna qilinganda avtomatik qo‘shish va muddati tugaganda cheklash imkoniyati.
+                </p>
+              </div>
+
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-5 shadow-sm">
+                <div className="grid size-10 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 mb-3">
+                  <Layers size={20} />
+                </div>
+                <h3 className="text-sm font-bold text-[#152238] mb-1">🏪 Ko‘p Do‘kon & 0% Komissiya</h3>
+                <p className="text-xs text-[#64748b] leading-relaxed">
+                  Bir nechta mustaqil do‘konlar oching, har biriga alohida karta va webhook ulang. Barcha pullar 100% o‘zingizda!
+                </p>
+              </div>
+            </div>
+
+            {/* Tariffs Cards Section */}
+            <div>
+              {/* 0% Commission and Legal Guarantee Banner */}
+              <div className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-5 shadow-sm mb-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-11 place-items-center rounded-2xl bg-emerald-600 text-white font-bold text-lg shrink-0 shadow-sm">
+                      🛡
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-950 flex items-center gap-2">
+                        <span>0% Komissiya — Qonuniy Kafolat</span>
+                        <span className="rounded-full bg-emerald-200/80 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5">
+                          100% KARTANGIZGA
+                        </span>
+                      </h4>
+                      <p className="text-xs text-emerald-900/80 mt-0.5 leading-relaxed">
+                        Biz to‘lovlardan <b>hech qachon foiz olmaymiz</b> va foydalanuvchilar mablag‘larini platformada saqlamaymiz! Har bir tushum 100% to‘g‘ridan-to‘g‘ri sizning o‘z HUMO yoki UZCARD kartangizga tushadi. PayGo — faqatgina @humocardbot orqali ishlovchi xavfsiz SaaS avtomatlashtirish tizimidir.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 bg-white/80 border border-emerald-200 rounded-2xl px-3.5 py-2 text-center">
+                    <span className="text-[10px] font-bold text-slate-400 block uppercase">Bepul Rejim Limitlari</span>
+                    <span className="text-xs font-bold text-emerald-800">50 test / 30 haqiqiy</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-[#152238]">Mavjud Tarif Rejalari</h3>
+                  <p className="text-xs text-[#64748b]">O‘zingizga mos tarifni tanlang va cheksiz imkoniyatlardan foydalaning</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {currentUser?.isAdmin && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Birlamchi tariflarni (Kunlik 1 000 UZS, Haftalik 6 500 UZS, Oylik 27 858 UZS) qayta tiklamoqchimisiz?')) return
+                        try {
+                          const res = await fetch('/api/admin/crm', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                            },
+                            body: JSON.stringify({ action: 'reset_default_tariffs' }),
+                          })
+                          const d = await res.json()
+                          if (d.ok) {
+                            showToast('✅ Birlamchi tariflar muvaffaqiyatli tiklandi!')
+                            loadTariffs()
+                            loadCrm()
+                          } else {
+                            showToast(d.error || 'Tiklashda xatolik', 'error')
+                          }
+                        } catch {
+                          showToast('Server bilan aloqa uzildi', 'error')
+                        }
+                      }}
+                      className="rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800 flex items-center gap-1 transition"
+                      title="Eski tariflarni yangi narxlarga tiklash"
+                    >
+                      <RotateCcw size={12} /> Birlamchi Tariflarni Tiklash
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      loadTariffs()
+                      if (currentUser?.isAdmin) loadCrm()
+                    }}
+                    className="rounded-xl border border-[#e2e8f0] bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 flex items-center gap-1"
+                  >
+                    <RefreshCw size={12} /> Yangilash
+                  </button>
+                </div>
+              </div>
+
+              {(() => {
+                const defaultTariffList = [
+                  {
+                    id: 'tariff-daily',
+                    name: 'Kunlik Sinov',
+                    price: 1000,
+                    period: 'kun',
+                    description: '1 kunlik sinov, avto-to‘lov va monitoring',
+                    cardNumber: '9860350123453587',
+                    cardOwner: 'AZIZBEK KARIMOV',
+                    cardBank: 'HUMOCARD',
+                    features: '["⚡️ @humocardbot orqali 1 soniyada avto-to‘lov", "🏪 3 tagacha do‘kon ochish", "🔗 Har bir do‘kon uchun alohida Webhook & Kanal", "👥 1 ta VIP Guruh (Pullik yozish / kirish)", "🎁 1 ta Donate / Ehson yig‘ish kampaniyasi", "0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga", "📄 PDF cheklar generatsiyasi"]',
+                    active: true,
+                  },
+                  {
+                    id: 'tariff-weekly',
+                    name: 'Haftalik Standart',
+                    price: 6500,
+                    period: 'hafta',
+                    description: '7 kunlik biznes va faol savdo imkoniyati',
+                    cardNumber: '9860350123453587',
+                    cardOwner: 'AZIZBEK KARIMOV',
+                    cardBank: 'HUMOCARD',
+                    features: '["⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)", "🏪 10 tagacha mustaqil do‘konlar", "🔗 Har bir do‘kon uchun maxsus Webhook & Kanal", "👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)", "🎁 Cheksiz Donate & Xayriya yig‘ish havolalari", "0% komissiya va 24/7 avtomatik monitoring", "📄 QR-kodli rasmiy PDF kvitansiyalar", "🛠 Dasturchilar uchun REST API & SDK"]',
+                    active: true,
+                  },
+                  {
+                    id: 'tariff-monthly',
+                    name: 'Oylik VIP (Cheksiz)',
+                    price: 27858,
+                    period: 'oy',
+                    description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
+                    cardNumber: '9860350123453587',
+                    cardOwner: 'AZIZBEK KARIMOV',
+                    cardBank: 'HUMOCARD',
+                    features: '["⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)", "🏪 CHEKSIZ do‘konlar yaratish va ulash", "🔗 Har bir do‘konga individual Webhook & Kanal", "👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi", "🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari", "💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash", "0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga", "📄 Brendlangan PDF cheklar va to‘lov tahlillari", "🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash"]',
+                    active: true,
+                  },
+                ]
+
+                const displayTariffs =
+                  tariffList && tariffList.length > 0
+                    ? tariffList
+                    : crmData?.tariffs && crmData.tariffs.length > 0
+                    ? crmData.tariffs
+                    : defaultTariffList
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {displayTariffs.map((t: any) => {
+                      const isPopular = t.id?.includes('monthly') || t.name?.toLowerCase().includes('vip') || t.price >= 50000
+                      let featuresList: string[] = []
+                      try {
+                        if (Array.isArray(t.features)) {
+                          featuresList = t.features
+                        } else if (typeof t.features === 'string') {
+                          featuresList = JSON.parse(t.features)
+                        }
+                      } catch {
+                        featuresList = (t.features || '')
+                          .split('\n')
+                          .map((s: string) => s.trim().replace(/^[✓•\-\*]\s*/, ''))
+                          .filter(Boolean)
+                      }
+                      if (!featuresList.length) {
+                        featuresList = [
+                          '⚡️ 1 soniyada avto-to‘lov (@humocardbot)',
+                          '🏪 Do‘kon ochish va Webhook ulash',
+                          '🎁 Donate & Ehson kampaniyalari',
+                          '👥 VIP Guruhlar & Pullik yozish',
+                          '0% komissiya — to‘g‘ridan-to‘g‘ri kartangizga',
+                        ]
+                      }
+
+                      const formattedCard = (t.cardNumber || '9860350123453587').replace(/(\d{4})(?=\d)/g, '$1 ')
+
+                      return (
+                        <div
+                          key={t.id}
+                          className={`relative flex flex-col justify-between rounded-3xl bg-white p-6 sm:p-7 border transition-all ${
+                            isPopular
+                              ? 'border-blue-500 shadow-lg shadow-blue-500/10 ring-2 ring-blue-500/20'
+                              : 'border-[#e2e8f0] shadow-sm hover:shadow-md'
                           }`}
                         >
-                          {s.approved ? 'To‘xtatish' : 'Tasdiqlash'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          {isPopular && (
+                            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-1 text-[11px] font-extrabold text-white shadow-sm uppercase tracking-wider">
+                              ⭐️ ENG MASHHUR REJA
+                            </div>
+                          )}
+
+                          <div>
+                            {/* Title & Price */}
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-base font-bold text-[#152238]">{t.name}</h4>
+                              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+                                1 {t.period || 'oy'}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-[#64748b] mb-4 min-h-[32px]">{t.description || 'To‘liq monitoring va avto-to‘lov'}</p>
+
+                            <div className="mb-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/50 p-4 border border-slate-100">
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-3xl font-extrabold text-[#152238]">
+                                  {Number(t.price).toLocaleString('uz-UZ')}
+                                </span>
+                                <span className="text-xs font-bold text-slate-500">UZS</span>
+                                <span className="text-xs text-slate-400">/ {t.period || 'oy'}</span>
+                              </div>
+                            </div>
+
+                            {/* Features Checklist */}
+                            <div className="space-y-2.5 mb-6">
+                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                                Imkoniyatlar & Xususiyatlar:
+                              </p>
+                              {featuresList.map((feat: string, idx: number) => (
+                                <div key={idx} className="flex items-start gap-2 text-xs text-slate-700">
+                                  <div className="grid size-4 place-items-center rounded-full bg-emerald-100 text-emerald-700 shrink-0 mt-0.5">
+                                    <Check size={10} strokeWidth={3} />
+                                  </div>
+                                  <span className="leading-snug">{feat}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Card Details Box */}
+                            <div className="rounded-2xl bg-[#f8fafc] p-3.5 border border-[#e2e8f0] text-xs space-y-1 mb-6">
+                              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                                <span>To‘lov kartasi ({t.cardBank || 'HUMOCARD'}):</span>
+                                <span className="text-blue-600 font-bold">0% komissiya</span>
+                              </div>
+                              <p className="font-mono font-bold text-[#152238] flex items-center justify-between">
+                                <span>{formattedCard}</span>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText((t.cardNumber || '').replace(/\s+/g, ''))
+                                    showToast('Karta raqami nusxalandi!')
+                                  }}
+                                  title="Nusxa olish"
+                                  className="text-slate-400 hover:text-blue-600"
+                                >
+                                  <Copy size={12} />
+                                </button>
+                              </p>
+                              <p className="text-slate-600 text-[11px]">{t.cardOwner || 'Hisob egasi'}</p>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="space-y-2 pt-2 border-t border-slate-100">
+                            <button
+                              onClick={() => setTariffPayModal(t)}
+                              className={`w-full rounded-2xl py-3 text-xs font-bold transition shadow-sm flex items-center justify-center gap-2 ${
+                                isPopular
+                                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20'
+                                  : 'bg-[#152238] hover:bg-slate-800 text-white'
+                              }`}
+                            >
+                              <Crown size={14} className={isPopular ? 'text-yellow-300' : 'text-amber-400'} />
+                              <span>Ushbu Tarifni Tanlash</span>
+                            </button>
+
+                            {/* Admin Controls */}
+                            {currentUser?.isAdmin && (
+                              <div className="flex items-center gap-1.5 pt-1">
+                                <button
+                                  onClick={() => {
+                                    setIsAddingTariff(false)
+                                    setEditingTariff({
+                                      ...t,
+                                      featuresText: featuresList.join('\n'),
+                                    })
+                                  }}
+                                  className="flex-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 py-2 text-xs font-bold border border-slate-300 flex items-center justify-center gap-1 transition"
+                                >
+                                  <Edit3 size={12} />
+                                  <span>Tahrirlash</span>
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`"${t.name}" tarifini o‘chirishni tasdiqlaysizmi?`)) return
+                                    const res = await fetch('/api/admin/crm', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                      },
+                                      body: JSON.stringify({
+                                        action: 'delete_tariff',
+                                        id: t.id,
+                                        tariffId: t.id,
+                                      }),
+                                    })
+                                    if (res.ok) {
+                                      showToast('Tarif o‘chirildi')
+                                      loadTariffs()
+                                      loadCrm()
+                                    } else {
+                                      showToast('O‘chirishda xatolik', 'error')
+                                    }
+                                  }}
+                                  className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 transition"
+                                  title="Tarifni o‘chirish"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB: ADMIN TARIFFS LIST */}
+        {/* MODAL: TARIFF PURCHASE (SOTIB OLISH & 5-MIN TIMER) */}
         {/* ------------------------------------------------------------- */}
-        {activeTab === 'tariffs' && currentUser?.isAdmin && crmData && (
-          <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
-            <h2 className="text-lg font-bold text-[#152238] mb-6">
-              💎 Pullik Tariflar va Rekvizitlar
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {crmData?.tariffs?.map((t: any) => (
-                <div key={t.id} className="rounded-2xl border border-[#e2e8f0] p-5 bg-[#f8fafc]">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-bold text-sm text-[#152238]">{t.name}</h3>
-                    <span className="rounded-full bg-[#eff6ff] px-2.5 py-0.5 text-xs font-bold text-[#1769e0]">
-                      {Number(t.price).toLocaleString()} UZS / {t.period}
-                    </span>
+        {tariffPayModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-amber-100 text-amber-700">
+                    <Crown size={22} />
                   </div>
-                  <p className="text-xs text-[#64748b] mb-4">{t.description}</p>
-                  <div className="rounded-xl bg-white p-3 border border-[#e2e8f0] space-y-1 text-xs">
-                    <p className="text-[#94a3b8]">To‘lov kartasi:</p>
-                    <p className="font-mono font-bold text-[#152238]">{t.cardNumber}</p>
-                    <p className="text-[#64748b]">{t.cardOwner}</p>
+                  <div>
+                    <h3 className="text-base font-bold text-[#152238]">{tariffPayModal.name} Obunasi</h3>
+                    <p className="text-xs text-slate-500">Muddati: 1 {tariffPayModal.period || 'oy'}</p>
                   </div>
                 </div>
-              ))}
+                <button
+                  onClick={() => setTariffPayModal(null)}
+                  className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Countdown Timer Alert */}
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-amber-900 font-semibold text-xs">
+                  <Clock size={16} className="text-amber-600 animate-pulse" />
+                  <span>Hisob faol bo‘lish vaqti:</span>
+                </div>
+                <div className="font-mono text-base font-extrabold text-amber-900 bg-amber-100 px-3 py-1 rounded-xl">
+                  {Math.floor(tariffPayCountdown / 60)
+                    .toString()
+                    .padStart(2, '0')}
+                  :{(tariffPayCountdown % 60).toString().padStart(2, '0')}
+                </div>
+              </div>
+
+              {/* Payment Details Box */}
+              <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 p-5 space-y-4">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium mb-1">To‘lov summasi:</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-2xl font-extrabold text-[#152238]">
+                      {Number(tariffPayModal.price).toLocaleString('uz-UZ')}{' '}
+                      <span className="text-sm font-bold text-slate-500">UZS</span>
+                    </p>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(String(tariffPayModal.price))
+                        showToast('Summa nusxalandi!')
+                      }}
+                      className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <Copy size={12} /> Nusxalash
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border-t border-blue-100 pt-3">
+                  <p className="text-xs text-slate-500 font-medium mb-1">Qabul qiluvchi HUMO kartasi:</p>
+                  <div className="flex items-center justify-between rounded-2xl bg-white p-3 border border-slate-200">
+                    <div>
+                      <p className="font-mono text-base font-bold text-[#152238] tracking-wider">
+                        {(tariffPayModal.cardNumber || '9860350123453587').replace(/(\d{4})(?=\d)/g, '$1 ')}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {tariffPayModal.cardOwner || 'AZizbek I'} • {tariffPayModal.cardBank || 'HUMOCARD'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText((tariffPayModal.cardNumber || '9860350123453587').replace(/\s+/g, ''))
+                        showToast('Karta raqami nusxalandi!')
+                      }}
+                      className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold flex items-center gap-1 shadow-sm transition"
+                    >
+                      <Copy size={13} /> Nusxa
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-2 text-xs text-slate-600">
+                <p className="font-bold text-slate-800">Qanday qilib to‘lanadi?</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-600">
+                  <li>Har qanday bank ilovangizdan (Payme, Click, Uzum, Anorbank) yuqoridagi kartaga roppa-rosa <b>{Number(tariffPayModal.price).toLocaleString('uz-UZ')} UZS</b> o‘tkazing.</li>
+                  <li>O‘tkazma amalga oshirilishi bilan @humocardbot Userbot xabarnomani <b>avtomatik aniqlaydi</b>.</li>
+                  <li>Tizim 1 soniyada Premium maqomingizni faollashtiradi va PDF kvitansiya taqdim etadi!</li>
+                </ol>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-2">
+                <button
+                  disabled={tariffPayChecking}
+                  onClick={async () => {
+                    setTariffPayChecking(true)
+                    try {
+                      // Check user profile or payment status
+                      const res = await fetch('/api/tariffs')
+                      const data = await res.json()
+                      showToast('To‘lov holati tekshirilmoqda...')
+                      setTimeout(() => {
+                        setTariffPayChecking(false)
+                        showToast('To‘lov kutilmoqda. Mablag‘ kartaga yetib kelgach tizim avtomatik faollashtiradi.')
+                      }, 1200)
+                    } catch {
+                      setTariffPayChecking(false)
+                    }
+                  }}
+                  className="w-full rounded-2xl bg-[#1769e0] hover:bg-blue-700 text-white py-3 text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={tariffPayChecking ? 'animate-spin' : ''} />
+                  <span>{tariffPayChecking ? 'Tekshirilmoqda...' : '🔄 To‘lovni Tekshirish'}</span>
+                </button>
+
+                {currentUser?.isAdmin && (
+                  <button
+                    onClick={async () => {
+                      // Admin instant activation demo
+                      const res = await fetch('/api/admin/crm', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                        },
+                        body: JSON.stringify({
+                          action: 'force_activate_user_premium',
+                          userId: currentUser?.telegramId || '8021115446',
+                          days: tariffPayModal.period === 'kun' ? 1 : tariffPayModal.period === 'hafta' ? 7 : 30,
+                        }),
+                      })
+                      showToast('✅ Admin Demo: Premium muvaffaqiyatli faollashtirildi!')
+                      setTariffPayModal(null)
+                      loadTariffs()
+                      loadCrm()
+                    }}
+                    className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <span>🧪 Admin Test Tasdiqlash (Demo Faollashtirish)</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setTariffPayModal(null)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 py-2.5 text-xs font-bold transition"
+                >
+                  Yopish
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: EDIT / ADD TARIFF (ADMIN) */}
+        {/* ------------------------------------------------------------- */}
+        {editingTariff && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-blue-100 text-blue-700">
+                    <Edit3 size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-[#152238]">
+                      {isAddingTariff ? '➕ Yangi Tarif Yaratish' : `✏️ Tarifni Tahrirlash: ${editingTariff.name}`}
+                    </h3>
+                    <p className="text-xs text-slate-500">Narx, muddat, xususiyatlar va karta rekvizitlarini sozlash</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditingTariff(null)}
+                  className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Tarif Nomi</label>
+                    <input
+                      type="text"
+                      placeholder="Masalan: Oylik VIP"
+                      value={editingTariff.name || ''}
+                      onChange={(e) => setEditingTariff({ ...editingTariff, name: e.target.value })}
+                      className="w-full rounded-2xl border border-[#e2e8f0] px-4 py-2.5 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Tarif Narxi (UZS)</label>
+                    <input
+                      type="number"
+                      placeholder="Masalan: 79000"
+                      value={editingTariff.price || ''}
+                      onChange={(e) => setEditingTariff({ ...editingTariff, price: Number(e.target.value) })}
+                      className="w-full rounded-2xl border border-[#e2e8f0] px-4 py-2.5 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Muddati (Davr)</label>
+                    <select
+                      value={editingTariff.period || 'oy'}
+                      onChange={(e) => setEditingTariff({ ...editingTariff, period: e.target.value })}
+                      className="w-full rounded-2xl border border-[#e2e8f0] px-4 py-2.5 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="kun">Kun (1 kunlik)</option>
+                      <option value="hafta">Hafta (7 kunlik)</option>
+                      <option value="oy">Oy (30 kunlik)</option>
+                      <option value="yil">Yil (365 kunlik)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Qisqacha Tavsif</label>
+                    <input
+                      type="text"
+                      placeholder="Masalan: Cheksiz to‘lovlar va monitoring"
+                      value={editingTariff.description || ''}
+                      onChange={(e) => setEditingTariff({ ...editingTariff, description: e.target.value })}
+                      className="w-full rounded-2xl border border-[#e2e8f0] px-4 py-2.5 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Features Multiline Input */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      ✨ Xususiyatlar Ro‘yxati (Har bir qatorda 1 ta xususiyat)
+                    </label>
+                    <span className="text-[10px] text-slate-400">Avto-to‘lov, Donate, VIP guruhlar, Do‘konlar</span>
+                  </div>
+                  <textarea
+                    rows={5}
+                    placeholder={`⚡️ @humocardbot orqali 1 soniyada avto-to‘lov\n🏪 10 tagacha mustaqil do‘konlar\n👥 VIP Guruhlar & Pullik yozish\n🎁 Donate / Ehson yig‘ish kampaniyalari\n📄 QR-kodli rasmiy PDF cheklar\n0% komissiya, to‘g‘ridan-to‘g‘ri kartangizga`}
+                    value={editingTariff.featuresText ?? (typeof editingTariff.features === 'string' ? editingTariff.features : '')}
+                    onChange={(e) => setEditingTariff({ ...editingTariff, featuresText: e.target.value })}
+                    className="w-full rounded-2xl border border-[#e2e8f0] p-4 text-xs font-sans text-[#152238] focus:border-blue-500 focus:outline-none leading-relaxed"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Maslahat: Har bir qator oldiga "⚡️", "🎁", "👥", "🏪", "📄" kabi belgilarni qo‘yishingiz mumkin.
+                  </p>
+                </div>
+
+                {/* Card Details for this Tariff */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+                  <p className="text-xs font-bold text-[#152238]">To‘lov Qabul Qiluvchi Karta Rekvizitlari:</p>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Karta Raqami</label>
+                      <input
+                        type="text"
+                        placeholder="9860 3501 2345 3587"
+                        value={editingTariff.cardNumber || ''}
+                        onChange={(e) => setEditingTariff({ ...editingTariff, cardNumber: e.target.value })}
+                        className="w-full rounded-xl border border-[#e2e8f0] px-3 py-2 text-xs font-mono text-[#152238] focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Karta Egasi</label>
+                      <input
+                        type="text"
+                        placeholder="AZIZBEK ISMOILOV"
+                        value={editingTariff.cardOwner || ''}
+                        onChange={(e) => setEditingTariff({ ...editingTariff, cardOwner: e.target.value })}
+                        className="w-full rounded-xl border border-[#e2e8f0] px-3 py-2 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Bank Nomi</label>
+                      <input
+                        type="text"
+                        placeholder="HUMOCARD"
+                        value={editingTariff.cardBank || ''}
+                        onChange={(e) => setEditingTariff({ ...editingTariff, cardBank: e.target.value })}
+                        className="w-full rounded-xl border border-[#e2e8f0] px-3 py-2 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="tariffActiveCheck"
+                    checked={editingTariff.active !== false}
+                    onChange={(e) => setEditingTariff({ ...editingTariff, active: e.target.checked })}
+                    className="size-4 rounded text-blue-600"
+                  />
+                  <label htmlFor="tariffActiveCheck" className="text-xs font-bold text-slate-700 cursor-pointer">
+                    Tarif faol holatda bo‘lsin (Foydalanuvchilarga ko‘rinadi)
+                  </label>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => setEditingTariff(null)}
+                  className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  disabled={savingTariff}
+                  onClick={async () => {
+                    if (!editingTariff.name || !editingTariff.price) {
+                      showToast('Tarif nomi va narxini kiriting', 'error')
+                      return
+                    }
+                    setSavingTariff(true)
+                    try {
+                      const featuresArr = (editingTariff.featuresText || '')
+                        .split('\n')
+                        .map((s: string) => s.trim())
+                        .filter(Boolean)
+
+                      const res = await fetch('/api/admin/crm', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                        },
+                        body: JSON.stringify({
+                          action: 'save_tariff',
+                          id: editingTariff.id,
+                          name: editingTariff.name,
+                          price: editingTariff.price,
+                          period: editingTariff.period,
+                          description: editingTariff.description,
+                          cardNumber: editingTariff.cardNumber,
+                          cardOwner: editingTariff.cardOwner,
+                          cardBank: editingTariff.cardBank,
+                          active: editingTariff.active !== false,
+                          features: featuresArr,
+                          tariff: {
+                            ...editingTariff,
+                            features: featuresArr,
+                          },
+                        }),
+                      })
+                      const data = await res.json()
+                      if (data.ok) {
+                        showToast('✅ Tarif muvaffaqiyatli saqlandi!')
+                        setEditingTariff(null)
+                        loadTariffs()
+                        loadCrm()
+                      } else {
+                        showToast(data.error || 'Saqlashda xatolik', 'error')
+                      }
+                    } catch (e) {
+                      showToast('Tarifni saqlashda xatolik', 'error')
+                    } finally {
+                      setSavingTariff(false)
+                    }
+                  }}
+                  className="rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-6 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-sm transition disabled:opacity-50"
+                >
+                  <Check size={14} />
+                  <span>{savingTariff ? 'Saqlanmoqda...' : 'Tarifni Saqlash'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: BULK CARD UPDATE (ADMIN) */}
+        {/* ------------------------------------------------------------- */}
+        {bulkCardModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-blue-100 text-blue-700">
+                    <CreditCard size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-[#152238]">Barcha Kartalarni Yangilash</h3>
+                    <p className="text-xs text-slate-500">Barcha mavjud tariflar kartasini 1 bosishda o‘zgartirish</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setBulkCardModal(false)}
+                  className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Yangi Karta Raqami</label>
+                  <input
+                    type="text"
+                    placeholder="9860 3501 2345 3587"
+                    value={bulkCardForm.cardNumber}
+                    onChange={(e) => setBulkCardForm({ ...bulkCardForm, cardNumber: e.target.value })}
+                    className="w-full rounded-2xl border border-[#e2e8f0] px-4 py-2.5 text-xs font-mono text-[#152238] focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Karta Egasi</label>
+                  <input
+                    type="text"
+                    placeholder="AZIZBEK ISMOILOV"
+                    value={bulkCardForm.cardOwner}
+                    onChange={(e) => setBulkCardForm({ ...bulkCardForm, cardOwner: e.target.value })}
+                    className="w-full rounded-2xl border border-[#e2e8f0] px-4 py-2.5 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Bank Nomi</label>
+                  <input
+                    type="text"
+                    placeholder="HUMOCARD"
+                    value={bulkCardForm.cardBank}
+                    onChange={(e) => setBulkCardForm({ ...bulkCardForm, cardBank: e.target.value })}
+                    className="w-full rounded-2xl border border-[#e2e8f0] px-4 py-2.5 text-xs text-[#152238] focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => setBulkCardModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  disabled={savingBulkCard}
+                  onClick={async () => {
+                    setSavingBulkCard(true)
+                    try {
+                      const res = await fetch('/api/admin/crm', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                        },
+                        body: JSON.stringify({
+                          action: 'bulk_update_tariff_card',
+                          cardNumber: bulkCardForm.cardNumber,
+                          cardOwner: bulkCardForm.cardOwner,
+                          cardBank: bulkCardForm.cardBank,
+                        }),
+                      })
+                      const data = await res.json()
+                      if (data.ok) {
+                        showToast('✅ Barcha tariflar kartasi muvaffaqiyatli yangilandi!')
+                        setBulkCardModal(false)
+                        loadTariffs()
+                        loadCrm()
+                      } else {
+                        showToast(data.error || 'Xatolik yuz berdi', 'error')
+                      }
+                    } catch {
+                      showToast('Yangilashda xatolik', 'error')
+                    } finally {
+                      setSavingBulkCard(false)
+                    }
+                  }}
+                  className="rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-sm transition disabled:opacity-50"
+                >
+                  <Check size={14} />
+                  <span>{savingBulkCard ? 'Yangilanmoqda...' : 'Hamma Kartalarni Saqlash'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -4049,6 +5259,63 @@ export function PaybotDashboard() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Do‘kon Logotipi (Ixtiyoriy)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="size-11 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0 overflow-hidden">
+                      {newShopForm.logoUrl ? (
+                        <img src={newShopForm.logoUrl} alt="Logo" className="size-full object-cover" />
+                      ) : (
+                        <Store size={20} className="text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <input
+                        type="url"
+                        value={newShopForm.logoUrl}
+                        onChange={(e) => setNewShopForm({ ...newShopForm, logoUrl: e.target.value })}
+                        placeholder="https://mysite.uz/logo.png yoki rasm yuklang"
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-mono outline-none focus:border-[#1769e0]"
+                      />
+                      <div className="flex items-center gap-2">
+                        <label className="cursor-pointer rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1 transition">
+                          <Upload size={12} /> Rasm yuklash
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (!file) return
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert('Fayl 5MB dan oshmasligi kerak!')
+                                return
+                              }
+                              const reader = new FileReader()
+                              reader.onload = (ev) => {
+                                const dataUrl = ev.target?.result as string
+                                if (dataUrl) setNewShopForm(prev => ({ ...prev, logoUrl: dataUrl }))
+                              }
+                              reader.readAsDataURL(file)
+                            }}
+                          />
+                        </label>
+                        {newShopForm.logoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setNewShopForm(prev => ({ ...prev, logoUrl: '' }))}
+                            className="text-[11px] text-rose-500 hover:underline"
+                          >
+                            Tozalash
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Webhook URL (Ixtiyoriy)
                   </label>
                   <input
@@ -4090,6 +5357,180 @@ export function PaybotDashboard() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: CHANGE INDIVIDUAL SHOP LOGO */}
+        {/* ------------------------------------------------------------- */}
+        {logoModalShop && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-blue-50 text-[#1769e0]">
+                    <ImageIcon size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Do‘kon Logotipi</h3>
+                    <p className="text-xs text-slate-400">{logoModalShop.name}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLogoModalShop(null)}
+                  className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Preview */}
+              <div className="flex flex-col items-center justify-center py-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="relative size-24 rounded-2xl overflow-hidden border-2 border-slate-200 bg-white shadow-sm flex items-center justify-center">
+                  {logoInputUrl ? (
+                    <img src={logoInputUrl} alt={logoModalShop.name} className="size-full object-cover" />
+                  ) : (
+                    <span className="text-4xl">🏪</span>
+                  )}
+                </div>
+                <p className="text-xs font-bold text-slate-700 mt-2">{logoModalShop.name}</p>
+                <span className="text-[11px] text-slate-400">Har bir do‘kon o‘z mustaqil logotipiga ega</span>
+              </div>
+
+              {/* Upload or URL */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Logotip Rasm Fayli (PNG, JPG, SVG, WebP)
+                  </label>
+                  <label className="w-full border-2 border-dashed border-slate-300 hover:border-[#1769e0] rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer bg-slate-50/50 hover:bg-blue-50/30 transition">
+                    <Upload size={20} className="text-slate-400 mb-1" />
+                    <span className="text-xs font-semibold text-[#1769e0]">Kompyuter yoki telefondan tanlash</span>
+                    <span className="text-[10px] text-slate-400 mt-0.5">Maksimal hajm: 5MB</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        if (file.size > 5 * 1024 * 1024) {
+                          alert('Fayl hajmi 5MB dan oshmasligi kerak!')
+                          return
+                        }
+                        const reader = new FileReader()
+                        reader.onload = (ev) => {
+                          const dataUrl = ev.target?.result as string
+                          if (dataUrl) setLogoInputUrl(dataUrl)
+                        }
+                        reader.readAsDataURL(file)
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Yoki To‘g‘ridan-to‘g‘ri Rasm Havolasi (URL)
+                  </label>
+                  <input
+                    type="url"
+                    value={logoInputUrl}
+                    onChange={(e) => setLogoInputUrl(e.target.value)}
+                    placeholder="https://misol.uz/logo.png"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
+                  />
+                </div>
+
+                {/* Preset quick icons */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Tezkor Tanlash (Do‘kon Belgilari):
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: '🛍 Do‘kon', emoji: '🛍' },
+                      { label: '⚡️ Tezkor', emoji: '⚡️' },
+                      { label: '💎 VIP', emoji: '💎' },
+                      { label: '📱 Gadget', emoji: '📱' },
+                      { label: '👕 Kiyim', emoji: '👕' },
+                      { label: '🍔 Taom', emoji: '🍔' },
+                      { label: '🎮 O‘yin', emoji: '🎮' },
+                      { label: '🎓 Ta’lim', emoji: '🎓' },
+                    ].map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" rx="32" fill="#1769e0"/><text x="50%" y="54%" font-size="64" text-anchor="middle" dominant-baseline="middle">${p.emoji}</text></svg>`
+                          const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+                          setLogoInputUrl(dataUrl)
+                        }}
+                        className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 flex items-center gap-1 transition"
+                      >
+                        <span>{p.emoji}</span>
+                        <span>{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setLogoModalShop(null)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  type="button"
+                  disabled={savingShopLogo}
+                  onClick={async () => {
+                    setSavingShopLogo(true)
+                    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+                    try {
+                      const res = await fetch('/api/shop/settings', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${token}`,
+                          'x-telegram-user-id': effectiveUserId,
+                        },
+                        body: JSON.stringify({
+                          action: 'update_shop',
+                          shopId: logoModalShop.id,
+                          logoUrl: logoInputUrl,
+                        }),
+                      })
+                      const data = await res.json()
+                      if (data.ok) {
+                        setMyShops((prev: any[]) => prev.map(s => s.id === logoModalShop.id ? { ...s, logoUrl: logoInputUrl } : s))
+                        if (shopData?.id === logoModalShop.id) {
+                          setShopData((prev: any) => ({ ...prev, logoUrl: logoInputUrl }))
+                          setShopForm((prev: any) => ({ ...prev, logoUrl: logoInputUrl }))
+                        }
+                        showToast('✅ Do‘kon logotipi muvaffaqiyatli saqlandi!')
+                        setLogoModalShop(null)
+                      } else {
+                        showToast(data.error || 'Logotipni saqlashda xatolik', 'error')
+                      }
+                    } catch {
+                      showToast('Server bilan aloqa uzildi', 'error')
+                    } finally {
+                      setSavingShopLogo(false)
+                    }
+                  }}
+                  className="rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-5 py-2 text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Check size={14} />
+                  <span>{savingShopLogo ? 'Saqlanmoqda...' : 'Logotipni Saqlash'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

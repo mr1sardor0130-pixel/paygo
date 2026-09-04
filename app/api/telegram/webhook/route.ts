@@ -29,7 +29,7 @@ import {
   submitTelegram2FA,
   cancelOnboarding,
 } from '@/lib/userbot-onboarding'
-import { checkShopLimit, checkTransactionLimits } from '@/lib/utils/limits'
+import { checkShopLimit, checkTransactionLimits, getUserLimitsStatus } from '@/lib/utils/limits'
 import { startHumoUserbot, stopHumoUserbot, isUserbotActive } from '@/lib/telegram-userbot'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
@@ -322,14 +322,22 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
   } catch {}
 
   let currentTierInfo = '<b>Oddiy (Bepul)</b> — Limit: 1 ta do‘kon, test to‘lovlar.'
-  if (profile?.tier === 'premium') {
-    if (profile.premiumEndsAt && new Date(profile.premiumEndsAt) > new Date()) {
+  try {
+    const limits = await getUserLimitsStatus(userIdStr)
+    if (limits.isAdmin) {
+      currentTierInfo = '👑 <b>Bosh Admin</b> — Cheksiz barcha imkoniyatlar faol.'
+    } else if (limits.isPremium && profile?.premiumEndsAt && new Date(profile.premiumEndsAt) > new Date()) {
       const exactEndDate = new Date(profile.premiumEndsAt).toLocaleString('uz-UZ')
-      currentTierInfo = `💎 <b>PREMIUM VIP</b> (Faol)\n⏳ <b>Amal qilish muddati:</b> <code>${exactEndDate}</code> gacha`
+      currentTierInfo = `💎 <b>PREMIUM VIP</b> (Faol)\n⏳ <b>Amal qilish muddati:</b> <code>${exactEndDate}</code> gacha\n🏪 Do‘konlar: Cheksiz | ⚡️ To‘lovlar: Cheksiz`
     } else {
-      currentTierInfo = '<b>Oddiy (Birlamchi)</b> — Premium muddati tugagan.'
+      currentTierInfo =
+        `<b>Oddiy (Bepul)</b>:\n` +
+        `  • 🧪 Test to‘lovlar: <b>${limits.testUsed}/50 ta</b>\n` +
+        `  • 💳 Haqiqiy to‘lovlar: <b>${limits.realUsed}/30 ta</b>\n` +
+        `  • 🏪 Do‘konlar: <b>${limits.shopsCount}/1 ta</b>\n` +
+        `<i>Cheksiz test va cheksiz to‘lovlar uchun quyidagi Premium tariflarga o‘ting.</i>`
     }
-  }
+  } catch {}
 
   let tariffs: any[] = []
   try {
@@ -340,36 +348,36 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
     tariffs = [
       {
         id: 'tariff-daily',
-        name: 'Kunlik Sinov',
-        price: 5000,
-        period: 'kun',
+        name: 'Kunlik',
+        price: 1000,
+        period: 'day',
         description: '1 kunlik sinov, avto-to‘lov va monitoring',
         cardNumber: '9860350123453587',
         cardOwner: 'AZizbek I',
         cardBank: 'HUMOCARD',
-        features: '["⚡️ @humocardbot orqali 1 soniyada avto-to‘lov", "🏪 3 tagacha do‘kon ochish", "🔗 Har bir do‘kon uchun alohida Webhook & Kanal", "👥 1 ta VIP Guruh (Pullik yozish / kirish)", "🎁 1 ta Donate / Ehson yig‘ish kampaniyasi", "0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga", "📄 PDF cheklar generatsiyasi"]',
+        features: '["⚡️ @humocardbot orqali 1 soniyada avto-to‘lov", "🏪 3 tagacha do‘kon ochish", "🔗 Har bir do‘kon uchun alohida Webhook & Kanal", "👥 1 ta VIP Guruh (Pullik yozish / kirish)", "🎁 1 ta Donate / Ehson yig‘ish kampaniyasi", "🛡 0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga", "📄 PDF cheklar generatsiyasi"]',
       },
       {
         id: 'tariff-weekly',
-        name: 'Haftalik Standart',
-        price: 25000,
-        period: 'hafta',
+        name: 'Haftalik',
+        price: 6500,
+        period: 'week',
         description: '7 kunlik biznes va faol savdo imkoniyati',
         cardNumber: '9860350123453587',
         cardOwner: 'AZizbek I',
         cardBank: 'HUMOCARD',
-        features: '["⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)", "🏪 10 tagacha mustaqil do‘konlar", "🔗 Har bir do‘kon uchun maxsus Webhook & Kanal", "👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)", "🎁 Cheksiz Donate & Xayriya yig‘ish havolalari", "0% komissiya va 24/7 avtomatik monitoring", "📄 QR-kodli rasmiy PDF kvitansiyalar", "🛠 Dasturchilar uchun REST API & SDK"]',
+        features: '["⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)", "🏪 10 tagacha mustaqil do‘konlar", "🔗 Har bir do‘kon uchun maxsus Webhook & Kanal", "👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)", "🎁 Cheksiz Donate & Xayriya yig‘ish havolalari", "🛡 0% komissiya va 24/7 avtomatik monitoring", "📄 QR-kodli rasmiy PDF kvitansiyalar", "🛠 Dasturchilar uchun REST API & SDK"]',
       },
       {
         id: 'tariff-monthly',
-        name: 'Oylik VIP (Cheksiz)',
-        price: 79000,
-        period: 'oy',
+        name: 'Oylik VIP',
+        price: 27858,
+        period: 'month',
         description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
         cardNumber: '9860350123453587',
         cardOwner: 'AZizbek I',
         cardBank: 'HUMOCARD',
-        features: '["⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)", "🏪 CHEKSIZ do‘konlar yaratish va ulash", "🔗 Har bir do‘konga individual Webhook & Kanal", "👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi", "🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari", "💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash", "0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga", "📄 Brendlangan PDF cheklar va to‘lov tahlillari", "🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash"]',
+        features: '["⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)", "🏪 CHEKSIZ do‘konlar yaratish va ulash", "🔗 Har bir do‘konga individual Webhook & Kanal", "👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi", "🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari", "💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash", "🛡 0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga", "📄 Brendlangan PDF cheklar va to‘lov tahlillari", "🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash"]',
       },
     ]
   }
@@ -377,6 +385,8 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
   const text =
     `💎 <b>PayGo Mukammal Premium Obunalar</b>\n\n` +
     `⚡️ <i>Avto to‘lov (@humocardbot), Donate jamg‘armalari, VIP Guruhlar (Pullik yozish) va cheksiz do‘konlar tizimi!</i>\n\n` +
+    `🛡 <b>0% Komissiya — Qonuniy Kafolat:</b>\n` +
+    `Biz hech qachon to‘lovlardan foiz olmaymiz va foydalanuvchilar mablag‘larini saqlamaymiz! Barcha pullar 100% to‘g‘ridan-to‘g‘ri sizning o‘z bank kartangizga tushadi. PayGo — faqatgina xavfsiz SaaS texnik avtomatlashtirish platformasidir.\n\n` +
     `👤 <b>Hozirgi maqomingiz:</b>\n${currentTierInfo}\n\n` +
     `─────────────\n\n` +
     `📋 <b>Mavjud Tariflar va Imkoniyatlar:</b>\n\n` +
@@ -913,36 +923,78 @@ async function notifyAdminNewShop(token: string, shop: any) {
 async function renderAdminTariffManagement(token: string, chatId: number | string) {
   let tariffs: any[] = []
   try {
-    tariffs = await db.select().from(systemTariffs)
+    tariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.price))
   } catch {}
 
   if (!tariffs.length) {
     try {
       await db.insert(systemTariffs).values([
-        { id: 'tariff-daily', name: 'Kunlik', description: '1 kunlik sinov va faol monitoring', price: 1000, period: 'kun', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD', active: true },
-        { id: 'tariff-weekly', name: 'Haftalik', description: '7 kunlik do‘kon integratsiyasi', price: 6500, period: 'hafta', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD', active: true },
-        { id: 'tariff-monthly', name: 'Oylik VIP', description: '30 kunlik to‘liq cheksiz imkoniyat', price: 27858, period: 'oy', cardNumber: '9860350123453587', cardOwner: 'AZizbek I', cardBank: 'HUMOCARD', active: true },
+        {
+          id: 'tariff-daily',
+          name: 'Kunlik Sinov',
+          description: '1 kunlik sinov, avto-to‘lov va monitoring',
+          features: '["⚡️ @humocardbot orqali 1 soniyada avto-to‘lov", "🏪 3 tagacha do‘kon ochish", "🔗 Har bir do‘kon uchun alohida Webhook & Kanal", "👥 1 ta VIP Guruh (Pullik yozish / kirish)", "🎁 1 ta Donate / Ehson yig‘ish kampaniyasi", "0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga", "📄 PDF cheklar generatsiyasi"]',
+          price: 5000,
+          period: 'kun',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+        {
+          id: 'tariff-weekly',
+          name: 'Haftalik Standart',
+          description: '7 kunlik biznes va faol savdo imkoniyati',
+          features: '["⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)", "🏪 10 tagacha mustaqil do‘konlar", "🔗 Har bir do‘kon uchun maxsus Webhook & Kanal", "👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)", "🎁 Cheksiz Donate & Xayriya yig‘ish havolalari", "0% komissiya va 24/7 avtomatik monitoring", "📄 QR-kodli rasmiy PDF kvitansiyalar", "🛠 Dasturchilar uchun REST API & SDK"]',
+          price: 25000,
+          period: 'hafta',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+        {
+          id: 'tariff-monthly',
+          name: 'Oylik VIP (Cheksiz)',
+          description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
+          features: '["⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)", "🏪 CHEKSIZ do‘konlar yaratish va ulash", "🔗 Har bir do‘konga individual Webhook & Kanal", "👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi", "🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari", "💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash", "0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga", "📄 Brendlangan PDF cheklar va to‘lov tahlillari", "🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash"]',
+          price: 79000,
+          period: 'oy',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
       ]).onConflictDoNothing()
-      tariffs = await db.select().from(systemTariffs)
+      tariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.price))
     } catch {}
   }
 
   const listText = tariffs
-    .map((t, idx) =>
-      `<b>${idx + 1}️⃣ ${t.name}</b> (ID: <code>${t.id}</code>)\n` +
-      `💰 <b>Narxi:</b> <code>${Number(t.price).toLocaleString('uz-UZ')}</code> UZS / ${t.period}\n` +
-      `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
-      `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})\n` +
-      `📝 <b>Tavsif:</b> ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}`
-    )
+    .map((t, idx) => {
+      const featText = formatTariffFeatures(t.features)
+      return (
+        `<b>${idx + 1}️⃣ ${t.name}</b> ${t.active ? '🟢 (Faol)' : '🔴 (Nofaol)'} (ID: <code>${t.id}</code>)\n` +
+        `💰 <b>Narxi:</b> <code>${Number(t.price).toLocaleString('uz-UZ')}</code> UZS / ${t.period}\n` +
+        `💳 <b>Karta:</b> <code>${formatCard(t.cardNumber || '9860350123453587')}</code>\n` +
+        `👤 <b>Egasi:</b> ${t.cardOwner || 'AZizbek I'} (${t.cardBank || 'HUMOCARD'})\n` +
+        `📝 <b>Tavsif:</b> ${t.description || 'Cheksiz to‘lov qabul qilish va monitoring'}\n` +
+        (featText ? `✨ <b>Xususiyatlar:</b>\n${featText}` : '')
+      )
+    })
     .join('\n\n─────────────\n\n')
 
   const inlineButtons: any[] = tariffs.map((t) => [
-    { text: `✏️ ${t.name} ni tahrirlash`, callback_data: `adm_ed_tar_${t.id}` }
+    { text: `✏️ ${t.name} (${Number(t.price).toLocaleString('uz-UZ')} UZS) ni tahrirlash`, callback_data: `adm_ed_tar_${t.id}` }
   ])
 
   inlineButtons.push([
     { text: `💳 Barcha kartalarni o‘zgartirish`, callback_data: `adm_tar_card_all` }
+  ])
+
+  const adminAuthUrl = await generateAuthUrl(chatId, '/admin')
+  inlineButtons.push([
+    { text: `🌐 Web CRM da Tariflar Boshqaruvi`, url: adminAuthUrl }
   ])
 
   await send(
@@ -950,8 +1002,7 @@ async function renderAdminTariffManagement(token: string, chatId: number | strin
     chatId,
     `💎 <b>PayGo Tizim Tariflari va Karta Boshqaruvi</b>\n\n` +
     `${listText}\n\n` +
-    `👇 <i>Tahrirlamoqchi bo‘lgan tarifingizni tanlang yoki barcha kartalarni o‘zgartiring:</i>\n\n` +
-    `🌐 Web CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
+    `👇 <i>Tahrirlamoqchi bo‘lgan tarifingizni tanlang yoki barcha kartalarni o‘zgartiring:</i>`,
     { inline_keyboard: inlineButtons }
   )
 }
@@ -968,9 +1019,12 @@ async function renderAdminTariffDetail(token: string, chatId: number | string, t
     return
   }
 
+  const featText = formatTariffFeatures(tariff.features)
+
   const text =
     `⚙️ <b>Tarif Tahrirlash: ${tariff.name}</b>\n\n` +
     `🆔 <b>ID:</b> <code>${tariff.id}</code>\n` +
+    `⚡️ <b>Holati:</b> ${tariff.active ? '🟢 Faol' : '🔴 Nofaol'}\n` +
     `📝 <b>Nomi:</b> ${tariff.name}\n` +
     `💰 <b>Narxi:</b> <code>${Number(tariff.price).toLocaleString('uz-UZ')}</code> UZS\n` +
     `⏱ <b>Muddati:</b> ${tariff.period}\n` +
@@ -978,20 +1032,29 @@ async function renderAdminTariffDetail(token: string, chatId: number | string, t
     `👤 <b>Egasi:</b> ${tariff.cardOwner || ''}\n` +
     `🏦 <b>Bank:</b> ${tariff.cardBank || 'HUMOCARD'}\n` +
     `📄 <b>Tavsif:</b> ${tariff.description || '-'}\n\n` +
+    `✨ <b>Xususiyatlar (Avto to‘lov, Donate, VIP guruhlar):</b>\n${featText || '  (Kiritilmagan)'}\n\n` +
     `Quyidagi tugmalardan birini tanlab, kerakli maydonni o‘zgartiring:`
 
   const buttons = [
+    [
+      { text: '💰 Narxi', callback_data: `adm_tf_field_${tariff.id}_price` },
+      { text: '📝 Nomi', callback_data: `adm_tf_field_${tariff.id}_name` },
+    ],
+    [
+      { text: '✨ Xususiyatlar', callback_data: `adm_tf_field_${tariff.id}_features` },
+      { text: '⏱ Muddati (kun/oy)', callback_data: `adm_tf_field_${tariff.id}_period` },
+    ],
     [
       { text: '💳 Karta raqami', callback_data: `adm_tf_field_${tariff.id}_cardNumber` },
       { text: '👤 Karta egasi', callback_data: `adm_tf_field_${tariff.id}_cardOwner` },
     ],
     [
       { text: '🏦 Bank nomi', callback_data: `adm_tf_field_${tariff.id}_cardBank` },
-      { text: '💰 Narxi', callback_data: `adm_tf_field_${tariff.id}_price` },
+      { text: '📄 Tavsif', callback_data: `adm_tf_field_${tariff.id}_description` },
     ],
     [
-      { text: '📝 Nomi', callback_data: `adm_tf_field_${tariff.id}_name` },
-      { text: '📄 Tavsif', callback_data: `adm_tf_field_${tariff.id}_description` },
+      { text: tariff.active ? '🔴 Nofaol qilish' : '🟢 Faollashtirish', callback_data: `adm_tf_toggle_${tariff.id}` },
+      { text: '🗑 O‘chirish', callback_data: `adm_tf_del_${tariff.id}` },
     ],
     [
       { text: '🔙 Tariflar ro‘yxatiga qaytish', callback_data: 'adm_tar_list' }
@@ -2247,16 +2310,46 @@ export async function POST(request: Request) {
       } else if (fieldName === 'description') {
         label = 'Tarif tavsifi'
         example = '30 kunlik to‘liq cheksiz imkoniyat'
+      } else if (fieldName === 'features') {
+        label = 'Tarif xususiyatlari (har bir qator yangi xususiyat)'
+        example = '⚡️ 1 soniyada avto-to‘lov\n❤️ Donate sahifalari\n👥 VIP guruhlar (Pullik yozish)\n🏪 Cheksiz do‘konlar'
+      } else if (fieldName === 'period') {
+        label = 'Tarif amal qilish muddati (kun, hafta, oy)'
+        example = 'oy'
       }
 
       await send(
         token,
         chatId,
         `✏️ <b>Tarifning ${label}ni kiriting:</b>\n\n` +
-        `Misol: <code>${example}</code>\n\n` +
+        `Misol:\n<code>${example}</code>\n\n` +
         `<i>Yangi qiymatni Telegram orqali yuboring:</i>`,
         back
       )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('adm_tf_toggle_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      const tariffId = data.replace('adm_tf_toggle_', '')
+      const cur = await db.select().from(systemTariffs).where(eq(systemTariffs.id, tariffId)).limit(1)
+      if (cur.length) {
+        const nextActive = !cur[0].active
+        await db.update(systemTariffs).set({ active: nextActive, updatedAt: new Date() }).where(eq(systemTariffs.id, tariffId))
+        await send(token, chatId, `Tarif holati: ${nextActive ? '🟢 Faol' : '🔴 Nofaol'} qilindi.`)
+        await renderAdminTariffDetail(token, chatId, tariffId)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('adm_tf_del_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      const tariffId = data.replace('adm_tf_del_', '')
+      await db.delete(systemTariffs).where(eq(systemTariffs.id, tariffId))
+      await send(token, chatId, `🗑 Tarif o‘chirildi.`)
+      await renderAdminTariffManagement(token, chatId)
       return NextResponse.json({ ok: true })
     }
 
@@ -2600,8 +2693,13 @@ export async function POST(request: Request) {
     text !== '🤝 Referal (Tekin Premium)' &&
     text !== 'Referal' &&
     text !== '💎 Tariflar boshqaruvi' &&
+    text !== 'Tariflar boshqaruvi' &&
+    !norm.includes('boshqaruv') &&
+    !norm.includes('admin') &&
     raw !== '/ref' &&
-    raw !== '/referral'
+    raw !== '/referral' &&
+    raw !== '/admin_tariffs' &&
+    raw !== '/adm_tariffs'
 
   const isReferralCmd =
     norm.includes('referal') ||
@@ -3768,7 +3866,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    const txLimit = await checkTransactionLimits(userIdStr)
+    const txLimit = await checkTransactionLimits(userIdStr, true)
     if (!txLimit.allowed) {
       await stateDelete(chatId)
       await send(token, chatId, `⚠️ <b>${txLimit.reason}</b>\n\nLimitni oshirish uchun Premium tarifga o'ting: "💎 Tariflar" tugmasini bosing.`, menu)
@@ -4164,10 +4262,29 @@ export async function POST(request: Request) {
       updateData.name = val
     } else if (field === 'description') {
       updateData.description = val
+    } else if (field === 'features') {
+      updateData.features = val
+    } else if (field === 'period') {
+      updateData.period = val
     }
 
     try {
-      await db.update(systemTariffs).set(updateData).where(eq(systemTariffs.id, tariffId))
+      const existing = await db.select().from(systemTariffs).where(eq(systemTariffs.id, tariffId)).limit(1)
+      if (existing.length > 0) {
+        await db.update(systemTariffs).set(updateData).where(eq(systemTariffs.id, tariffId))
+      } else {
+        await db.insert(systemTariffs).values({
+          id: tariffId,
+          name: tariffId.includes('daily') ? 'Kunlik Sinov' : tariffId.includes('weekly') ? 'Haftalik Standart' : 'Oylik VIP',
+          price: 5000,
+          period: 'oy',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+          ...updateData,
+        })
+      }
     } catch (dbErr) {
       console.error('Tariff update err:', dbErr)
     }
@@ -4657,27 +4774,53 @@ export async function POST(request: Request) {
   }
 
   // Admin sub-menus
-  if (text === 'Do‘konlar boshqaruvi') {
+  if (
+    text === 'Do‘konlar boshqaruvi' ||
+    text === "Do'konlar boshqaruvi" ||
+    text === '🏪 Do‘konlar boshqaruvi' ||
+    text === 'Jami do‘konlar' ||
+    text === 'Barcha do‘konlar' ||
+    norm === 'dukonlar boshqaruvi' ||
+    norm === "do'konlar boshqaruvi" ||
+    norm === 'jami dukonlar' ||
+    norm === 'barcha dukonlar' ||
+    raw === '/shops' ||
+    raw === '/dukonlar'
+  ) {
     const isAdmin = await isAdminTelegramId(userIdStr)
     if (!isAdmin) return NextResponse.json({ ok: true })
 
-    const allShops = await db.select().from(shops).orderBy(desc(shops.createdAt)).limit(10)
-    const inlineButtons = allShops.map((s) => [
+    const allShops = await db.select().from(shops).orderBy(desc(shops.createdAt)).limit(25)
+    const inlineButtons: any[] = allShops.map((s) => [
       { text: `${s.approved ? '✅' : '⏳'} ${s.name}`, callback_data: `view_shop_${s.id}` },
       ...(!s.approved ? [{ text: 'Tasdiqlash', callback_data: `approve_shop_${s.id}` }] : []),
+    ])
+
+    const adminCrmUrl = await generateAuthUrl(userIdStr, '/admin')
+    inlineButtons.push([
+      { text: '🌐 Web CRM da Jami Do‘konlarni Ko‘rish', url: adminCrmUrl }
     ])
 
     await send(
       token,
       chatId,
       `🏪 <b>Barcha Do‘konlar Ro‘yxati (${allShops.length} ta):</b>\n\n` +
-      allShops.map((s) => `• <b>${s.name}</b> | Karta: <code>${formatCard(s.cardNumber || '')}</code> | ${s.approved ? '✅ Faol' : '⏳ Kutilmoqda'}`).join('\n'),
-      { inline_keyboard: inlineButtons.slice(0, 10) }
+      allShops.map((s, idx) => `${idx + 1}. <b>${s.name}</b> | Karta: <code>${formatCard(s.cardNumber || '')}</code> | ${s.approved ? '✅ Faol' : '⏳ Kutilmoqda'}`).join('\n') +
+      `\n\n<i>Batafsil ma’lumot va boshqarish uchun do‘kon ustiga bosing yoki Web CRM ga o‘ting:</i>`,
+      { inline_keyboard: inlineButtons.slice(0, 15) }
     )
     return NextResponse.json({ ok: true })
   }
 
-  if (text === 'Tariflar boshqaruvi') {
+  if (
+    text === 'Tariflar boshqaruvi' ||
+    text === '💎 Tariflar boshqaruvi' ||
+    norm === 'tariflar boshqaruvi' ||
+    norm === 'tarif boshqaruvi' ||
+    raw === '/tariffs_admin' ||
+    raw === '/admin_tariffs' ||
+    raw === '/adm_tariffs'
+  ) {
     const isAdmin = await isAdminTelegramId(userIdStr)
     if (!isAdmin) return NextResponse.json({ ok: true })
     await renderAdminTariffManagement(token, chatId)

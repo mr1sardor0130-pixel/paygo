@@ -10,6 +10,7 @@ const createPaymentSchema = z.object({
   shopId: z.string().min(1),
   amount: z.number().int().positive().max(1_000_000_000),
   orderId: z.string().min(1).max(120),
+  isTest: z.boolean().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
@@ -24,12 +25,15 @@ export async function POST(request: Request) {
     }
 
     const userId = keyRecord[0].userId
-    const limitCheck = await checkTransactionLimits(userId)
+    const rawJson = await request.json()
+    const body = createPaymentSchema.parse(rawJson)
+    const isTest = Boolean(body.isTest || (body.metadata as any)?.isTest)
+
+    const limitCheck = await checkTransactionLimits(userId, isTest)
     if (!limitCheck.allowed) {
       return NextResponse.json({ error: 'quota_exceeded', message: limitCheck.reason }, { status: 429 })
     }
 
-    const body = createPaymentSchema.parse(await request.json())
     const paymentId = randomUUID()
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
     
@@ -38,6 +42,7 @@ export async function POST(request: Request) {
       shopId: body.shopId,
       userId,
       amount: body.amount,
+      isTest,
       expiresAt,
     })
     
