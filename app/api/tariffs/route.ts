@@ -62,13 +62,13 @@ export async function GET(request: Request) {
       .select()
       .from(systemTariffs)
       .where(eq(systemTariffs.active, true))
-      .orderBy(desc(systemTariffs.price))
+      .orderBy(systemTariffs.price)
   } catch (e) {
     console.warn('Get tariffs db err:', e)
   }
 
   if (!tariffs.length) {
-    tariffs = [
+    const defaultTariffsData = [
       {
         id: 'tariff-daily',
         name: 'Kunlik Sinov',
@@ -133,6 +133,17 @@ export async function GET(request: Request) {
         active: true,
       },
     ]
+
+    try {
+      await db.insert(systemTariffs).values(defaultTariffsData).onConflictDoNothing()
+      tariffs = await db
+        .select()
+        .from(systemTariffs)
+        .where(eq(systemTariffs.active, true))
+        .orderBy(systemTariffs.price)
+    } catch {
+      tariffs = defaultTariffsData
+    }
   }
 
   let userProfile: any = null
