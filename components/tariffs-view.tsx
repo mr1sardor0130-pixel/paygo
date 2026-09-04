@@ -137,7 +137,7 @@ export function TariffsView() {
   const loadTariffs = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/tariffs')
+      const res = await fetch(`/api/tariffs?_t=${Date.now()}`, { cache: 'no-store' })
       const data = await res.json()
       if (data.ok && Array.isArray(data.tariffs) && data.tariffs.length > 0) {
         setTariffs(data.tariffs)

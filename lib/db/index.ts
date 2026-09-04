@@ -132,6 +132,7 @@ export async function ensureDbSchema() {
         "id" text PRIMARY KEY,
         "name" text NOT NULL,
         "description" text,
+        "features" text,
         "price" integer NOT NULL,
         "period" text NOT NULL DEFAULT 'month',
         "cardNumber" text NOT NULL DEFAULT '9860350123453587',
@@ -141,6 +142,15 @@ export async function ensureDbSchema() {
         "createdAt" timestamp NOT NULL DEFAULT NOW(),
         "updatedAt" timestamp NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "features" text;
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardNumber" text DEFAULT '9860350123453587';
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardOwner" text DEFAULT 'AZizbek I';
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "cardBank" text DEFAULT 'HUMOCARD';
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "active" boolean DEFAULT true;
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "period" text DEFAULT 'month';
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "description" text;
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "updatedAt" timestamp DEFAULT NOW();
 
       CREATE TABLE IF NOT EXISTS "system_settings" (
         "key" text PRIMARY KEY,

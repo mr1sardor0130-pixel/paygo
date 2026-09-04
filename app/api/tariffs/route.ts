@@ -154,7 +154,7 @@ export async function GET(request: Request) {
     } catch {}
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     ok: true,
     tariffs,
     isAdmin,
@@ -164,6 +164,12 @@ export async function GET(request: Request) {
       isPremiumActive: userProfile.tier === 'premium' && userProfile.premiumEndsAt && new Date(userProfile.premiumEndsAt) > new Date(),
     } : null,
   })
+
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  response.headers.set('Pragma', 'no-cache')
+  response.headers.set('Expires', '0')
+
+  return response
 }
 
 export async function POST(request: Request) {
