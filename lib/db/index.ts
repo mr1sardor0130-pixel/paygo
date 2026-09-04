@@ -173,6 +173,40 @@ export async function ensureDbSchema() {
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS "paid_access_rooms" (
+        "id" text PRIMARY KEY,
+        "shopId" text,
+        "title" text NOT NULL,
+        "chatId" text NOT NULL,
+        "type" text NOT NULL DEFAULT 'group',
+        "mode" text NOT NULL DEFAULT 'write_permission',
+        "hourlyPrice" integer NOT NULL DEFAULT 5000,
+        "dailyPrice" integer NOT NULL DEFAULT 15000,
+        "weeklyPrice" integer NOT NULL DEFAULT 50000,
+        "monthlyPrice" integer NOT NULL DEFAULT 120000,
+        "currency" text NOT NULL DEFAULT 'UZS',
+        "active" boolean NOT NULL DEFAULT true,
+        "welcomeMessage" text,
+        "ownerTelegramId" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW(),
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "paid_access_members" (
+        "id" text PRIMARY KEY,
+        "roomId" text NOT NULL,
+        "userId" text NOT NULL,
+        "username" text,
+        "fullName" text,
+        "plan" text NOT NULL DEFAULT 'month',
+        "amountPaid" integer NOT NULL DEFAULT 0,
+        "status" text NOT NULL DEFAULT 'active',
+        "startsAt" timestamp NOT NULL DEFAULT NOW(),
+        "expiresAt" timestamp NOT NULL,
+        "paymentId" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
       -- Ensure default superadmin 8021115446 exists
       INSERT INTO "system_roles" ("id", "telegramId", "role", "addedBy")
       VALUES ('superadmin-8021115446', '8021115446', 'superadmin', 'system')

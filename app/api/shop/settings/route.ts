@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { shops, authSessions, deliveryLogs } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { shops, authSessions } from '@/lib/db/schema'
+import { eq, or, desc } from 'drizzle-orm'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
+import { isAdminTelegramId } from '@/lib/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,18 +38,45 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Avtorizatsiyadan o‘tilmagan' }, { status: 401 })
   }
 
+  const { searchParams } = new URL(request.url)
+  const reqShopId = searchParams.get('shopId')
+
   try {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, user.userId)).limit(1)
+    const searchUserIds = Array.from(new Set([user.userId, user.telegramId].filter(Boolean)))
+    const whereConditions = searchUserIds.map((id) => eq(shops.userId, id))
+    let userShops = await db
+      .select()
+      .from(shops)
+      .where(whereConditions.length > 1 ? or(...whereConditions) : whereConditions[0])
+      .orderBy(desc(shops.createdAt))
+
+    const isAdmin = await isAdminTelegramId(user.telegramId || user.userId)
+    if (userShops.length === 0 && isAdmin) {
+      userShops = await db.select().from(shops).orderBy(desc(shops.createdAt)).limit(20)
+    }
+
+    let activeShop = userShops[0] || null
+    if (reqShopId) {
+      const found = userShops.find((s) => s.id === reqShopId)
+      if (found) {
+        activeShop = found
+      } else if (isAdmin) {
+        const anyShop = await db.select().from(shops).where(eq(shops.id, reqShopId)).limit(1)
+        if (anyShop.length) activeShop = anyShop[0]
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      shop: userShops[0] || null,
+      shop: activeShop,
+      shops: userShops,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message }, { status: 500 })
   }
 }
 
-// POST: Update shop info or test webhook / channel
+// POST: Update shop info, create new shop, delete shop or test webhook / channel
 export async function POST(request: Request) {
   let body: any = {}
   try {
@@ -60,20 +88,112 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Avtorizatsiyadan o‘tilmagan' }, { status: 401 })
   }
 
-  const { action } = body
+  const { action, shopId } = body
+  const isAdmin = await isAdminTelegramId(user.telegramId || user.userId)
 
   try {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, user.userId)).limit(1)
-    let shop = userShops[0]
+    const searchUserIds = Array.from(new Set([user.userId, user.telegramId].filter(Boolean)))
+    const whereConditions = searchUserIds.map((id) => eq(shops.userId, id))
+    let userShops = await db
+      .select()
+      .from(shops)
+      .where(whereConditions.length > 1 ? or(...whereConditions) : whereConditions[0])
+      .orderBy(desc(shops.createdAt))
+
+    // Handle Create New Shop
+    if (action === 'create_shop') {
+      const newShopId = randomUUID()
+      const rawSlug = (body.name || 'shop').toLowerCase().replace(/[^a-z0-9]/g, '')
+      const uniqueSlug = `${rawSlug || 'shop'}-${Date.now().toString().slice(-4)}`
+      const cardDigits = (body.cardNumber || '9860350123453587').replace(/\D/g, '')
+
+      await db.insert(shops).values({
+        id: newShopId,
+        userId: user.telegramId || user.userId,
+        name: (body.name || 'Yangi Do‘kon').trim(),
+        description: body.description?.trim() || '',
+        slug: uniqueSlug,
+        cardNumber: cardDigits,
+        cardLast4: cardDigits.slice(-4),
+        cardBank: body.cardBank || 'HUMOCARD',
+        accountOwner: body.accountOwner?.trim() || 'Hisob egasi',
+        logoUrl: body.logoUrl?.trim() || null,
+        webhookUrl: body.webhookUrl?.trim() || null,
+        telegramChannelId: body.telegramChannelId?.trim() || null,
+        approved: true,
+      })
+
+      const created = await db.select().from(shops).where(eq(shops.id, newShopId)).limit(1)
+      const refreshedShops = await db
+        .select()
+        .from(shops)
+        .where(whereConditions.length > 1 ? or(...whereConditions) : whereConditions[0])
+        .orderBy(desc(shops.createdAt))
+
+      return NextResponse.json({
+        ok: true,
+        message: '🎉 Yangi do‘kon muvaffaqiyatli yaratildi!',
+        shop: created[0],
+        shops: refreshedShops,
+      })
+    }
+
+    // Handle Delete Shop
+    if (action === 'delete_shop') {
+      const targetId = shopId || body.targetShopId
+      if (!targetId) {
+        return NextResponse.json({ error: 'Do‘kon ID ko‘rsatilmadi' }, { status: 400 })
+      }
+
+      // Check ownership
+      const toDelete = await db.select().from(shops).where(eq(shops.id, targetId)).limit(1)
+      if (!toDelete.length) {
+        return NextResponse.json({ error: 'Do‘kon topilmadi' }, { status: 404 })
+      }
+
+      if (!isAdmin && toDelete[0].userId !== user.userId && toDelete[0].userId !== user.telegramId) {
+        return NextResponse.json({ error: 'Ruxsat berilmadi' }, { status: 403 })
+      }
+
+      await db.delete(shops).where(eq(shops.id, targetId))
+
+      const refreshedShops = await db
+        .select()
+        .from(shops)
+        .where(whereConditions.length > 1 ? or(...whereConditions) : whereConditions[0])
+        .orderBy(desc(shops.createdAt))
+
+      return NextResponse.json({
+        ok: true,
+        message: 'Do‘kon o‘chirildi',
+        shops: refreshedShops,
+        shop: refreshedShops[0] || null,
+      })
+    }
+
+    // Resolve Target Shop for updates & tests
+    let shop: any = null
+    if (shopId) {
+      const found = userShops.find((s) => s.id === shopId)
+      if (found) {
+        shop = found
+      } else if (isAdmin) {
+        const anyS = await db.select().from(shops).where(eq(shops.id, shopId)).limit(1)
+        if (anyS.length) shop = anyS[0]
+      }
+    }
+    if (!shop) {
+      shop = userShops[0]
+    }
 
     // Create if not exists
     if (!shop) {
       const newShopId = randomUUID()
       await db.insert(shops).values({
         id: newShopId,
-        userId: user.userId,
+        userId: user.telegramId || user.userId,
         name: body.name || 'Mening Do‘konim',
-        slug: `shop-${user.userId.slice(-6)}`,
+        slug: `shop-${(user.telegramId || user.userId).slice(-6)}`,
         cardNumber: body.cardNumber?.replace(/\D/g, '') || '9860350123453587',
         cardLast4: (body.cardNumber?.replace(/\D/g, '') || '3587').slice(-4),
         cardBank: body.cardBank || 'HUMOCARD',
@@ -105,10 +225,17 @@ export async function POST(request: Request) {
       await db.update(shops).set(updates).where(eq(shops.id, shop.id))
       const updated = await db.select().from(shops).where(eq(shops.id, shop.id)).limit(1)
 
+      const refreshedShops = await db
+        .select()
+        .from(shops)
+        .where(whereConditions.length > 1 ? or(...whereConditions) : whereConditions[0])
+        .orderBy(desc(shops.createdAt))
+
       return NextResponse.json({
         ok: true,
         message: 'Do‘kon ma’lumotlari muvaffaqiyatli saqlandi!',
         shop: updated[0],
+        shops: refreshedShops,
       })
     }
 
@@ -157,7 +284,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Telegram kanal ID si kiritilmagan' }, { status: 400 })
       }
 
-      const token = process.env.TELEGRAM_BOT_TOKEN
+      const token = process.env.TELEGRAM_BOT_TOKEN || process.env.HUMO_BOT_TOKEN
       if (!token) {
         return NextResponse.json({ error: 'Telegram bot token mavjud emas' }, { status: 500 })
       }

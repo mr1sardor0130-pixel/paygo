@@ -326,6 +326,41 @@ export const mandatoryChannels = pgTable('mandatory_channels', {
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 })
 
+// VIP & Paid Group / Channel Access (Pay-to-Write or Invite)
+export const paidAccessRooms = pgTable('paid_access_rooms', {
+  id: text('id').primaryKey(),
+  shopId: text('shopId'),
+  title: text('title').notNull(),
+  chatId: text('chatId').notNull(), // Telegram chat_id (e.g. -100...)
+  type: text('type').notNull().default('group'), // 'group' | 'channel'
+  mode: text('mode').notNull().default('write_permission'), // 'write_permission' (mute non-paying) | 'invite_link' (private invite)
+  hourlyPrice: integer('hourlyPrice').notNull().default(5000), // UZS
+  dailyPrice: integer('dailyPrice').notNull().default(15000), // UZS
+  weeklyPrice: integer('weeklyPrice').notNull().default(50000), // UZS
+  monthlyPrice: integer('monthlyPrice').notNull().default(120000), // UZS
+  currency: text('currency').notNull().default('UZS'),
+  active: boolean('active').notNull().default(true),
+  welcomeMessage: text('welcomeMessage'),
+  ownerTelegramId: text('ownerTelegramId'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
+export const paidAccessMembers = pgTable('paid_access_members', {
+  id: text('id').primaryKey(),
+  roomId: text('roomId').notNull(),
+  userId: text('userId').notNull(), // Telegram User ID
+  username: text('username'),
+  fullName: text('fullName'),
+  plan: text('plan').notNull().default('month'), // 'hour' | 'day' | 'week' | 'month'
+  amountPaid: integer('amountPaid').notNull().default(0),
+  status: text('status').notNull().default('active'), // 'active' | 'expired' | 'revoked'
+  startsAt: timestamp('startsAt').notNull().defaultNow(),
+  expiresAt: timestamp('expiresAt').notNull(),
+  paymentId: text('paymentId'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
 // Relations
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),

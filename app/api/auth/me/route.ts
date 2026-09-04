@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, ensureDbSchema } from '@/lib/db'
 import { authSessions, shops, systemSettings, mandatoryChannels } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, or, desc } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
 
 export const dynamic = 'force-dynamic'
@@ -50,6 +50,8 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization') || ''
   const token = authHeader.replace('Bearer ', '').trim()
   const telegramHeader = request.headers.get('x-telegram-user-id') || ''
+  const { searchParams } = new URL(request.url)
+  const reqShopId = searchParams.get('shopId')
 
   if (!token && !telegramHeader) {
     return NextResponse.json({ ok: false, error: 'Avtorizatsiya talab qilinadi' }, { status: 401 })
@@ -82,7 +84,31 @@ export async function GET(request: Request) {
     }
 
     const isAdmin = await isAdminTelegramId(telegramId || userId)
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userId))
+
+    // Search user's shops across both userId and telegramId
+    const searchUserIds = Array.from(new Set([userId, telegramId].filter(Boolean)))
+    const whereConditions = searchUserIds.map((id) => eq(shops.userId, id))
+    let userShops = await db
+      .select()
+      .from(shops)
+      .where(whereConditions.length > 1 ? or(...whereConditions) : whereConditions[0])
+      .orderBy(desc(shops.createdAt))
+
+    // If admin has no personal shops, allow seeing all available shops
+    if (userShops.length === 0 && isAdmin) {
+      userShops = await db.select().from(shops).orderBy(desc(shops.createdAt)).limit(10)
+    }
+
+    let activeShop = userShops[0] || null
+    if (reqShopId) {
+      const found = userShops.find((s) => s.id === reqShopId)
+      if (found) {
+        activeShop = found
+      } else if (isAdmin) {
+        const anyShop = await db.select().from(shops).where(eq(shops.id, reqShopId)).limit(1)
+        if (anyShop.length) activeShop = anyShop[0]
+      }
+    }
 
     let subCheck = { ok: true, missingChannels: [] as any[] }
     if (!isAdmin && telegramId) {
@@ -95,7 +121,7 @@ export async function GET(request: Request) {
       telegramId,
       isAdmin,
       role: isAdmin ? 'admin' : role,
-      shop: userShops[0] || null,
+      shop: activeShop,
       shops: userShops,
       mandatorySubRequired: !subCheck.ok,
       missingChannels: subCheck.missingChannels,
@@ -104,4 +130,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: err?.message }, { status: 500 })
   }
 }
-

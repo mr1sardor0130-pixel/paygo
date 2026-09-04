@@ -14,6 +14,8 @@ import {
   fundraisers,
   donations,
   mandatoryChannels,
+  paidAccessRooms,
+  paidAccessMembers,
 } from '@/lib/db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
@@ -113,11 +115,11 @@ const menu = {
     [{ text: '🛍 Do‘kon ochish' }, { text: '🏪 Mening do‘konim' }],
     [{ text: '💳 Mening kartam' }, { text: '🔐 Userbot ulash' }],
     [{ text: '🤝 Referal (Tekin Premium)' }, { text: '💎 Tariflar' }],
-    [{ text: '🧪 Webhook Test' }, { text: '📣 Kanal ulash' }],
-    [{ text: '🔗 Webhook sozlash' }, { text: '🌐 Veb-panelga kirish' }],
-    [{ text: '📊 Statistika' }, { text: '🏆 Liderlar' }],
-    [{ text: '❤️ Qo‘llab-quvvatlash (Ehson)' }, { text: '🤖 Bot haqida & FAQ' }],
-    [{ text: '⚖️ Faoliyat va Qonuniylik' }, { text: '📚 API hujjat' }],
+    [{ text: '💎 VIP Guruhlar' }, { text: '📣 Kanal ulash' }],
+    [{ text: '🧪 Webhook Test' }, { text: '🔗 Webhook sozlash' }],
+    [{ text: '🌐 Veb-panelga kirish' }, { text: '📊 Statistika' }],
+    [{ text: '🏆 Liderlar' }, { text: '❤️ Qo‘llab-quvvatlash (Ehson)' }],
+    [{ text: '🤖 Bot haqida & FAQ' }, { text: '📚 API hujjat' }],
     [{ text: '❌ Menyuni yopish' }],
   ],
   resize_keyboard: true,
@@ -1074,6 +1076,230 @@ async function renderAdminOfficialChannels(token: string, chatId: number | strin
   await send(token, chatId, text, { inline_keyboard })
 }
 
+let cachedBotUsername = ''
+async function getBotUsername(token: string): Promise<string> {
+  if (cachedBotUsername) return cachedBotUsername
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/getMe`)
+    const data = await res.json()
+    if (data.ok && data.result?.username) {
+      cachedBotUsername = data.result.username
+      return cachedBotUsername
+    }
+  } catch {}
+  return 'Pay_Gouzbot'
+}
+
+async function renderVipRooms(token: string, chatId: number | string) {
+  let rooms: any[] = []
+  try {
+    await ensureDbSchema()
+    rooms = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.active, true))
+  } catch {}
+
+  if (!rooms.length) {
+    await send(
+      token,
+      chatId,
+      `💎 <b>VIP Guruhlar va Pullik Yozish Xizmatlari</b>\n\n` +
+      `Hozircha tizimda ochiq VIP guruhlar qo‘shilmagan.\n\n` +
+      `ℹ️ <i>Agar siz o‘z guruhingizda pullik yozish yoki VIP a’zolik tizimini yoqmoqchi bo‘lsangiz, Sayt Veb CRM paneli orqali yangi guruh qo‘shishingiz mumkin.</i>`,
+      {
+        inline_keyboard: [
+          [{ text: '🌐 Sayt Veb CRM ga o‘tish', url: `${APP_URL}/admin` }],
+        ],
+      }
+    )
+    return
+  }
+
+  const roomListText = rooms
+    .map(
+      (r, idx) =>
+        `<b>${idx + 1}️⃣ ${r.title}</b>\n` +
+        `• Turi: ${r.type === 'channel' ? '📢 Kanal' : '👥 Guruh'}\n` +
+        `• Xizmat: ${r.mode === 'write_permission' ? '✍️ Xabar yozish ruxsati' : '🚪 Maxfiy guruhga kirish'}\n` +
+        `• ⏱ 1 Soat: <code>${Number(r.hourlyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+        `• 📅 1 Kun: <code>${Number(r.dailyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+        `• ⭐️ 1 Oy: <code>${Number(r.monthlyPrice).toLocaleString('uz-UZ')} UZS</code>`
+    )
+    .join('\n\n─────────────\n\n')
+
+  const buttons = rooms.map((r) => [
+    { text: `💎 ${r.title} (Tariflar)`, callback_data: `view_room_tariffs_${r.id}` },
+  ])
+
+  await send(
+    token,
+    chatId,
+    `💎 <b>PayGo VIP Guruhlar va Pullik Yozish Xizmatlari</b>\n\n` +
+    `${roomListText}\n\n` +
+    `👇 <i>Tariflar va kirish huquqini sotib olish uchun kerakli guruhni tanlang:</i>`,
+    { inline_keyboard: buttons }
+  )
+}
+
+async function renderRoomTariffs(token: string, chatId: number | string, roomId: string) {
+  let room: any = null
+  try {
+    await ensureDbSchema()
+    const rows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, roomId)).limit(1)
+    if (rows.length) room = rows[0]
+  } catch {}
+
+  if (!room) {
+    await send(token, chatId, '⚠️ Guruh topilmadi.')
+    return
+  }
+
+  const text =
+    `💎 <b>${room.title} — VIP Kirish & Yozish Huquqi</b>\n\n` +
+    `• Turi: <b>${room.type === 'channel' ? '📢 Telegram Kanal' : '👥 Telegram Guruh'}</b>\n` +
+    `• Xizmat: <b>${room.mode === 'write_permission' ? '✍️ Guruhda xabar yozish ruxsati' : '🚪 VIP guruhga kirish'}</b>\n\n` +
+    `Mavjud tariflar:\n` +
+    `• ⏱ <b>1 Soat:</b> <code>${Number(room.hourlyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+    `• 📅 <b>1 Kun:</b> <code>${Number(room.dailyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+    `• 🗓 <b>1 Hafta:</b> <code>${Number(room.weeklyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+    `• ⭐️ <b>1 Oy:</b> <code>${Number(room.monthlyPrice).toLocaleString('uz-UZ')} UZS</code>\n\n` +
+    `To‘lov qilganingizdan so‘ng guruhda yozish huquqi yoki maxsus taklif havolasi avtomatik ravishda taqdim etiladi. Kerakli muddatni tanlang: 👇`
+
+  const buttons = [
+    [
+      { text: `⏱ 1 Soat (${Number(room.hourlyPrice).toLocaleString()} UZS)`, callback_data: `buy_room_${room.id}_hour` },
+      { text: `📅 1 Kun (${Number(room.dailyPrice).toLocaleString()} UZS)`, callback_data: `buy_room_${room.id}_day` },
+    ],
+    [
+      { text: `🗓 1 Hafta (${Number(room.weeklyPrice).toLocaleString()} UZS)`, callback_data: `buy_room_${room.id}_week` },
+      { text: `⭐️ 1 Oy (${Number(room.monthlyPrice).toLocaleString()} UZS)`, callback_data: `buy_room_${room.id}_month` },
+    ],
+    [{ text: '🔙 Guruhlar ro‘yxatiga qaytish', callback_data: 'view_vip_rooms' }],
+  ]
+
+  await send(token, chatId, text, { inline_keyboard: buttons })
+}
+
+async function handleRoomPaymentSuccess(
+  token: string,
+  chatId: number | string,
+  userIdStr: string,
+  payment: any,
+  roomId: string,
+  period: 'hour' | 'day' | 'week' | 'month'
+) {
+  try {
+    await ensureDbSchema()
+    const roomRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, roomId)).limit(1)
+    if (!roomRows.length) return
+    const room = roomRows[0]
+
+    const now = Date.now()
+    let durationMs = 30 * 24 * 60 * 60 * 1000
+    if (period === 'hour') durationMs = 60 * 60 * 1000
+    else if (period === 'day') durationMs = 24 * 60 * 60 * 1000
+    else if (period === 'week') durationMs = 7 * 24 * 60 * 60 * 1000
+    else if (period === 'month') durationMs = 30 * 24 * 60 * 60 * 1000
+
+    const expiresAt = new Date(now + durationMs)
+
+    await db.update(payments).set({ status: 'paid', matchedAt: new Date() }).where(eq(payments.id, payment.id))
+
+    const existingMem = await db
+      .select()
+      .from(paidAccessMembers)
+      .where(and(eq(paidAccessMembers.roomId, room.id), eq(paidAccessMembers.userId, userIdStr)))
+      .limit(1)
+
+    if (existingMem.length > 0) {
+      await db
+        .update(paidAccessMembers)
+        .set({
+          status: 'active',
+          period,
+          expiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(paidAccessMembers.id, existingMem[0].id))
+    } else {
+      await db.insert(paidAccessMembers).values({
+        id: `pmem_${randomUUID().slice(0, 10)}`,
+        roomId: room.id,
+        userId: userIdStr,
+        status: 'active',
+        period,
+        expiresAt,
+      })
+    }
+
+    let inviteLink = ''
+    if (room.mode === 'write_permission') {
+      try {
+        await fetch(`https://api.telegram.org/bot${token}/restrictChatMember`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: room.chatId,
+            user_id: Number(userIdStr),
+            permissions: {
+              can_send_messages: true,
+              can_send_media_messages: true,
+              can_send_other_messages: true,
+              can_add_web_page_previews: true,
+            },
+          }),
+        })
+      } catch (tgErr) {
+        console.warn('restrictChatMember err:', tgErr)
+      }
+    } else if (room.mode === 'invite_only') {
+      try {
+        const linkRes = await fetch(`https://api.telegram.org/bot${token}/createChatInviteLink`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: room.chatId,
+            member_limit: 1,
+            name: `VIP-${userIdStr}`,
+          }),
+        })
+        const linkData = await linkRes.json()
+        if (linkData.ok && linkData.result?.invite_link) {
+          inviteLink = linkData.result.invite_link
+        }
+      } catch (tgErr) {
+        console.warn('createChatInviteLink err:', tgErr)
+      }
+    }
+
+    const expiryStr = expiresAt.toLocaleString('uz-UZ', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+    const buttons: any[] = []
+    if (inviteLink) {
+      buttons.push([{ text: '🚪 Guruhga kirish (Bir martalik havola)', url: inviteLink }])
+    }
+    buttons.push([{ text: '💎 VIP Guruhlar', callback_data: 'view_vip_rooms' }])
+
+    await send(
+      token,
+      chatId,
+      `🎉 <b>To‘lov Muvaffaqiyatli Tasdiqlandi!</b>\n\n` +
+      `💎 <b>Guruh/Kanal:</b> ${room.title}\n` +
+      `⏱ <b>Muddati:</b> ${period === 'hour' ? '1 Soat' : period === 'day' ? '1 Kun' : period === 'week' ? '1 Hafta' : '1 Oy'}\n` +
+      `⏳ <b>Amal qilish vaqti:</b> <code>${expiryStr}</code> gacha\n\n` +
+      `✅ <b>Sizga guruhda erkin yozish ruxsati muvaffaqiyatli faollashtirildi!</b>\n` +
+      `Endi guruhda cheklovlarsiz muloqot qilishingiz mumkin.`,
+      { inline_keyboard: buttons }
+    )
+  } catch (err) {
+    console.error('handleRoomPaymentSuccess error:', err)
+  }
+}
+
 export async function GET() {
   return NextResponse.json({ ok: true, service: 'paygo-telegram-webhook', time: new Date().toISOString() })
 }
@@ -1138,6 +1364,134 @@ export async function POST(request: Request) {
     const data = cb.data || ''
 
     await answerCallback(token, cb.id)
+
+    // Mandatory subscription enforcement for non-admin callback queries
+    const isExemptCb =
+      data === 'check_mandatory_sub' ||
+      data === 'accept_terms' ||
+      data === 'view_terms' ||
+      data === 'view_offer' ||
+      data === 'view_legal' ||
+      data.startsWith('admin_') ||
+      data.startsWith('adm_')
+
+    if (!isAdmin && !isExemptCb) {
+      const subCheck = await checkMandatorySubscription(token, userIdStr)
+      if (!subCheck.ok && subCheck.missingChannels.length > 0) {
+        const buttons = subCheck.missingChannels.map((ch) => [
+          { text: `📢 ${ch.name}`, url: ch.inviteUrl },
+        ])
+        buttons.push([{ text: '✅ Obunani tekshirish', callback_data: 'check_mandatory_sub' }])
+        await send(
+          token,
+          chatId,
+          `⚠️ <b>Hurmatli foydalanuvchi!</b>\n\n` +
+          `Bot xizmatlaridan to‘liq foydalanish uchun quyidagi rasmiy kanallarimizga obuna bo‘lishingiz shart:\n\n` +
+          subCheck.missingChannels.map((c, i) => `${i + 1}. <b>${c.name}</b>`).join('\n') +
+          `\n\nObuna bo‘lgach, <b>"✅ Obunani tekshirish"</b> tugmasini bosing:`,
+          { inline_keyboard: buttons }
+        )
+        return NextResponse.json({ ok: true })
+      }
+    }
+
+    // VIP Rooms Callbacks
+    if (data === 'view_vip_rooms') {
+      await renderVipRooms(token, chatId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('view_room_tariffs_')) {
+      const rId = data.replace('view_room_tariffs_', '')
+      await renderRoomTariffs(token, chatId, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('buy_room_')) {
+      const parts = data.replace('buy_room_', '').split('_')
+      const period = parts.pop() as 'hour' | 'day' | 'week' | 'month'
+      const rId = parts.join('_')
+
+      const roomRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (!roomRows.length) {
+        await send(token, chatId, '⚠️ Guruh topilmadi.')
+        return NextResponse.json({ ok: true })
+      }
+      const room = roomRows[0]
+      let price = room.monthlyPrice
+      if (period === 'hour') price = room.hourlyPrice
+      else if (period === 'day') price = room.dailyPrice
+      else if (period === 'week') price = room.weeklyPrice
+      else if (period === 'month') price = room.monthlyPrice
+
+      const paymentId = `proom_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+      const expAt = new Date(Date.now() + 5 * 60 * 1000)
+
+      let shop = null
+      if (room.shopId) {
+        const shRows = await db.select().from(shops).where(eq(shops.id, room.shopId)).limit(1)
+        if (shRows.length) shop = shRows[0]
+      }
+      if (!shop) {
+        const anySh = await db.select().from(shops).limit(1)
+        if (anySh.length) shop = anySh[0]
+      }
+
+      const cardNum = shop?.cardNumber || '9860350123453587'
+      const cardOwner = shop?.accountOwner || 'Hisob egasi'
+      const cardBank = shop?.cardBank || 'HUMOCARD'
+
+      await db.insert(payments).values({
+        id: paymentId,
+        shopId: shop?.id || 'default',
+        userId: userIdStr,
+        amount: String(price),
+        cardNumber: cardNum,
+        cardLast4: cardNum.slice(-4),
+        cardBank,
+        accountOwner: cardOwner,
+        status: 'pending',
+        expiresAt: expAt,
+      })
+
+      const payText =
+        `💎 <b>VIP Guruh Uchun To‘lov Yaratildi:</b>\n\n` +
+        `• Guruh: <b>${room.title}</b>\n` +
+        `• Tarif: <b>${period === 'hour' ? '1 Soat' : period === 'day' ? '1 Kun' : period === 'week' ? '1 Hafta' : '1 Oy'}</b>\n` +
+        `• Summa: <code>${Number(price).toLocaleString('uz-UZ')} UZS</code>\n` +
+        `• Karta: <code>${formatCard(cardNum)}</code> (${cardBank})\n` +
+        `• Egasi: <b>${cardOwner}</b>\n` +
+        `⏱ <b>Amal qilish vaqti:</b> 5 daqiqa\n\n` +
+        `To‘lovni amalga oshirgach, HUMO to‘lov xabarnomasi avtomatik ravishda tasdiqlanadi yoki quyidagi tugma orqali tekshirishingiz mumkin:`
+
+      const payMarkup = {
+        inline_keyboard: [
+          [{ text: '💳 To‘lov sahifasini ochish (Web)', url: `${APP_URL}/pay/${paymentId}` }],
+          [{ text: '⚡️ To‘lovni tasdiqlash (Test/Simulyatsiya)', callback_data: `confirm_room_pay_${paymentId}_${room.id}_${period}` }],
+          [{ text: '🔙 Tariflarga qaytish', callback_data: `view_room_tariffs_${room.id}` }],
+        ],
+      }
+
+      await send(token, chatId, payText, payMarkup)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('confirm_room_pay_')) {
+      const rawRest = data.replace('confirm_room_pay_', '')
+      const parts = rawRest.split('_')
+      const period = parts.pop() as 'hour' | 'day' | 'week' | 'month'
+      const rId = parts.pop() || ''
+      const paymentId = parts.join('_')
+
+      const payRows = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1)
+      if (!payRows.length) {
+        await send(token, chatId, '⚠️ To‘lov topilmadi.')
+        return NextResponse.json({ ok: true })
+      }
+
+      await handleRoomPaymentSuccess(token, chatId, userIdStr, payRows[0], rId, period)
+      return NextResponse.json({ ok: true })
+    }
 
     // Admin inline button actions for shutdown and maintenance
     if (data === 'admin_shutdown_on') {
@@ -1993,6 +2347,134 @@ export async function POST(request: Request) {
   const message = update.message
   if (!message?.chat?.id) return NextResponse.json({ ok: true })
 
+  // -------------------------------------------------------------
+  // GROUP / SUPERGROUP HANDLER (VIP Paid Rooms & Write Permissions)
+  // -------------------------------------------------------------
+  if (message.chat.type === 'group' || message.chat.type === 'supergroup') {
+    const groupIdStr = String(message.chat.id)
+    const senderIdStr = String(message.from?.id || '')
+    const isBot = Boolean(message.from?.is_bot)
+
+    // Check if group is linked to VIP Paid Rooms
+    try {
+      await ensureDbSchema()
+      const roomRows = await db
+        .select()
+        .from(paidAccessRooms)
+        .where(and(eq(paidAccessRooms.chatId, groupIdStr), eq(paidAccessRooms.active, true)))
+        .limit(1)
+
+      if (roomRows.length > 0 && !isBot && senderIdStr) {
+        const room = roomRows[0]
+        let isGroupAdmin = false
+        try {
+          const memberRes = await fetch(
+            `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(groupIdStr)}&user_id=${senderIdStr}`
+          )
+          const memberData = await memberRes.json()
+          if (memberData.ok && memberData.result) {
+            const status = memberData.result.status
+            if (status === 'creator' || status === 'administrator') {
+              isGroupAdmin = true
+            }
+          }
+        } catch {}
+
+        const isSysAdmin = await isAdminTelegramId(senderIdStr)
+
+        if (!isGroupAdmin && !isSysAdmin && room.mode === 'write_permission') {
+          // Check if sender has active paid access
+          const memRows = await db
+            .select()
+            .from(paidAccessMembers)
+            .where(
+              and(
+                eq(paidAccessMembers.roomId, room.id),
+                eq(paidAccessMembers.userId, senderIdStr),
+                eq(paidAccessMembers.status, 'active')
+              )
+            )
+            .limit(1)
+
+          const hasActive =
+            memRows.length > 0 &&
+            memRows[0].expiresAt &&
+            new Date(memRows[0].expiresAt) > new Date()
+
+          if (!hasActive) {
+            // 1. Delete the unauthorized message
+            try {
+              await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: message.chat.id,
+                  message_id: message.message_id,
+                }),
+              })
+            } catch {}
+
+            // 2. Restrict user in group
+            try {
+              await fetch(`https://api.telegram.org/bot${token}/restrictChatMember`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: message.chat.id,
+                  user_id: Number(senderIdStr),
+                  permissions: {
+                    can_send_messages: false,
+                    can_send_media_messages: false,
+                    can_send_other_messages: false,
+                    can_add_web_page_previews: false,
+                  },
+                }),
+              })
+            } catch {}
+
+            // 3. Send warning in group
+            const botUser = await getBotUsername(token)
+            const botLink = `https://t.me/${botUser}?start=pay_room_${room.id}`
+            const warnText =
+              `🚫 <b><a href="tg://user?id=${senderIdStr}">${message.from?.first_name || 'Foydalanuvchi'}</a></b>, ushbu guruhda yozish uchun ruxsat kerak!\n\n` +
+              `• ⏱ 1 Soat: <b>${Number(room.hourlyPrice).toLocaleString('uz-UZ')} UZS</b>\n` +
+              `• 📅 1 Kun: <b>${Number(room.dailyPrice).toLocaleString('uz-UZ')} UZS</b>\n` +
+              `• ⭐️ 1 Oy: <b>${Number(room.monthlyPrice).toLocaleString('uz-UZ')} UZS</b>\n\n` +
+              `Yozish huquqini sotib olish va darhol ochish uchun quyidagi tugmani bosing 👇`
+
+            await send(token, message.chat.id, warnText, {
+              inline_keyboard: [[{ text: '💎 Yozish huquqini sotib olish (Botda)', url: botLink }]],
+            })
+
+            return NextResponse.json({ ok: true })
+          }
+        }
+      }
+    } catch (gErr) {
+      console.warn('Group check error:', gErr)
+    }
+
+    const rawGrp = (message.text ?? '').trim()
+    if (rawGrp === '/link_vip' || rawGrp === '/setup_vip') {
+      const senderIdStr = String(message.from?.id || '')
+      const isSysAdmin = await isAdminTelegramId(senderIdStr)
+      if (isSysAdmin) {
+        await send(
+          token,
+          message.chat.id,
+          `👑 <b>Guruhni VIP Tizimiga Ulash:</b>\n\n` +
+          `• Guruh ID: <code>${message.chat.id}</code>\n` +
+          `• Nomi: <b>${message.chat.title || 'Telegram Guruh'}</b>\n\n` +
+          `Ushbu guruhni Veb CRM panelida "VIP Guruh & Pullik Yozish" bo‘limida osongina sozlab, narxlarni belgilashingiz mumkin:`,
+          { inline_keyboard: [[{ text: '🌐 Web CRM da sozlash', url: `${APP_URL}/admin` }]] }
+        )
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
   const chatId = message.chat.id
   const userIdStr = String(chatId)
   const raw = (message.text ?? '').trim()
@@ -2112,6 +2594,13 @@ export async function POST(request: Request) {
     text === 'Bekor qilish' ||
     raw === '/cancel' ||
     raw === '/back'
+
+  const isVipRoomsCmd =
+    norm.includes('vip guruh') ||
+    norm.includes('pullik yozish') ||
+    text === '💎 VIP Guruhlar' ||
+    raw === '/viprooms' ||
+    raw === '/vip'
 
   // -------------------------------------------------------------
   // PHOTO UPLOAD (e.g. for Logo)
@@ -2782,6 +3271,13 @@ export async function POST(request: Request) {
       }
     }
 
+    // Check if this is a VIP room pay deep link: /start pay_room_xyz
+    if (startPayload.startsWith('pay_room_')) {
+      const roomId = startPayload.replace('pay_room_', '').trim()
+      await renderRoomTariffs(token, chatId, roomId)
+      return NextResponse.json({ ok: true })
+    }
+
     // Check if this is a referral link: /start ref_123456789
     if (startPayload.startsWith('ref_')) {
       const referrerId = startPayload.replace('ref_', '').trim()
@@ -3105,6 +3601,15 @@ export async function POST(request: Request) {
       `To‘lov tasdiqlangach Webhook va Kanalingizga to‘liq JSON ma’lumot boradi.`,
       testAmountsKeyboard
     )
+    return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // VIP GURUHLAR & PULLIK YOZISH
+  // -------------------------------------------------------------
+  if (isVipRoomsCmd) {
+    await stateDelete(chatId)
+    await renderVipRooms(token, chatId)
     return NextResponse.json({ ok: true })
   }
 

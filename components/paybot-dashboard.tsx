@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-type TabType = 'overview' | 'shop_settings' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels'
+type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels'
 
 export function PaybotDashboard() {
   // Auth state
@@ -58,7 +58,22 @@ export function PaybotDashboard() {
   const [loading, setLoading] = useState(false)
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
-  // Merchant Shop Settings
+  // Merchant Shop Settings & Multi-Shop state
+  const [myShops, setMyShops] = useState<any[]>([])
+  const [activeShopId, setActiveShopId] = useState<string>('')
+  const [isShopSwitcherOpen, setIsShopSwitcherOpen] = useState(false)
+  const [isNewShopModalOpen, setIsNewShopModalOpen] = useState(false)
+  const [creatingShop, setCreatingShop] = useState(false)
+  const [newShopForm, setNewShopForm] = useState({
+    name: '',
+    description: '',
+    cardNumber: '9860350123453587',
+    accountOwner: 'Hisob egasi',
+    cardBank: 'HUMOCARD',
+    webhookUrl: '',
+    telegramChannelId: '',
+  })
+
   const [shopForm, setShopForm] = useState({
     name: '',
     description: '',
@@ -73,6 +88,34 @@ export function PaybotDashboard() {
   const [savingShop, setSavingShop] = useState(false)
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [testingChannel, setTestingChannel] = useState(false)
+
+  // VIP Group / Channel Access State
+  const [vipRooms, setVipRooms] = useState<any[]>([])
+  const [vipMembers, setVipMembers] = useState<any[]>([])
+  const [vipStats, setVipStats] = useState<any>(null)
+  const [vipLoading, setVipLoading] = useState(false)
+  const [isNewVipRoomModalOpen, setIsNewVipRoomModalOpen] = useState(false)
+  const [isAddVipMemberModalOpen, setIsAddVipMemberModalOpen] = useState(false)
+  const [newVipRoomForm, setNewVipRoomForm] = useState({
+    title: '',
+    chatId: '',
+    type: 'group',
+    mode: 'write_permission',
+    hourlyPrice: 5000,
+    dailyPrice: 15000,
+    weeklyPrice: 50000,
+    monthlyPrice: 120000,
+    welcomeMessage: '',
+  })
+  const [addVipMemberForm, setAddVipMemberForm] = useState({
+    roomId: '',
+    userId: '',
+    username: '',
+    fullName: '',
+    plan: 'month',
+    durationHours: 720,
+    amountPaid: 120000,
+  })
 
   // Official PayGo Platform Logo & Admin Editing State
   const [paygoOfficialLogo, setPaygoOfficialLogo] = useState('')
@@ -290,9 +333,10 @@ export function PaybotDashboard() {
   }, [loginPendingToken, currentUser])
 
   // 4. Verify User Session
-  const verifyUser = async (authToken: string, fallbackUserId?: string) => {
+  const verifyUser = async (authToken: string, fallbackUserId?: string, targetShopId?: string) => {
     try {
-      const res = await fetch('/api/auth/me', {
+      const url = targetShopId ? `/api/auth/me?shopId=${targetShopId}` : '/api/auth/me'
+      const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${authToken}`,
           'x-telegram-user-id': fallbackUserId || '',
@@ -301,8 +345,12 @@ export function PaybotDashboard() {
       const data = await res.json()
       if (data.ok) {
         setCurrentUser(data)
+        if (data.shops && data.shops.length > 0) {
+          setMyShops(data.shops)
+        }
         if (data.shop) {
           setShopData(data.shop)
+          setActiveShopId(data.shop.id)
           setShopForm({
             name: data.shop.name || '',
             description: data.shop.description || '',
@@ -314,6 +362,7 @@ export function PaybotDashboard() {
             telegramChannelId: data.shop.telegramChannelId || '',
           })
         }
+        loadVipRooms(authToken, fallbackUserId || data.telegramId || data.userId)
         // If admin, load CRM
         if (data.isAdmin) {
           loadCrm(data.telegramId || data.userId)
@@ -326,6 +375,298 @@ export function PaybotDashboard() {
       }
     } catch {
       setCurrentUser(null)
+    }
+  }
+
+  // Switch Active Shop
+  const handleSelectShop = (selected: any) => {
+    setShopData(selected)
+    setActiveShopId(selected.id)
+    setIsShopSwitcherOpen(false)
+    setShopForm({
+      name: selected.name || '',
+      description: selected.description || '',
+      cardNumber: selected.cardNumber || '9860350123453587',
+      accountOwner: selected.accountOwner || 'Hisob egasi',
+      cardBank: selected.cardBank || 'HUMOCARD',
+      logoUrl: selected.logoUrl || '',
+      webhookUrl: selected.webhookUrl || '',
+      telegramChannelId: selected.telegramChannelId || '',
+    })
+    showToast(`Faol do‘kon tanlandi: ${selected.name}`)
+  }
+
+  // Create New Shop
+  const handleCreateNewShop = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newShopForm.name.trim()) {
+      showToast('Do‘kon nomini kiriting', 'error')
+      return
+    }
+    setCreatingShop(true)
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/shop/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'create_shop',
+          userId: effectiveUserId,
+          ...newShopForm,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        if (data.shops) setMyShops(data.shops)
+        if (data.shop) handleSelectShop(data.shop)
+        setIsNewShopModalOpen(false)
+        setNewShopForm({
+          name: '',
+          description: '',
+          cardNumber: '9860350123453587',
+          accountOwner: 'Hisob egasi',
+          cardBank: 'HUMOCARD',
+          webhookUrl: '',
+          telegramChannelId: '',
+        })
+        showToast('🎉 Yangi do‘kon muvaffaqiyatli ochildi!')
+      } else {
+        showToast(data.error || 'Do‘kon ochishda xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    } finally {
+      setCreatingShop(false)
+    }
+  }
+
+  // Delete Shop
+  const handleDeleteShop = async (targetShopId: string, shopName: string) => {
+    if (!confirm(`Haqiqatan ham "${shopName}" do‘konini o‘chirmoqchimisiz?`)) return
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/shop/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'delete_shop',
+          userId: effectiveUserId,
+          shopId: targetShopId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        if (data.shops) setMyShops(data.shops)
+        if (data.shop) handleSelectShop(data.shop)
+        showToast('Do‘kon muvaffaqiyatli o‘chirildi')
+      } else {
+        showToast(data.error || 'O‘chirishda xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    }
+  }
+
+  // Load VIP Rooms
+  const loadVipRooms = async (authToken?: string, uid?: string) => {
+    const effToken = authToken || token
+    const effUid = uid || currentUser?.telegramId || currentUser?.userId || ''
+    setVipLoading(true)
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        headers: {
+          Authorization: `Bearer ${effToken}`,
+          'x-telegram-user-id': effUid,
+        },
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setVipRooms(data.rooms || [])
+        setVipMembers(data.members || [])
+        setVipStats(data.stats || null)
+      }
+    } catch {
+      // safe bypass
+    } finally {
+      setVipLoading(false)
+    }
+  }
+
+  // Create VIP Room
+  const handleCreateVipRoom = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newVipRoomForm.title.trim() || !newVipRoomForm.chatId.trim()) {
+      showToast('Nomi va Chat ID kiritilishi shart', 'error')
+      return
+    }
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'create_room',
+          ...newVipRoomForm,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        if (data.rooms) setVipRooms(data.rooms)
+        setIsNewVipRoomModalOpen(false)
+        setNewVipRoomForm({
+          title: '',
+          chatId: '',
+          type: 'group',
+          mode: 'write_permission',
+          hourlyPrice: 5000,
+          dailyPrice: 15000,
+          weeklyPrice: 50000,
+          monthlyPrice: 120000,
+          welcomeMessage: '',
+        })
+        loadVipRooms()
+        showToast('VIP Guruh/Kanal ulandi!')
+      } else {
+        showToast(data.error || 'Xatolik yuz berdi', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    }
+  }
+
+  // Toggle VIP Room Active
+  const handleToggleVipRoom = async (id: string, currentActive: boolean) => {
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'update_room',
+          id,
+          active: !currentActive,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast(!currentActive ? 'VIP rejim faollashtirildi' : 'VIP rejim to‘xtatildi')
+        loadVipRooms()
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    }
+  }
+
+  // Delete VIP Room
+  const handleDeleteVipRoom = async (id: string, title: string) => {
+    if (!confirm(`Haqiqatan ham "${title}" guruhini tizimdan uzmoqchimisiz?`)) return
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'delete_room',
+          id,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast('Guruh uzildi')
+        loadVipRooms()
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    }
+  }
+
+  // Add VIP Member manually
+  const handleAddVipMember = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!addVipMemberForm.roomId || !addVipMemberForm.userId) {
+      showToast('Guruh va Telegram ID kiritilishi shart', 'error')
+      return
+    }
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'add_member',
+          ...addVipMemberForm,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setIsAddVipMemberModalOpen(false)
+        setAddVipMemberForm({
+          roomId: '',
+          userId: '',
+          username: '',
+          fullName: '',
+          plan: 'month',
+          durationHours: 720,
+          amountPaid: 120000,
+        })
+        loadVipRooms()
+        showToast('Foydalanuvchiga ruxsat berildi!')
+      } else {
+        showToast(data.error || 'Xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    }
+  }
+
+  // Revoke VIP Member
+  const handleRevokeVipMember = async (id: string) => {
+    if (!confirm('Ushbu a’zoning ruxsatini bekor qilmoqchimisiz?')) return
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'revoke_member',
+          id,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast('Ruxsat bekor qilindi')
+        loadVipRooms()
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
     }
   }
 
@@ -556,6 +897,7 @@ export function PaybotDashboard() {
         },
         body: JSON.stringify({
           action: 'update_shop',
+          shopId: shopData?.id || activeShopId,
           userId: effectiveUserId,
           ...shopForm,
         }),
@@ -563,6 +905,7 @@ export function PaybotDashboard() {
       const data = await res.json()
       if (data.ok) {
         setShopData(data.shop)
+        if (data.shops) setMyShops(data.shops)
         showToast('Do‘kon ma’lumotlari muvaffaqiyatli saqlandi!')
       } else {
         showToast(data.error || 'Saqlashda xatolik yuz berdi', 'error')
@@ -930,6 +1273,61 @@ export function PaybotDashboard() {
                 </span>
               )}
             </div>
+
+            {/* Header Multi-Shop Selector */}
+            {myShops.length > 0 && (
+              <div className="relative hidden md:block">
+                <button
+                  type="button"
+                  onClick={() => setIsShopSwitcherOpen(!isShopSwitcherOpen)}
+                  className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100/70 px-3 py-1.5 text-xs font-bold text-[#1769e0] transition"
+                >
+                  <Store size={14} />
+                  <span className="max-w-[130px] truncate">{shopData?.name || 'Do‘kon'}</span>
+                  <span className="rounded-full bg-blue-200 px-1.5 py-0.5 text-[10px]">{myShops.length}</span>
+                </button>
+
+                {isShopSwitcherOpen && (
+                  <div className="absolute left-0 mt-1.5 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl z-50 animate-in fade-in zoom-in-95">
+                    <div className="px-2.5 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Sizning Do‘konlaringiz ({myShops.length})
+                    </div>
+                    <div className="max-h-56 overflow-y-auto space-y-1">
+                      {myShops.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => handleSelectShop(s)}
+                          className={`w-full flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                            s.id === shopData?.id
+                              ? 'bg-blue-50 text-[#1769e0] font-bold'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="truncate">
+                            <p className="truncate font-semibold">{s.name}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">••{s.cardLast4 || '3587'}</p>
+                          </div>
+                          {s.id === shopData?.id && <Check size={14} className="text-[#1769e0]" />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-1.5 border-t border-slate-100 pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsShopSwitcherOpen(false)
+                          setIsNewShopModalOpen(true)
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#1769e0] px-2.5 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition"
+                      >
+                        <Plus size={13} /> Yangi do‘kon qo‘shish
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right Action buttons */}
@@ -970,6 +1368,31 @@ export function PaybotDashboard() {
             }`}
           >
             <Settings2 size={15} /> ⚙️ Do‘kon Sozlamalari & Karta
+          </button>
+
+          <button
+            onClick={() => setActiveTab('my_shops')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === 'my_shops'
+                ? 'bg-[#1769e0] text-white shadow-sm'
+                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
+            }`}
+          >
+            <Store size={15} /> 🏪 Mening Do‘konlarim ({myShops.length || 1})
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('vip_rooms')
+              loadVipRooms()
+            }}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === 'vip_rooms'
+                ? 'bg-[#1769e0] text-white shadow-sm'
+                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
+            }`}
+          >
+            <Lock size={15} /> 🔐 VIP Guruh & Pullik Yozish ({vipRooms.length})
           </button>
 
           <button
@@ -1080,7 +1503,51 @@ export function PaybotDashboard() {
         {/* TAB: SHOP SETTINGS (Full Card Number, Channel, Webhook, Logo) */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'shop_settings' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="space-y-6">
+            {/* Active Shop Selector Banner */}
+            <div className="rounded-3xl border border-blue-200 bg-gradient-to-r from-blue-50/80 via-white to-indigo-50/60 p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="grid size-12 place-items-center rounded-2xl bg-[#1769e0] text-white shadow-sm">
+                  <Store size={22} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">Tahrirlanayotgan faol do‘kon:</span>
+                    <span className="inline-flex items-center rounded-md bg-emerald-100/80 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                      Jami {myShops.length || 1} ta do‘koningiz bor
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">{shopData?.name || 'Do‘kon'}</h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={shopData?.id || ''}
+                  onChange={(e) => {
+                    const sel = myShops.find((s) => s.id === e.target.value)
+                    if (sel) handleSelectShop(sel)
+                  }}
+                  className="rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#1769e0] shadow-sm"
+                >
+                  {myShops.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      🏪 {s.name} ({s.cardLast4 ? `••${s.cardLast4}` : 'Karta'})
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => setIsNewShopModalOpen(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-[#1769e0] px-3.5 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-sm"
+                >
+                  <Plus size={14} /> Yangi Do‘kon
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left 2 Cols: Form */}
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
@@ -1611,6 +2078,464 @@ export function PaybotDashboard() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: MY SHOPS (All Merchant Shops Grid & Management) */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'my_shops' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-blue-200 bg-white p-6 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#1769e0]">
+                    🏪 Ko‘p Do‘konli Tizim
+                  </span>
+                  <span className="text-xs font-semibold text-slate-500">
+                    Jami {myShops.length || 1} ta do‘kon
+                  </span>
+                </div>
+                <h2 className="text-xl font-bold text-[#152238]">Mening Barcha Do‘konlarim</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Har bir do‘kon alohida karta, shaxsiy Webhook va o‘z Telegram kanaliga ega bo‘ladi.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsNewShopModalOpen(true)}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-[#1769e0] px-5 py-3 text-xs font-bold text-white hover:bg-blue-700 transition shadow-sm"
+              >
+                <Plus size={16} /> Yangi Do‘kon Qo‘shish
+              </button>
+            </div>
+
+            {myShops.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
+                <Store size={40} className="mx-auto text-slate-400 mb-3" />
+                <h3 className="text-base font-bold text-slate-800">Hozircha do‘koningiz yo‘q</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  Birinchi do‘koningizni oching va to‘lovlarni qabul qilishni boshlang.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsNewShopModalOpen(true)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#1769e0] px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition"
+                >
+                  <Plus size={15} /> Yangi Do‘kon Ochish
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {myShops.map((shop) => {
+                  const isActive = shop.id === shopData?.id
+                  return (
+                    <div
+                      key={shop.id}
+                      className={`relative flex flex-col justify-between rounded-3xl border bg-white p-6 shadow-sm transition hover:shadow-md ${
+                        isActive ? 'border-[#1769e0] ring-2 ring-blue-100' : 'border-slate-200'
+                      }`}
+                    >
+                      <div>
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-3 mb-4">
+                          <div className="flex items-center gap-3">
+                            {shop.logoUrl ? (
+                              <img
+                                src={shop.logoUrl}
+                                alt={shop.name}
+                                className="size-12 rounded-2xl object-cover border border-slate-100 shadow-sm"
+                              />
+                            ) : (
+                              <div className="grid size-12 place-items-center rounded-2xl bg-blue-50 text-[#1769e0] font-bold text-lg">
+                                🏪
+                              </div>
+                            )}
+                            <div>
+                              <h3 className="text-base font-bold text-slate-900 line-clamp-1">{shop.name}</h3>
+                              <span className="font-mono text-[10px] text-slate-400">/{shop.slug}</span>
+                            </div>
+                          </div>
+
+                          {isActive && (
+                            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-[#1769e0]">
+                              Faol Do‘kon
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Description */}
+                        {shop.description && (
+                          <p className="text-xs text-slate-500 mb-4 line-clamp-2">{shop.description}</p>
+                        )}
+
+                        {/* Details */}
+                        <div className="space-y-2.5 rounded-2xl bg-slate-50 p-4 text-xs">
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500">Karta:</span>
+                            <span className="font-mono font-bold text-slate-800">
+                              •••• {shop.cardLast4 || (shop.cardNumber ? shop.cardNumber.slice(-4) : '3587')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500">Egasi:</span>
+                            <span className="font-semibold text-slate-800 line-clamp-1">{shop.accountOwner || 'Hisob egasi'}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500">Bank:</span>
+                            <span className="font-semibold text-slate-800">{shop.cardBank || 'HUMOCARD'}</span>
+                          </div>
+                          <div className="flex justify-between items-center border-t border-slate-200/60 pt-2">
+                            <span className="text-slate-500">Webhook:</span>
+                            <span className={`font-semibold ${shop.webhookUrl ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {shop.webhookUrl ? '🟢 Ulangan' : '⚪️ Yo‘q'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500">Telegram Kanal:</span>
+                            <span className={`font-semibold ${shop.telegramChannelId ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {shop.telegramChannelId ? '🟢 Ulangan' : '⚪️ Yo‘q'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                        {!isActive ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectShop(shop)}
+                            className="flex-1 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1769e0] py-2 text-xs font-bold transition"
+                          >
+                            Faol qilish
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('shop_settings')}
+                            className="flex-1 rounded-xl bg-[#1769e0] text-white py-2 text-xs font-bold transition hover:bg-blue-700"
+                          >
+                            ⚙️ Sozlamalar
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSelectShop(shop)
+                            setActiveTab('shop_settings')
+                          }}
+                          title="Tahrirlash"
+                          className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          <Edit3 size={15} />
+                        </button>
+
+                        {myShops.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShop(shop.id, shop.name)}
+                            title="O‘chirish"
+                            className="rounded-xl border border-rose-200 p-2 text-rose-500 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: VIP ROOMS & PAY-TO-WRITE SYSTEM */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'vip_rooms' && (
+          <div className="space-y-8">
+            {/* Header Banner */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/60 p-6 sm:p-8 shadow-sm">
+              <div className="max-w-2xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
+                    🔐 VIP Guruh & Pullik Yozish
+                  </span>
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                    Avtomatlashtirilgan Mute / Unmute
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-[#152238]">
+                  Kanal va Guruhlarga Pullik A’zolik & Yozish Huquqi
+                </h2>
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  Foydalanuvchilar guruhda xabar yozish yoki yopiq kanalga kirish uchun soatlik, kunlik, haftalik yoki oylik tarif asosida to‘lov qiladilar. Bot avtomatik to‘lovni qabul qilib, yozish huquqini ochadi!
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsNewVipRoomModalOpen(true)}
+                  className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-sm"
+                >
+                  <Plus size={16} /> Yangi VIP Guruh Ulash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddVipMemberModalOpen(true)}
+                  className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-white px-4 py-3 text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition"
+                >
+                  <UserCheck size={16} /> A’zo Qo‘shish (Muddat)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loadVipRooms()}
+                  title="Yangilash"
+                  className="rounded-2xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50 transition"
+                >
+                  <RefreshCw size={16} className={vipLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+
+            {/* Statistics Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="text-xs text-slate-400 font-semibold">Ulangan Guruhlar</span>
+                <p className="text-2xl font-black text-slate-900 mt-1">{vipStats?.totalRooms || vipRooms.length || 0}</p>
+                <span className="text-[11px] text-indigo-600 font-medium">{vipStats?.activeRooms || 0} tasi faol</span>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="text-xs text-slate-400 font-semibold">Pullik A’zolar</span>
+                <p className="text-2xl font-black text-emerald-600 mt-1">{vipStats?.totalMembers || vipMembers.length || 0}</p>
+                <span className="text-[11px] text-slate-400 font-medium">{vipStats?.activeMembers || 0} tasi amal qilmoqda</span>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="text-xs text-slate-400 font-semibold">Jami Yig‘ilgan Mablag‘</span>
+                <p className="text-xl sm:text-2xl font-black text-blue-600 mt-1">
+                  {(vipStats?.totalVolume || 0).toLocaleString('uz-UZ')} <span className="text-xs font-bold">UZS</span>
+                </p>
+                <span className="text-[11px] text-emerald-600 font-medium">100% tushum</span>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="text-xs text-slate-400 font-semibold">Yozish Nazorati</span>
+                <p className="text-lg font-bold text-slate-900 mt-1">Avto-Mute</p>
+                <span className="text-[11px] text-emerald-600 font-medium">To‘lovsiz xabar o‘chiriladi</span>
+              </div>
+            </div>
+
+            {/* VIP Rooms List */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-slate-900">Ulangan VIP Guruh va Kanallar ({vipRooms.length})</h3>
+                <span className="text-xs text-slate-400">Bot guruhda Admin (Restrict ruxsati bilan) bo‘lishi shart</span>
+              </div>
+
+              {vipRooms.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
+                  <Lock size={36} className="mx-auto text-indigo-400 mb-2" />
+                  <h4 className="text-sm font-bold text-slate-800">Hozircha VIP Guruh ulanmagan</h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                    Guruh yoki kanalingizni ulab, soatlik, kunlik, haftalik va oylik pullik tariflarni yoqing.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsNewVipRoomModalOpen(true)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition"
+                  >
+                    <Plus size={14} /> VIP Guruh Ulash
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {vipRooms.map((room) => (
+                    <div
+                      key={room.id}
+                      className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-3 mb-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 uppercase">
+                                {room.type === 'channel' ? '📢 Kanal' : '👥 Guruh'}
+                              </span>
+                              <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+                                {room.mode === 'write_permission' ? '✍️ Yozish huquqi' : '🔒 Yopiq a’zolik'}
+                              </span>
+                            </div>
+                            <h4 className="text-base font-bold text-slate-900 mt-1">{room.title}</h4>
+                            <p className="font-mono text-xs text-slate-400">{room.chatId}</p>
+                          </div>
+
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                              room.active
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            {room.active ? '🟢 Faol' : '⚪️ Nofaol'}
+                          </span>
+                        </div>
+
+                        {/* Tariffs Grid */}
+                        <div className="mb-4">
+                          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                            To‘lov Tariflari:
+                          </span>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                              <span className="text-slate-400 text-[10px] block">⏱ 1 Soat</span>
+                              <span className="font-bold text-slate-800">
+                                {Number(room.hourlyPrice).toLocaleString('uz-UZ')} UZS
+                              </span>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                              <span className="text-slate-400 text-[10px] block">📅 1 Kun</span>
+                              <span className="font-bold text-slate-800">
+                                {Number(room.dailyPrice).toLocaleString('uz-UZ')} UZS
+                              </span>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                              <span className="text-slate-400 text-[10px] block">📆 1 Hafta</span>
+                              <span className="font-bold text-slate-800">
+                                {Number(room.weeklyPrice).toLocaleString('uz-UZ')} UZS
+                              </span>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                              <span className="text-slate-400 text-[10px] block">🗓 1 Oy</span>
+                              <span className="font-bold text-indigo-700">
+                                {Number(room.monthlyPrice).toLocaleString('uz-UZ')} UZS
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleVipRoom(room.id, room.active)}
+                          className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                            room.active
+                              ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {room.active ? 'Vaqtincha to‘xtatish' : 'Faollashtirish'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteVipRoom(room.id, room.title)}
+                          className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          Guruhni uzish
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Members Table */}
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Faol VIP A’zolar va Yozish Huquqlari ({vipMembers.length})</h3>
+                  <p className="text-xs text-slate-400">To‘lov qilgan va ruxsat berilgan barcha foydalanuvchilar ro‘yxati</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddVipMemberModalOpen(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition"
+                >
+                  <Plus size={14} /> A’zo qo‘shish
+                </button>
+              </div>
+
+              {vipMembers.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Hozircha pullik a’zolar yo‘q. Foydalanuvchilar guruhda yozish uchun to‘lov qilganda bu yerda paydo bo‘ladi.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                        <th className="pb-3">Telegram Foydalanuvchi</th>
+                        <th className="pb-3">Guruh</th>
+                        <th className="pb-3">Tarif</th>
+                        <th className="pb-3">To‘lov</th>
+                        <th className="pb-3">Muddati</th>
+                        <th className="pb-3">Holat</th>
+                        <th className="pb-3 text-right">Amal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {vipMembers.map((m) => {
+                        const isExpired = new Date(m.expiresAt) < new Date()
+                        const targetRoom = vipRooms.find((r) => r.id === m.roomId)
+                        return (
+                          <tr key={m.id} className="hover:bg-slate-50/60">
+                            <td className="py-3">
+                              <span className="font-mono font-bold text-slate-900 block">{m.userId}</span>
+                              <span className="text-[11px] text-slate-400">
+                                {m.fullName || m.username ? `@${m.username || ''} (${m.fullName || ''})` : 'Foydalanuvchi'}
+                              </span>
+                            </td>
+                            <td className="py-3 font-medium text-slate-700">{targetRoom?.title || m.roomId}</td>
+                            <td className="py-3 font-semibold text-indigo-600 uppercase text-[11px]">
+                              {m.plan === 'hour' ? '1 Soat' : m.plan === 'day' ? '1 Kun' : m.plan === 'week' ? '1 Hafta' : '1 Oy'}
+                            </td>
+                            <td className="py-3 font-bold text-slate-800">
+                              {(m.amountPaid || 0).toLocaleString('uz-UZ')} UZS
+                            </td>
+                            <td className="py-3 text-slate-500">
+                              {new Date(m.expiresAt).toLocaleDateString('uz-UZ', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </td>
+                            <td className="py-3">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  m.status === 'active' && !isExpired
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                }`}
+                              >
+                                {m.status === 'active' && !isExpired ? 'Faol' : 'Muddati tugagan'}
+                              </span>
+                            </td>
+                            <td className="py-3 text-right">
+                              {m.status === 'active' && !isExpired && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokeVipMember(m.id)}
+                                  className="text-rose-500 hover:text-rose-700 font-bold text-[11px]"
+                                >
+                                  Bekor qilish
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -3015,6 +3940,462 @@ export function PaybotDashboard() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: CREATE NEW SHOP */}
+        {/* ------------------------------------------------------------- */}
+        {isNewShopModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 sm:p-8 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-blue-50 text-[#1769e0]">
+                    <Store size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Yangi Do‘kon Ochish</h3>
+                    <p className="text-xs text-slate-400">Har bir do‘kon alohida karta va webhookka ega</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNewShopModalOpen(false)}
+                  className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateNewShop} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Do‘kon Nomi *
+                  </label>
+                  <input
+                    type="text"
+                    value={newShopForm.name}
+                    onChange={(e) => setNewShopForm({ ...newShopForm, name: e.target.value })}
+                    placeholder="Masalan: VIP Kurslar yoki Online Shop"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-[#1769e0] focus:ring-2 focus:ring-blue-50"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Do‘kon Tavsifi
+                  </label>
+                  <input
+                    type="text"
+                    value={newShopForm.description}
+                    onChange={(e) => setNewShopForm({ ...newShopForm, description: e.target.value })}
+                    placeholder="Xizmat haqida qisqacha ma’lumot"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-[#1769e0]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Karta Raqami (16 xonali) *
+                    </label>
+                    <input
+                      type="text"
+                      value={newShopForm.cardNumber}
+                      onChange={(e) => setNewShopForm({ ...newShopForm, cardNumber: e.target.value.replace(/\s+/g, '') })}
+                      placeholder="9860350123453587"
+                      maxLength={16}
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Karta Egasi (F.I.O) *
+                    </label>
+                    <input
+                      type="text"
+                      value={newShopForm.accountOwner}
+                      onChange={(e) => setNewShopForm({ ...newShopForm, accountOwner: e.target.value.toUpperCase() })}
+                      placeholder="AZIZBEK KARIMOV"
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-semibold outline-none focus:border-[#1769e0]"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Bank / To‘lov Tizimi
+                  </label>
+                  <select
+                    value={newShopForm.cardBank}
+                    onChange={(e) => setNewShopForm({ ...newShopForm, cardBank: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-[#1769e0]"
+                  >
+                    <option value="HUMOCARD">HUMO CARD</option>
+                    <option value="UZCARD">UZCARD</option>
+                    <option value="XALQ BANKI">XALQ BANKI</option>
+                    <option value="IPOTEKA BANK">IPOTEKA BANK</option>
+                    <option value="AGROBANK">AGROBANK</option>
+                    <option value="TBC BANK">TBC BANK</option>
+                    <option value="ANORBANK">ANORBANK</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Webhook URL (Ixtiyoriy)
+                  </label>
+                  <input
+                    type="url"
+                    value={newShopForm.webhookUrl}
+                    onChange={(e) => setNewShopForm({ ...newShopForm, webhookUrl: e.target.value })}
+                    placeholder="https://example.com/api/payment-callback"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Telegram Kanal ID (Ixtiyoriy)
+                  </label>
+                  <input
+                    type="text"
+                    value={newShopForm.telegramChannelId}
+                    onChange={(e) => setNewShopForm({ ...newShopForm, telegramChannelId: e.target.value })}
+                    placeholder="-1001234567890"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewShopModalOpen(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creatingShop}
+                    className="rounded-xl bg-[#1769e0] px-5 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {creatingShop ? 'Ochilmoqda...' : 'Do‘konni Ochish'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: CONNECT NEW VIP ROOM */}
+        {/* ------------------------------------------------------------- */}
+        {isNewVipRoomModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
+                    <Lock size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">VIP Guruh / Kanal Ulash</h3>
+                    <p className="text-xs text-slate-400">Yozish huquqi yoki yopiq a’zolik tariflari</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNewVipRoomModalOpen(false)}
+                  className="rounded-full p-2 text-slate-400 hover:bg-slate-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateVipRoom} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Guruh / Kanal Nomi *
+                  </label>
+                  <input
+                    type="text"
+                    value={newVipRoomForm.title}
+                    onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, title: e.target.value })}
+                    placeholder="Masalan: VIP Kripto Treyding Guruhi"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Telegram Chat ID * (Bot admin bo‘lishi shart)
+                  </label>
+                  <input
+                    type="text"
+                    value={newVipRoomForm.chatId}
+                    onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, chatId: e.target.value })}
+                    placeholder="-1001234567890"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-indigo-600"
+                    required
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Guruhdan ID olish uchun botni guruhga qo‘shing va /id yoki @userinfobot dan foydalaning.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Turi
+                    </label>
+                    <select
+                      value={newVipRoomForm.type}
+                      onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, type: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600"
+                    >
+                      <option value="group">👥 Guruh (Group)</option>
+                      <option value="channel">📢 Kanal (Channel)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nazorat Rejimi
+                    </label>
+                    <select
+                      value={newVipRoomForm.mode}
+                      onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, mode: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600"
+                    >
+                      <option value="write_permission">✍️ Yozish huquqi (Mute)</option>
+                      <option value="invite_only">🔒 Yopiq a’zolik (Invite link)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-4">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-3">
+                    💰 To‘lov Tariflari (UZS)
+                  </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        ⏱ 1 Soatlik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={newVipRoomForm.hourlyPrice}
+                        onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, hourlyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        📅 1 Kunlik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={newVipRoomForm.dailyPrice}
+                        onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, dailyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        📆 1 Haftalik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={newVipRoomForm.weeklyPrice}
+                        onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, weeklyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        🗓 1 Oylik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={newVipRoomForm.monthlyPrice}
+                        onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, monthlyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewVipRoomModalOpen(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition"
+                  >
+                    Guruhni Ulash
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: MANUALLY ADD VIP MEMBER / GRANT ACCESS */}
+        {/* ------------------------------------------------------------- */}
+        {isAddVipMemberModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <UserCheck size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">A’zoga Ruxsat Berish</h3>
+                    <p className="text-xs text-slate-400">Guruhda yozish yoki a’zolik muddatini qo‘lda belgilash</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddVipMemberModalOpen(false)}
+                  className="rounded-full p-2 text-slate-400 hover:bg-slate-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddVipMember} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Guruh / Kanalni Tanlang *
+                  </label>
+                  <select
+                    value={addVipMemberForm.roomId}
+                    onChange={(e) => setAddVipMemberForm({ ...addVipMemberForm, roomId: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600"
+                    required
+                  >
+                    <option value="">Guruhni tanlang...</option>
+                    {vipRooms.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.title} ({r.chatId})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Telegram Foydalanuvchi ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={addVipMemberForm.userId}
+                    onChange={(e) => setAddVipMemberForm({ ...addVipMemberForm, userId: e.target.value })}
+                    placeholder="Masalan: 123456789"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-indigo-600"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Username (Ixtiyoriy)
+                    </label>
+                    <input
+                      type="text"
+                      value={addVipMemberForm.username}
+                      onChange={(e) => setAddVipMemberForm({ ...addVipMemberForm, username: e.target.value.replace('@', '') })}
+                      placeholder="username"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      F.I.O (Ixtiyoriy)
+                    </label>
+                    <input
+                      type="text"
+                      value={addVipMemberForm.fullName}
+                      onChange={(e) => setAddVipMemberForm({ ...addVipMemberForm, fullName: e.target.value })}
+                      placeholder="Ism Familiya"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tarif Tanlang
+                    </label>
+                    <select
+                      value={addVipMemberForm.plan}
+                      onChange={(e) => {
+                        const plan = e.target.value
+                        let duration = 720
+                        if (plan === 'hour') duration = 1
+                        if (plan === 'day') duration = 24
+                        if (plan === 'week') duration = 168
+                        setAddVipMemberForm({
+                          ...addVipMemberForm,
+                          plan,
+                          durationHours: duration,
+                        })
+                      }}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none"
+                    >
+                      <option value="hour">⏱ 1 Soat</option>
+                      <option value="day">📅 1 Kun (24 soat)</option>
+                      <option value="week">📆 1 Hafta (7 kun)</option>
+                      <option value="month">🗓 1 Oy (30 kun)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      To‘langan Summa (UZS)
+                    </label>
+                    <input
+                      type="number"
+                      value={addVipMemberForm.amountPaid}
+                      onChange={(e) => setAddVipMemberForm({ ...addVipMemberForm, amountPaid: Number(e.target.value) })}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddVipMemberModalOpen(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 transition"
+                  >
+                    Ruxsat Berish
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
