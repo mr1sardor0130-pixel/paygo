@@ -60,9 +60,9 @@ export async function GET(request: Request) {
   const tariffs = await getSystemTariffs()
 
   let userProfile: any = null
-  if (telegramId) {
+  if (targetTgId) {
     try {
-      const profs = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, telegramId)).limit(1)
+      const profs = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, targetTgId)).limit(1)
       userProfile = profs[0] || null
     } catch {}
   }

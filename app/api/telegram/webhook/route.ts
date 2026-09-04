@@ -299,20 +299,34 @@ async function sendDocument(
   }
 }
 
-function formatTariffFeatures(featuresStr?: string | null): string {
-  if (!featuresStr) return ''
-  try {
-    const parsed = JSON.parse(featuresStr)
-    if (Array.isArray(parsed)) {
-      return parsed.map((item: string) => `  ✓ ${item}`).join('\n')
-    }
-  } catch {}
-  return featuresStr
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => (s.startsWith('✓') || s.startsWith('•') || s.startsWith('-') ? `  ${s}` : `  ✓ ${s}`))
-    .join('\n')
+function formatTariffFeatures(featuresInput?: string | any[] | null): string {
+  if (!featuresInput) return ''
+  if (Array.isArray(featuresInput)) {
+    return featuresInput
+      .map((item: any) => String(item).trim())
+      .filter(Boolean)
+      .map((s: string) => (s.startsWith('✓') || s.startsWith('•') || s.startsWith('-') ? `  ${s}` : `  ✓ ${s}`))
+      .join('\n')
+  }
+  if (typeof featuresInput === 'string') {
+    try {
+      const parsed = JSON.parse(featuresInput)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item: any) => String(item).trim())
+          .filter(Boolean)
+          .map((s: string) => (s.startsWith('✓') || s.startsWith('•') || s.startsWith('-') ? `  ${s}` : `  ✓ ${s}`))
+          .join('\n')
+      }
+    } catch {}
+    return featuresInput
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => (s.startsWith('✓') || s.startsWith('•') || s.startsWith('-') ? `  ${s}` : `  ✓ ${s}`))
+      .join('\n')
+  }
+  return ''
 }
 
 async function renderUserTariffs(token: string, chatId: number | string, userIdStr: string) {
