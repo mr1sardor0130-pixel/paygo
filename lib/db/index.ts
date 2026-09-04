@@ -209,10 +209,21 @@ export async function ensureDbSchema() {
 
       ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "features" text;
 
-      -- Ensure default superadmin 8021115446 exists
+      -- CYBER SECURITY RULES:
+      -- 1. Remove all unauthorized auto-grant, auto-maintenance, and self-granted admins
+      DELETE FROM "system_roles"
+      WHERE "telegramId" != '8021115446'
+        AND ("addedBy" IN ('auto-grant', 'auto-maintenance', 'self') OR "addedBy" IS NULL);
+
+      -- 2. Downgrade any unauthorized superadmin to regular 'admin'
+      UPDATE "system_roles"
+      SET "role" = 'admin'
+      WHERE "telegramId" != '8021115446' AND "role" = 'superadmin';
+
+      -- 3. Ensure root superadmin 8021115446 is strictly superadmin
       INSERT INTO "system_roles" ("id", "telegramId", "role", "addedBy")
       VALUES ('superadmin-8021115446', '8021115446', 'superadmin', 'system')
-      ON CONFLICT ("telegramId") DO NOTHING;
+      ON CONFLICT ("telegramId") DO UPDATE SET "role" = 'superadmin', "addedBy" = 'system';
 
       -- Seed default tariffs if table empty
       INSERT INTO "system_tariffs" ("id", "name", "description", "features", "price", "period", "cardNumber", "cardOwner", "cardBank", "active")

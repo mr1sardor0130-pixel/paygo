@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { db, ensureDbSchema } from '@/lib/db'
 import { authSessions, shops, systemSettings, mandatoryChannels } from '@/lib/db/schema'
 import { eq, or, desc } from 'drizzle-orm'
-import { isAdminTelegramId } from '@/lib/admin'
+import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,7 +83,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, error: 'Sessiya eskirgan yoki topilmadi' }, { status: 401 })
     }
 
-    const isAdmin = await isAdminTelegramId(telegramId || userId)
+    const effectiveTgId = telegramId || userId
+    const isAdmin = await isAdminTelegramId(effectiveTgId)
+    const isSuperAdmin = isSuperAdminTelegramId(effectiveTgId)
 
     // Search user's shops across both userId and telegramId
     const searchUserIds = Array.from(new Set([userId, telegramId].filter(Boolean)))
@@ -120,7 +122,8 @@ export async function GET(request: Request) {
       userId,
       telegramId,
       isAdmin,
-      role: isAdmin ? 'admin' : role,
+      isSuperAdmin,
+      role: isSuperAdmin ? 'superadmin' : (isAdmin ? 'admin' : role),
       shop: activeShop,
       shops: userShops,
       mandatorySubRequired: !subCheck.ok,

@@ -2823,41 +2823,21 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------
-  // MAINTENANCE MODE COMMANDS (Admin only)
+  // MAINTENANCE MODE COMMANDS (Super Admin only)
   // -------------------------------------------------------------
   if (raw === '/make_me_admin') {
-    try {
-      await ensureDbSchema()
-      await db.insert(systemRoles).values({
-        id: `admin-${userIdStr}`,
-        telegramId: userIdStr,
-        role: 'superadmin',
-        addedBy: 'self'
-      }).onConflictDoNothing()
-      await send(token, chatId, `✅ <b>Siz muvaffaqiyatli Super Admin bo‘ldingiz!</b>\n\nTelegram ID: <code>${userIdStr}</code>\nEndi <code>/maintenance_on</code> va <code>/maintenance_off</code> buyruqlaridan foydalanishingiz mumkin.`)
-    } catch (err: any) {
-      await send(token, chatId, `⚠️ Xatolik: ${err?.message}`)
-    }
+    await send(
+      token,
+      chatId,
+      '⛔️ <b>Xavfsizlik qoidasi:</b> Foydalanuvchilar o‘zlarini admin qila olmaydi.\n\nFaqat Bosh Superadmin (8021115446) yangi admin tayinlay oladi.'
+    )
     return NextResponse.json({ ok: true })
   }
 
   if (raw === '/maintenance_on') {
-    let effectiveAdmin = isAdmin
-    if (!effectiveAdmin) {
-      try {
-        await ensureDbSchema()
-        await db.insert(systemRoles).values({
-          id: `admin-${userIdStr}`,
-          telegramId: userIdStr,
-          role: 'superadmin',
-          addedBy: 'auto-maintenance'
-        }).onConflictDoNothing()
-        effectiveAdmin = true
-      } catch {}
-    }
-
-    if (!effectiveAdmin) {
-      await send(token, chatId, `⚠️ <b>Ruxsat yo‘q:</b> Siz admin emassiz.\n\nSizning Telegram ID: <code>${userIdStr}</code>`)
+    const isSuper = isSuperAdminTelegramId(userIdStr)
+    if (!isSuper) {
+      await send(token, chatId, `⛔️ <b>Ruxsat yo‘q:</b> Texnik holatni faqat Bosh Superadmin (8021115446) yoqa oladi.`)
       return NextResponse.json({ ok: true })
     }
 
@@ -2882,22 +2862,9 @@ export async function POST(request: Request) {
   }
 
   if (raw === '/maintenance_off') {
-    let effectiveAdmin = isAdmin
-    if (!effectiveAdmin) {
-      try {
-        await ensureDbSchema()
-        await db.insert(systemRoles).values({
-          id: `admin-${userIdStr}`,
-          telegramId: userIdStr,
-          role: 'superadmin',
-          addedBy: 'auto-maintenance'
-        }).onConflictDoNothing()
-        effectiveAdmin = true
-      } catch {}
-    }
-
-    if (!effectiveAdmin) {
-      await send(token, chatId, `⚠️ <b>Ruxsat yo‘q:</b> Siz admin emassiz.`)
+    const isSuper = isSuperAdminTelegramId(userIdStr)
+    if (!isSuper) {
+      await send(token, chatId, `⛔️ <b>Ruxsat yo‘q:</b> Texnik holatni faqat Bosh Superadmin (8021115446) o‘chira oladi.`)
       return NextResponse.json({ ok: true })
     }
 
@@ -3098,24 +3065,12 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------
-  // SERVICE SHUTDOWN & MAINTENANCE MANAGEMENT (Admin)
+  // SERVICE SHUTDOWN & MAINTENANCE MANAGEMENT (Super Admin Only)
   // -------------------------------------------------------------
-  let effectiveAdmin = isAdmin
-  if (!effectiveAdmin) {
-    try {
-      await ensureDbSchema()
-      await db.insert(systemRoles).values({
-        id: `admin-${userIdStr}`,
-        telegramId: userIdStr,
-        role: 'superadmin',
-        addedBy: 'auto-grant'
-      }).onConflictDoNothing()
-      effectiveAdmin = true
-    } catch {}
-  }
+  const isSuperForShutdown = isSuperAdminTelegramId(userIdStr)
 
   if (flow?.step === 'awaiting_shutdown_reason') {
-    if (!effectiveAdmin) return NextResponse.json({ ok: true })
+    if (!isSuperForShutdown) return NextResponse.json({ ok: true })
     const reasonText = raw.trim()
     if (!reasonText) {
       await send(token, chatId, '⚠️ Iltimos, faoliyat to‘xtatilishining sababini matn ko‘rinishida kiriting:', back)
@@ -3148,7 +3103,10 @@ export async function POST(request: Request) {
   }
 
   if (raw === '/shutdown_on' || text === '🛑 Faoliyatni to‘xtatish') {
-    if (!effectiveAdmin) return NextResponse.json({ ok: true })
+    if (!isSuperForShutdown) {
+      await send(token, chatId, '⛔️ <b>Ruxsat yo‘q:</b> Faoliyatni to‘xtatish faqat Bosh Superadmin (8021115446) tomonidan amalga oshiriladi.')
+      return NextResponse.json({ ok: true })
+    }
     await stateSet(chatId, { step: 'awaiting_shutdown_reason' })
     await send(
       token,
@@ -3162,7 +3120,10 @@ export async function POST(request: Request) {
   }
 
   if (raw === '/shutdown_off' || text === '🟢 Faoliyatni qayta tiklash') {
-    if (!effectiveAdmin) return NextResponse.json({ ok: true })
+    if (!isSuperForShutdown) {
+      await send(token, chatId, '⛔️ <b>Ruxsat yo‘q:</b> Faoliyatni qayta tiklash faqat Bosh Superadmin (8021115446) tomonidan amalga oshiriladi.')
+      return NextResponse.json({ ok: true })
+    }
     try {
       await ensureDbSchema()
       await db.insert(systemSettings).values({ key: 'service_shutdown_mode', value: 'false' }).onConflictDoUpdate({ target: systemSettings.key, set: { value: 'false', updatedAt: new Date() } })
@@ -3187,7 +3148,10 @@ export async function POST(request: Request) {
   }
 
   if (raw === '/shutdown_status' || text === '🛑 Faoliyat boshqaruvi') {
-    if (!effectiveAdmin) return NextResponse.json({ ok: true })
+    if (!isSuperForShutdown) {
+      await send(token, chatId, '⛔️ <b>Ruxsat yo‘q:</b> Faoliyat boshqaruvi faqat Bosh Superadmin (8021115446) uchun ochiq.')
+      return NextResponse.json({ ok: true })
+    }
     const shutdownData = await getServiceShutdownData()
     const maintenanceActive = await isMaintenanceMode()
 
@@ -3381,14 +3345,6 @@ export async function POST(request: Request) {
   // /start command (with terms check and deep auth link)
   // -------------------------------------------------------------
   if (/^\/start/.test(raw)) {
-    // Auto-promote first user to admin if no admins exist
-    const adminCount = await db.select().from(systemRoles).limit(1)
-    if (adminCount.length === 0) {
-      await db.insert(systemRoles).values({
-        telegramId: userIdStr,
-        role: 'superadmin',
-      })
-    }
     await stateDelete(chatId)
     cancelOnboarding(userIdStr)
 
@@ -4840,8 +4796,11 @@ export async function POST(request: Request) {
   }
 
   if (text === 'Adminlar boshqaruvi') {
-    const isAdmin = await isAdminTelegramId(userIdStr)
-    if (!isAdmin) return NextResponse.json({ ok: true })
+    const isSuper = isSuperAdminTelegramId(userIdStr)
+    if (!isSuper) {
+      await send(token, chatId, '⛔️ <b>Ruxsat etilmagan:</b> Adminlar boshqaruvi faqat Bosh Superadmin (8021115446) uchun ochiq.', adminMenu)
+      return NextResponse.json({ ok: true })
+    }
 
     const roles = await db.select().from(systemRoles)
     await send(
@@ -4849,8 +4808,9 @@ export async function POST(request: Request) {
       chatId,
       `👥 <b>Tizim Adminlari:</b>\n\n` +
       roles.map((r) => `• <code>${r.telegramId}</code> (${r.role}) - Qo‘shdi: ${r.addedBy}`).join('\n') +
-      `\n\n⚙️ <i>Yangi admin qo‘shish uchun: <code>/addadmin &lt;telegram_id&gt;</code></i>\n` +
-      `⚙️ <i>Adminni o‘chirish: <code>/removeadmin &lt;telegram_id&gt;</code></i>`,
+      `\n\n⚙️ <i>Yangi admin tayinlash: <code>/addadmin &lt;telegram_id&gt;</code></i>\n` +
+      `⚙️ <i>Adminni bekor qilish: <code>/removeadmin &lt;telegram_id&gt;</code></i>\n\n` +
+      `ℹ️ <i>Eslatma: Faqat Superadmin admin tayinlay oladi. Tayinlangan yangi shaxslar 'admin' maqomini oladi (super admin bo‘la olmaydi).</i>`,
       adminMenu
     )
     return NextResponse.json({ ok: true })

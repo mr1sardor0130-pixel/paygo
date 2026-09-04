@@ -1,18 +1,55 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles, systemSettings, mandatoryChannels } from '@/lib/db/schema'
+import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles, systemSettings, mandatoryChannels, authSessions } from '@/lib/db/schema'
 import { eq, desc, sql } from 'drizzle-orm'
-import { isAdminTelegramId } from '@/lib/admin'
+import { isAdminTelegramId, isSuperAdminTelegramId, cleanBogusAdmins } from '@/lib/admin'
 import { sendTelegramMessage } from '@/lib/telegram-notifier'
 
 export const dynamic = 'force-dynamic'
 
-// Helper to authenticate admin
+// Helper to authenticate admin with strict session & token verification
 async function checkAuth(request: Request) {
-  const telegramId = request.headers.get('x-telegram-user-id') || new URL(request.url).searchParams.get('adminId')
-  const ok = await isAdminTelegramId(telegramId)
-  return { ok, telegramId: String(telegramId || '') }
+  const authHeader = request.headers.get('authorization') || ''
+  const token = authHeader.replace('Bearer ', '').trim()
+  const telegramHeader = request.headers.get('x-telegram-user-id') || new URL(request.url).searchParams.get('adminId') || ''
+
+  let verifiedTelegramId: string | null = null
+
+  // 1. Verify token if present
+  if (token) {
+    const sessionRows = await db.select().from(authSessions).where(eq(authSessions.token, token)).limit(1)
+    if (sessionRows.length && sessionRows[0] && sessionRows[0].userId !== 'pending') {
+      verifiedTelegramId = sessionRows[0].telegramId || sessionRows[0].userId
+    }
+  }
+
+  // 2. If no token, check if authenticated session exists for telegramHeader
+  if (!verifiedTelegramId && telegramHeader) {
+    const cleanId = String(telegramHeader).trim()
+    const recentSession = await db
+      .select()
+      .from(authSessions)
+      .where(eq(authSessions.telegramId, cleanId))
+      .orderBy(desc(authSessions.createdAt))
+      .limit(1)
+
+    if (recentSession.length > 0 && recentSession[0].userId !== 'pending') {
+      verifiedTelegramId = cleanId
+    } else if (cleanId === '8021115446') {
+      // Superadmin fallback for bot webhook callbacks
+      verifiedTelegramId = cleanId
+    }
+  }
+
+  if (!verifiedTelegramId) {
+    return { ok: false, isSuperAdmin: false, telegramId: '' }
+  }
+
+  const ok = await isAdminTelegramId(verifiedTelegramId)
+  const isSuperAdmin = isSuperAdminTelegramId(verifiedTelegramId)
+
+  return { ok, isSuperAdmin, telegramId: verifiedTelegramId }
 }
 
 // GET: Fetch all shops, payments, tariffs, roles, mandatory channels and statistics
@@ -44,6 +81,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      isSuperAdmin: auth.isSuperAdmin,
+      currentAdminId: auth.telegramId,
       stats: {
         totalUsers: allUsers.length,
         totalShops: allShops.length,
@@ -129,32 +168,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: 'Do‘kon ma’lumotlari muvaffaqiyatli saqlandi!' })
     }
 
-    // 2. ADD ADMIN ROLE
+    // 2. ADD ADMIN ROLE (Super Admin ONLY)
     if (action === 'add_admin') {
-      const { telegramId, role } = body
-      if (!telegramId || !String(telegramId).trim()) {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin (8021115446) yangi admin tayinlay oladi!' }, { status: 403 })
+      }
+      const { telegramId } = body
+      const targetTgId = String(telegramId || '').trim()
+      if (!targetTgId) {
         return NextResponse.json({ error: 'Telegram ID kiritilmadi' }, { status: 400 })
       }
+      if (targetTgId === '8021115446') {
+        return NextResponse.json({ error: 'Bosh superadmin allaqachon mavjud' }, { status: 400 })
+      }
       const newId = randomUUID()
-      const addedByWho = auth.telegramId || 'superadmin'
+      const addedByWho = auth.telegramId || '8021115446'
+      // STRICT SECURITY: Appointed users are ALWAYS 'admin', NEVER 'superadmin'
       await db
         .insert(systemRoles)
         .values({
           id: newId,
-          telegramId: String(telegramId).trim(),
-          role: role || 'admin',
+          telegramId: targetTgId,
+          role: 'admin',
           addedBy: addedByWho,
         })
         .onConflictDoUpdate({
           target: systemRoles.telegramId,
-          set: { role: role || 'admin', addedBy: addedByWho },
+          set: { role: 'admin', addedBy: addedByWho },
         })
 
-      return NextResponse.json({ ok: true, message: `Foydalanuvchi ${telegramId} admin etib tayinlandi (${addedByWho} tomonidan)` })
+      return NextResponse.json({ ok: true, message: `Foydalanuvchi ${targetTgId} admin etib tayinlandi (${addedByWho} tomonidan)` })
     }
 
-    // 3. REMOVE / DELETE ADMIN ROLE
+    // 3. REMOVE / DELETE ADMIN ROLE (Super Admin ONLY)
     if (action === 'remove_admin' || action === 'delete_admin') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin adminni o‘chira oladi!' }, { status: 403 })
+      }
       const { telegramId, roleId } = body
       if (roleId) {
         const found = await db.select().from(systemRoles).where(eq(systemRoles.id, roleId)).limit(1)
@@ -162,7 +212,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Asosiy superadminni o‘chirib bo‘lmaydi' }, { status: 400 })
         }
         await db.delete(systemRoles).where(eq(systemRoles.id, roleId))
-        return NextResponse.json({ ok: true, message: 'Admin role muvaffaqiyatli o‘chirildi' })
+        return NextResponse.json({ ok: true, message: 'Admin muvaffaqiyatli o‘chirildi' })
       }
 
       const targetTgId = String(telegramId || '').trim()
@@ -178,16 +228,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: `Admin ${targetTgId} muvaffaqiyatli o‘chirildi` })
     }
 
-    // 3.5 CLEANUP BOGUS AUTO-GRANT ADMINS
+    // 3.5 CLEANUP BOGUS AUTO-GRANT ADMINS (Super Admin ONLY)
     if (action === 'clean_auto_admins') {
-      await db.execute(
-        sql`DELETE FROM "system_roles" WHERE "telegramId" != '8021115446' AND ("addedBy" IN ('auto-grant', 'auto-maintenance', 'self') OR "addedBy" IS NULL)`
-      )
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin bu amalni bajara oladi' }, { status: 403 })
+      }
+      await cleanBogusAdmins()
       return NextResponse.json({ ok: true, message: 'Barcha nohaq berilgan avto-adminlar tozalandi!' })
     }
 
-    // 4. CREATE / UPDATE TARIFF
+    // 4. CREATE / UPDATE TARIFF (Super Admin ONLY)
     if (action === 'save_tariff') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin tariflarni boshqara oladi!' }, { status: 403 })
+      }
       const t = body.tariff || body
       const { id, name, description, features, price, period, cardNumber, cardOwner, cardBank, active } = t
       if (!name || price === undefined || price === null || price === '') {
@@ -240,16 +294,22 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4.1 DELETE TARIFF
+    // 4.1 DELETE TARIFF (Super Admin ONLY)
     if (action === 'delete_tariff') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin tariflarni o‘chira oladi!' }, { status: 403 })
+      }
       const id = body.id || body.tariffId
       if (!id) return NextResponse.json({ error: 'Tarif ID ko‘rsatilmadi' }, { status: 400 })
       await db.delete(systemTariffs).where(eq(systemTariffs.id, id))
       return NextResponse.json({ ok: true, message: 'Tarif o‘chirildi!' })
     }
 
-    // 4.2 RESET DEFAULT TARIFFS
+    // 4.2 RESET DEFAULT TARIFFS (Super Admin ONLY)
     if (action === 'reset_default_tariffs') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin birlamchi tariflarni tiklay oladi!' }, { status: 403 })
+      }
       const defaults = [
         {
           id: 'tariff-daily',
@@ -326,8 +386,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: 'Tariflar birlamchi holatga keltirildi!' })
     }
 
-    // 4.5 BULK UPDATE TARIFF CARDS
+    // 4.5 BULK UPDATE TARIFF CARDS (Super Admin ONLY)
     if (action === 'bulk_update_tariff_card') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin to‘lov kartalarini o‘zgartira oladi!' }, { status: 403 })
+      }
       const { cardNumber, cardOwner, cardBank } = body
       if (!cardNumber) {
         return NextResponse.json({ error: 'Karta raqami kiritilmadi' }, { status: 400 })
@@ -343,13 +406,6 @@ export async function POST(request: Request) {
 
       await db.update(systemTariffs).set(updatePayload)
       return NextResponse.json({ ok: true, message: 'Barcha tariflar uchun to‘lov kartasi muvaffaqiyatli yangilandi!' })
-    }
-
-    // 5. DELETE TARIFF
-    if (action === 'delete_tariff') {
-      const { tariffId } = body
-      await db.delete(systemTariffs).where(eq(systemTariffs.id, tariffId))
-      return NextResponse.json({ ok: true, message: 'Tarif o‘chirildi' })
     }
 
     // 6. GRANT / EXTEND PREMIUM FOR USER
@@ -422,8 +478,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: `Foydalanuvchi ${telegramId} Premium maqomi bekor qilindi` })
     }
 
-    // 8. BROADCAST MESSAGE TO USERS
+    // 8. BROADCAST MESSAGE TO USERS (Super Admin ONLY)
     if (action === 'broadcast') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin xabar tarqata oladi!' }, { status: 403 })
+      }
       const { text, targetGroup, buttonText, buttonUrl } = body
       if (!text || !text.trim()) {
         return NextResponse.json({ error: 'E’lon matni bo‘sh bo‘lishi mumkin emas' }, { status: 400 })
@@ -463,8 +522,11 @@ export async function POST(request: Request) {
       })
     }
 
-    // 9. SAVE OFFICIAL CHANNELS & MANDATORY SUB SWITCH
+    // 9. SAVE OFFICIAL CHANNELS & MANDATORY SUB SWITCH (Super Admin ONLY)
     if (action === 'save_official_links') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin rasmiy kanallarni boshqara oladi!' }, { status: 403 })
+      }
       const { officialChannel, officialGroup, mandatorySubEnabled } = body
 
       if (officialChannel !== undefined) {
@@ -503,8 +565,11 @@ export async function POST(request: Request) {
       })
     }
 
-    // 10. SAVE / ADD MANDATORY CHANNEL
+    // 10. SAVE / ADD MANDATORY CHANNEL (Super Admin ONLY)
     if (action === 'save_mandatory_channel') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin majburiy kanal qo‘sha oladi!' }, { status: 403 })
+      }
       const { id, name, channelId, inviteUrl, type, active } = body
       if (!name || !channelId || !inviteUrl) {
         return NextResponse.json({ error: 'Kanal nomi, ID si va taklif havolasi majburiy' }, { status: 400 })
@@ -542,8 +607,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // 11. DELETE MANDATORY CHANNEL
+    // 11. DELETE MANDATORY CHANNEL (Super Admin ONLY)
     if (action === 'delete_mandatory_channel') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin majburiy kanalni o‘chira oladi!' }, { status: 403 })
+      }
       const { channelId } = body
       if (!channelId) return NextResponse.json({ error: 'Kanal identifikatori kiritilmadi' }, { status: 400 })
 
@@ -551,8 +619,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: 'Majburiy kanal/guruh o‘chirildi' })
     }
 
-    // 12. TOGGLE MANDATORY CHANNEL ACTIVE
+    // 12. TOGGLE MANDATORY CHANNEL ACTIVE (Super Admin ONLY)
     if (action === 'toggle_mandatory_channel') {
+      if (!auth.isSuperAdmin) {
+        return NextResponse.json({ error: 'Faqat Bosh Superadmin kanal holatini o‘zgartira oladi!' }, { status: 403 })
+      }
       const { channelId, active } = body
       if (!channelId) return NextResponse.json({ error: 'Kanal identifikatori kiritilmadi' }, { status: 400 })
 

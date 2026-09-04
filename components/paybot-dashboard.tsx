@@ -1134,28 +1134,12 @@ export function PaybotDashboard() {
             type="button"
             onClick={async () => {
               setAuthLoading(true)
-              const adminId = directTelegramIdInput.trim() || '8021115446'
+              const enteredId = directTelegramIdInput.trim() || '8021115446'
               try {
-                const res = await fetch(`/api/paybot?userId=${adminId}`)
-                const data = await res.json()
-                if (data.ok && data.user) {
-                  setCurrentUser(data.user)
-                  setToken(data.token || 'admin_token')
-                  setActiveTab('overview')
-                  loadCrm(adminId)
-                  showToast('Web CRM paneli muvaffaqiyatli ochildi!')
-                } else {
-                  // Fallback admin session
-                  setCurrentUser({ telegramId: adminId, userId: adminId, isAdmin: true, tier: 'premium' })
-                  setActiveTab('overview')
-                  loadCrm(adminId)
-                  showToast('Web CRM paneli ochildi (Admin Rejim)!')
-                }
+                await verifyUser(token, enteredId)
+                showToast('Ma’lumotlar tekshirildi')
               } catch {
-                setCurrentUser({ telegramId: adminId, userId: adminId, isAdmin: true, tier: 'premium' })
-                setActiveTab('overview')
-                loadCrm(adminId)
-                showToast('Web CRM paneli ochildi (Admin Rejim)!')
+                showToast('Ulanishda xatolik yuz berdi')
               } finally {
                 setAuthLoading(false)
               }
@@ -4222,75 +4206,130 @@ export function PaybotDashboard() {
         {/* ------------------------------------------------------------- */}
         {activeTab === 'admins' && currentUser?.isAdmin && crmData && (
           <div className="max-w-2xl bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
-            <h2 className="text-lg font-bold text-[#152238] mb-4">
-              👥 Tizim Boshqaruvchi Adminlari
-            </h2>
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-[#152238]">
+                  👥 Tizim Boshqaruvchi Adminlari
+                </h2>
+                <p className="text-xs text-[#718096]">
+                  Tizimda faqat bitta Bosh Superadmin (8021115446) mavjud. Boshqa barcha tayinlangan shaxslar 'admin' maqomida ishlaydi.
+                </p>
+              </div>
 
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                if (!newAdminTelegramId.trim()) return
-                const res = await fetch('/api/admin/crm', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-telegram-user-id': currentUser?.telegramId || '8021115446',
-                  },
-                  body: JSON.stringify({
-                    action: 'add_admin',
-                    telegramId: newAdminTelegramId.trim(),
-                  }),
-                })
-                if (res.ok) {
-                  showToast('Yangi admin tayinlandi!')
-                  setNewAdminTelegramId('')
-                  loadCrm()
-                }
-              }}
-              className="flex gap-2 mb-6"
-            >
-              <input
-                type="text"
-                value={newAdminTelegramId}
-                onChange={(e) => setNewAdminTelegramId(e.target.value)}
-                placeholder="Yangi admin Telegram ID (masalan: 12345678)"
-                className="flex-1 rounded-xl border border-[#cbd5e1] px-4 py-2.5 text-xs outline-none"
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-[#1769e0] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#1254b7]"
+              {(currentUser?.isSuperAdmin || currentUser?.telegramId === '8021115446') && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm('Nohaq yoki avtomatik berilgan barcha adminlarni tozalashni tasdiqlaysizmi?')) return
+                    const res = await fetch('/api/admin/crm', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                        'x-telegram-user-id': currentUser?.telegramId || '',
+                      },
+                      body: JSON.stringify({ action: 'clean_auto_admins' }),
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                      showToast(data.message || 'Avto-adminlar tozalandi!')
+                      loadCrm()
+                    } else {
+                      showToast(data.error || 'Xatolik', 'error')
+                    }
+                  }}
+                  className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5 text-xs font-semibold hover:bg-amber-100 transition whitespace-nowrap"
+                >
+                  🧹 Soxta adminlarni tozalash
+                </button>
+              )}
+            </div>
+
+            {(currentUser?.isSuperAdmin || currentUser?.telegramId === '8021115446') ? (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  if (!newAdminTelegramId.trim()) return
+                  const res = await fetch('/api/admin/crm', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                      'x-telegram-user-id': currentUser?.telegramId || '',
+                    },
+                    body: JSON.stringify({
+                      action: 'add_admin',
+                      telegramId: newAdminTelegramId.trim(),
+                    }),
+                  })
+                  const data = await res.json()
+                  if (res.ok) {
+                    showToast('Yangi admin muvaffaqiyatli tayinlandi!')
+                    setNewAdminTelegramId('')
+                    loadCrm()
+                  } else {
+                    showToast(data.error || 'Admin tayinlashda xatolik', 'error')
+                  }
+                }}
+                className="flex gap-2 mb-6"
               >
-                Qo‘shish
-              </button>
-            </form>
+                <input
+                  type="text"
+                  value={newAdminTelegramId}
+                  onChange={(e) => setNewAdminTelegramId(e.target.value)}
+                  placeholder="Yangi admin Telegram ID (masalan: 12345678)"
+                  className="flex-1 rounded-xl border border-[#cbd5e1] px-4 py-2.5 text-xs outline-none focus:border-[#1769e0]"
+                />
+                <button
+                  type="submit"
+                  className="rounded-xl bg-[#1769e0] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#1254b7] transition"
+                >
+                  Admin Tayinlash
+                </button>
+              </form>
+            ) : (
+              <div className="mb-6 rounded-2xl bg-amber-50 border border-amber-200 p-3.5 text-xs text-amber-800 font-medium">
+                🔒 <b>Xavfsizlik:</b> Yangi admin tayinlash yoki o‘chirish vakolati faqat Bosh Superadmin (<code>8021115446</code>) ga tegishli.
+              </div>
+            )}
 
             <div className="divide-y divide-[#f1f5f9]">
               {crmData?.roles?.map((r: any) => (
                 <div key={r.id} className="py-3 flex items-center justify-between text-xs">
                   <div>
                     <span className="font-mono font-bold text-[#152238]">{r.telegramId}</span>
-                    <span className="ml-2 text-[11px] text-[#94a3b8]">({r.role})</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${r.telegramId === '8021115446' ? 'bg-amber-100 text-amber-800' : 'bg-blue-50 text-blue-700'}`}>
+                      {r.telegramId === '8021115446' ? '👑 Bosh Superadmin' : '🛡 Admin'}
+                    </span>
+                    {r.addedBy && (
+                      <span className="ml-2 text-[10px] text-[#94a3b8]">Qo‘shdi: {r.addedBy}</span>
+                    )}
                   </div>
-                  {r.telegramId !== '8021115446' && (
+                  {r.telegramId !== '8021115446' && (currentUser?.isSuperAdmin || currentUser?.telegramId === '8021115446') && (
                     <button
                       onClick={async () => {
+                        if (!confirm(`Admin ${r.telegramId} ni o‘chirishni tasdiqlaysizmi?`)) return
                         const res = await fetch('/api/admin/crm', {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
-                            'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                            Authorization: `Bearer ${token}`,
+                            'x-telegram-user-id': currentUser?.telegramId || '',
                           },
                           body: JSON.stringify({
                             action: 'delete_admin',
                             roleId: r.id,
                           }),
                         })
+                        const data = await res.json()
                         if (res.ok) {
                           showToast('Admin o‘chirildi')
                           loadCrm()
+                        } else {
+                          showToast(data.error || 'O‘chirishda xatolik', 'error')
                         }
                       }}
-                      className="text-[#dc2626] hover:underline"
+                      className="text-[#dc2626] font-semibold hover:underline"
                     >
                       O‘chirish
                     </button>
