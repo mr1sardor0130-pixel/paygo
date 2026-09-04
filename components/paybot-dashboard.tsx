@@ -3387,12 +3387,20 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     <p className="text-xs text-amber-900/80 mt-1 max-w-2xl leading-relaxed">
                       Avtomatlashtirilgan 1 soniyalik to‘lovlar (@humocardbot), Donate jamg‘arma kampaniyalari, VIP Guruhlar (Pullik yozish va obuna) hamda cheksiz mustaqil do‘konlar tizimi!
                     </p>
-                    {currentUser?.premiumEndsAt && new Date(currentUser.premiumEndsAt) > new Date() && (
-                      <p className="text-xs font-semibold text-emerald-800 mt-2 flex items-center gap-1.5">
-                        <CheckCircle2 size={14} className="text-emerald-600" />
-                        Amal qilish muddati: <b>{new Date(currentUser.premiumEndsAt).toLocaleDateString('uz-UZ')}</b> gacha faol
-                      </p>
-                    )}
+                    {currentUser?.premiumEndsAt && (() => {
+                      try {
+                        const d = new Date(currentUser.premiumEndsAt)
+                        if (!isNaN(d.getTime()) && d.getTime() > Date.now()) {
+                          return (
+                            <p className="text-xs font-semibold text-emerald-800 mt-2 flex items-center gap-1.5">
+                              <CheckCircle2 size={14} className="text-emerald-600" />
+                              Amal qilish muddati: <b>{d.toLocaleDateString('uz-UZ')}</b> gacha faol
+                            </p>
+                          )
+                        }
+                      } catch {}
+                      return null
+                    })()}
                   </div>
                 </div>
 
@@ -3599,21 +3607,30 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {displayTariffs.map((t: any) => {
-                      const isPopular = t.id?.includes('monthly') || t.name?.toLowerCase().includes('vip') || t.price >= 50000
+                      const isPopular = t?.id?.includes('monthly') || t?.name?.toLowerCase().includes('vip') || Number(t?.price || 0) >= 50000
                       let featuresList: string[] = []
                       try {
-                        if (Array.isArray(t.features)) {
-                          featuresList = t.features
-                        } else if (typeof t.features === 'string') {
-                          featuresList = JSON.parse(t.features)
+                        if (Array.isArray(t?.features)) {
+                          featuresList = t.features.map((f: any) => String(f))
+                        } else if (typeof t?.features === 'string') {
+                          const trimmed = t.features.trim()
+                          if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+                            const parsed = JSON.parse(trimmed)
+                            if (Array.isArray(parsed)) {
+                              featuresList = parsed.map((f: any) => String(f))
+                            }
+                          }
+                          if (!featuresList.length) {
+                            featuresList = trimmed
+                              .split('\n')
+                              .map((s: string) => s.trim().replace(/^[✓•\-\*]\s*/, ''))
+                              .filter(Boolean)
+                          }
                         }
                       } catch {
-                        featuresList = (t.features || '')
-                          .split('\n')
-                          .map((s: string) => s.trim().replace(/^[✓•\-\*]\s*/, ''))
-                          .filter(Boolean)
+                        featuresList = []
                       }
-                      if (!featuresList.length) {
+                      if (!Array.isArray(featuresList) || !featuresList.length) {
                         featuresList = [
                           '⚡️ 1 soniyada avto-to‘lov (@humocardbot)',
                           '🏪 Do‘kon ochish va Webhook ulash',
@@ -3623,11 +3640,12 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                         ]
                       }
 
-                      const formattedCard = (t.cardNumber || '9860350123453587').replace(/(\d{4})(?=\d)/g, '$1 ')
+                      const cardNumStr = String(t?.cardNumber || '9860350123453587')
+                      const formattedCard = cardNumStr.replace(/(\d{4})(?=\d)/g, '$1 ')
 
                       return (
                         <div
-                          key={t.id}
+                          key={t?.id || String(Math.random())}
                           className={`relative flex flex-col justify-between rounded-3xl bg-white p-6 sm:p-7 border transition-all ${
                             isPopular
                               ? 'border-blue-500 shadow-lg shadow-blue-500/10 ring-2 ring-blue-500/20'
@@ -3643,21 +3661,21 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                           <div>
                             {/* Title & Price */}
                             <div className="flex items-center justify-between mb-3">
-                              <h4 className="text-base font-bold text-[#152238]">{t.name}</h4>
+                              <h4 className="text-base font-bold text-[#152238]">{t?.name || 'Tarif'}</h4>
                               <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
-                                1 {t.period || 'oy'}
+                                1 {t?.period || 'oy'}
                               </span>
                             </div>
 
-                            <p className="text-xs text-[#64748b] mb-4 min-h-[32px]">{t.description || 'To‘liq monitoring va avto-to‘lov'}</p>
+                            <p className="text-xs text-[#64748b] mb-4 min-h-[32px]">{t?.description || 'To‘liq monitoring va avto-to‘lov'}</p>
 
                             <div className="mb-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/50 p-4 border border-slate-100">
                               <div className="flex items-baseline gap-1">
                                 <span className="text-3xl font-extrabold text-[#152238]">
-                                  {Number(t.price).toLocaleString('uz-UZ')}
+                                  {Number(t?.price || 0).toLocaleString('uz-UZ')}
                                 </span>
                                 <span className="text-xs font-bold text-slate-500">UZS</span>
-                                <span className="text-xs text-slate-400">/ {t.period || 'oy'}</span>
+                                <span className="text-xs text-slate-400">/ {t?.period || 'oy'}</span>
                               </div>
                             </div>
 
@@ -3679,14 +3697,14 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                             {/* Card Details Box */}
                             <div className="rounded-2xl bg-[#f8fafc] p-3.5 border border-[#e2e8f0] text-xs space-y-1 mb-6">
                               <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
-                                <span>To‘lov kartasi ({t.cardBank || 'HUMOCARD'}):</span>
+                                <span>To‘lov kartasi ({t?.cardBank || 'HUMOCARD'}):</span>
                                 <span className="text-blue-600 font-bold">0% komissiya</span>
                               </div>
                               <p className="font-mono font-bold text-[#152238] flex items-center justify-between">
                                 <span>{formattedCard}</span>
                                 <button
                                   onClick={() => {
-                                    navigator.clipboard.writeText((t.cardNumber || '').replace(/\s+/g, ''))
+                                    navigator.clipboard.writeText(cardNumStr.replace(/\s+/g, ''))
                                     showToast('Karta raqami nusxalandi!')
                                   }}
                                   title="Nusxa olish"
@@ -3695,7 +3713,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                                   <Copy size={12} />
                                 </button>
                               </p>
-                              <p className="text-slate-600 text-[11px]">{t.cardOwner || 'Hisob egasi'}</p>
+                              <p className="text-slate-600 text-[11px]">{t?.cardOwner || 'Hisob egasi'}</p>
                             </div>
                           </div>
 
@@ -3834,15 +3852,15 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                   <div className="flex items-center justify-between rounded-2xl bg-white p-3 border border-slate-200">
                     <div>
                       <p className="font-mono text-base font-bold text-[#152238] tracking-wider">
-                        {(tariffPayModal.cardNumber || '9860350123453587').replace(/(\d{4})(?=\d)/g, '$1 ')}
+                        {String(tariffPayModal?.cardNumber || '9860350123453587').replace(/(\d{4})(?=\d)/g, '$1 ')}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {tariffPayModal.cardOwner || 'AZizbek I'} • {tariffPayModal.cardBank || 'HUMOCARD'}
+                        {tariffPayModal?.cardOwner || 'AZizbek I'} • {tariffPayModal?.cardBank || 'HUMOCARD'}
                       </p>
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText((tariffPayModal.cardNumber || '9860350123453587').replace(/\s+/g, ''))
+                        navigator.clipboard.writeText(String(tariffPayModal?.cardNumber || '9860350123453587').replace(/\s+/g, ''))
                         showToast('Karta raqami nusxalandi!')
                       }}
                       className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold flex items-center gap-1 shadow-sm transition"
@@ -4015,7 +4033,14 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                   <textarea
                     rows={5}
                     placeholder={`⚡️ @humocardbot orqali 1 soniyada avto-to‘lov\n🏪 10 tagacha mustaqil do‘konlar\n👥 VIP Guruhlar & Pullik yozish\n🎁 Donate / Ehson yig‘ish kampaniyalari\n📄 QR-kodli rasmiy PDF cheklar\n0% komissiya, to‘g‘ridan-to‘g‘ri kartangizga`}
-                    value={editingTariff.featuresText ?? (typeof editingTariff.features === 'string' ? editingTariff.features : '')}
+                    value={
+                      editingTariff.featuresText ??
+                      (Array.isArray(editingTariff.features)
+                        ? editingTariff.features.join('\n')
+                        : typeof editingTariff.features === 'string'
+                        ? editingTariff.features
+                        : '')
+                    }
                     onChange={(e) => setEditingTariff({ ...editingTariff, featuresText: e.target.value })}
                     className="w-full rounded-2xl border border-[#e2e8f0] p-4 text-xs font-sans text-[#152238] focus:border-blue-500 focus:outline-none leading-relaxed"
                   />
