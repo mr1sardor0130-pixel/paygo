@@ -2949,7 +2949,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                 <p className="mt-3 text-2xl font-bold text-[#152238]">
                   {crmData?.stats?.activeUserbots || 0} faol
                 </p>
-                <p className="mt-1 text-[11px] text-[#16865b]">@humocardbot monitoringda</p>
+                <p className="mt-1 text-[11px] text-[#16865b]">@CardXabarBot & @humocardbot faol</p>
               </div>
 
               <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm">

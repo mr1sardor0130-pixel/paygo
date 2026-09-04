@@ -123,7 +123,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
           ok: true,
           step: 'connected',
-          message: 'Telegram Userbot muvaffaqiyatli ulandi va @humocardbot monitoringi ishga tushdi!',
+          message: 'Telegram Userbot muvaffaqiyatli ulandi va @CardXabarBot hamda @humocardbot monitoringi ishga tushdi!',
         })
       }
     }
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         ok: true,
         step: 'connected',
-        message: 'Telegram Userbot 2FA orqali muvaffaqiyatli ulandi va @humocardbot monitoringi faollashdi!',
+        message: 'Telegram Userbot 2FA orqali muvaffaqiyatli ulandi va @CardXabarBot hamda @humocardbot monitoringi faollashdi!',
       })
     }
 

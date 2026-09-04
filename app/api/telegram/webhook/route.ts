@@ -358,7 +358,7 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
 
   const text =
     `💎 <b>PayGo Mukammal Premium Obunalar</b>\n\n` +
-    `⚡️ <i>Avto to‘lov (@humocardbot), Donate jamg‘armalari, VIP Guruhlar (Pullik yozish) va cheksiz do‘konlar tizimi!</i>\n\n` +
+    `⚡️ <i>Avto to‘lov (@CardXabarBot & @humocardbot), Donate jamg‘armalari, VIP Guruhlar (Pullik yozish) va cheksiz do‘konlar tizimi!</i>\n\n` +
     `🛡 <b>0% Komissiya — Qonuniy Kafolat:</b>\n` +
     `Biz hech qachon to‘lovlardan foiz olmaymiz va foydalanuvchilar mablag‘larini saqlamaymiz! Barcha pullar 100% to‘g‘ridan-to‘g‘ri sizning o‘z bank kartangizga tushadi. PayGo — faqatgina xavfsiz SaaS texnik avtomatlashtirish platformasidir.\n\n` +
     `👤 <b>Hozirgi maqomingiz:</b>\n${currentTierInfo}\n\n` +
@@ -764,7 +764,7 @@ async function showShopDetails(token: string, chatId: number, userIdStr: string,
     `🖼 <b>Logo:</b> ${s.logoUrl ? '✅ Yuklangan' : '❌ Yo‘q'}\n` +
     `🔗 <b>Webhook URL:</b> ${s.webhookUrl ? `<code>${s.webhookUrl}</code>` : '❌ O‘rnatilmagan'}\n` +
     `📣 <b>Telegram Kanal:</b> ${s.telegramChannelId ? `<code>${s.telegramChannelId}</code>` : '❌ Ulanmagan'}\n` +
-    `🤖 <b>Userbot (@humocardbot):</b> ${isConnected ? '🟢 Ulangan va Faol' : '🔴 Ulanmagan'}\n` +
+    `🤖 <b>Userbot (@CardXabarBot / @humocardbot):</b> ${isConnected ? '🟢 Ulangan va Faol' : '🔴 Ulanmagan'}\n` +
     `⚡️ <b>Holat:</b> ${s.approved ? '✅ Tasdiqlangan' : '⏳ Kutilmoqda'}\n` +
     `🆔 <b>Shop ID:</b> <code>${s.id}</code>\n\n` +
     `Tahrirlash va boshqarish uchun quyidagi tugmalardan foydalaning:`
@@ -814,10 +814,10 @@ async function showUserbotStatus(token: string, chatId: number, userIdStr: strin
       token,
       chatId,
       `🤖 <b>Userbot Holati: 🟢 Ulangan va Faol</b>\n\n` +
-      `✅ Sizning Telegram hisobingiz orqali <b>@humocardbot</b> monitoringi faol ishlamoqda.\n` +
-      `⚡️ HUMO kartangizga pul tushishi bilan to‘lovlar avtomatik tasdiqlanadi va Webhook hamda Telegram kanalingizga yuboriladi.\n\n` +
+      `✅ Sizning Telegram hisobingiz orqali <b>@CardXabarBot</b> (UZCARD & HUMO) hamda <b>@humocardbot</b> (HUMO) monitoringi faol ishlamoqda.\n` +
+      `⚡️ Kartangizga pul tushishi bilan to‘lovlar lahzada avtomatik tasdiqlanadi va Webhook hamda Telegram kanalingizga yuboriladi.\n\n` +
       `🆔 <b>Telegram ID:</b> <code>${userIdStr}</code>\n` +
-      `🔔 <b>Monitoring:</b> @humocardbot to‘lov xabarnomalari\n\n` +
+      `🔔 <b>Monitoring:</b> @CardXabarBot & @humocardbot to‘lov xabarnomalari\n\n` +
       `⚙️ <i>Agar hisobingizni almashtirmoqchi bo‘lsangiz yoki userbotni to‘xtatmoqchi bo‘lsangiz, quyidagi tugma orqali uzishingiz mumkin (2 bosqichli tasdiq talab qilinadi).</i>`,
       {
         inline_keyboard: [
@@ -840,7 +840,7 @@ async function showUserbotStatus(token: string, chatId: number, userIdStr: strin
     token,
     chatId,
     `🔐 <b>Telegram Userbot ulash (1/4)</b>\n\n` +
-    `Userbot @humocardbot dan kelgan HUMO to‘lov xabarnomalarini avtomatik o‘qib, to‘lovlarni tasdiqlaydi.\n\n` +
+    `Userbot <b>@CardXabarBot</b> (UZCARD + HUMO) va <b>@humocardbot</b> dan kelgan to‘lov xabarnomalarini avtomatik o‘qib, to‘lovlarni 1 soniyada tasdiqlaydi.\n\n` +
     `1️⃣ Iltimos, <b>Telegram API ID</b> raqamingizni yuboring:\n` +
     `(Uni <a href="https://my.telegram.org">my.telegram.org</a> saytidan olasiz, masalan: <code>12345678</code>)`,
     back
@@ -3441,7 +3441,7 @@ export async function POST(request: Request) {
       token,
       chatId,
       `👋 <b>PayGo avtomatlashtirilgan to‘lov botiga xush kelibsiz, ${message.from?.first_name ?? 'foydalanuvchi'}!</b>\n\n` +
-      `⚡️ Ushbu bot orqali HUMO to‘lov bildirishnomalarini (@humocardbot) Telegram Userbot orqali avtomatik qabul qilib, o‘z do‘koningiz, kanalingiz va veb-saytlaringizga ulashingiz mumkin.\n\n` +
+      `⚡️ Ushbu bot orqali UZCARD va HUMO to‘lov bildirishnomalarini (@CardXabarBot & @humocardbot) Telegram Userbot orqali avtomatik qabul qilib, o‘z do‘koningiz, kanalingiz va veb-saytlaringizga ulashingiz mumkin.\n\n` +
       `Davom etish uchun foydalanish shartlarini 1 marta qabul qiling:`,
       {
         keyboard: [
@@ -4583,8 +4583,8 @@ export async function POST(request: Request) {
           token,
           chatId,
           `🎉 <b>Tabriklaymiz! Userbot muvaffaqiyatli ulandi!</b>\n\n` +
-          `🤖 <b>Humocardbot (@humocardbot) monitoringi faollashtirildi.</b>\n` +
-          `Barcha HUMO to‘lovlari endi real vaqtda tasdiqlanadi va tizimingizga xabar beriladi!`,
+          `🤖 <b>@CardXabarBot (UZCARD & HUMO) hamda @humocardbot monitoringi faollashtirildi.</b>\n` +
+          `Barcha to‘lovlar endi real vaqtda 1 soniyada tasdiqlanadi va do‘koningiz yoki Webhook’ingizga yuboriladi!`,
           menu
         )
       }

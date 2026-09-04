@@ -437,7 +437,7 @@ export default function TelegramConnectPage() {
                   Userbot muvaffaqiyatli ulandi!
                 </h2>
                 <p className="mt-2 text-xs leading-5 text-[#475569]">
-                  {successMsg || 'Telegram hisobingiz va Humocardbot (@humocardbot) monitoringi faollashtirildi.'}
+                  {successMsg || 'Telegram hisobingiz, @CardXabarBot (UZCARD & HUMO) hamda @humocardbot monitoringi faollashtirildi.'}
                 </p>
               </div>
 
@@ -446,7 +446,7 @@ export default function TelegramConnectPage() {
                   <Sparkles size={16} /> Real-vaqt monitoringi faol:
                 </div>
                 <ul className="mt-2 list-disc list-inside space-y-1 text-[11px]">
-                  <li>@humocardbot dagi barcha kirim xabarlari avtomatik ushlanadi.</li>
+                  <li><b>@CardXabarBot</b> (UZCARD va HUMO) hamda <b>@humocardbot</b> dagi barcha kirim xabarlari avtomatik ushlanadi.</li>
                   <li>Mijozlar to‘lov sahifasida to‘lov qilganda holat 1 soniyada avto-tasdiqlanadi.</li>
                 </ul>
               </div>

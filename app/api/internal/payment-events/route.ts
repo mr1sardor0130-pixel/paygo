@@ -1,18 +1,13 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { z } from 'zod'
 import { db } from '@/lib/db'
 import { payments, userProfiles, shops, donations, fundraisers } from '@/lib/db/schema'
 import { deliverWebhook, type PaymentEvent } from '@/lib/webhook'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
 import { sendTelegramMessage, sendTelegramDocument } from '@/lib/telegram-notifier'
+import { parseBankNotification } from '@/lib/telegram-humo-parser'
 
-const eventSchema = z.object({
-  amount: z.number().int().positive(),
-  cardLast4: z.string().regex(/^\d{4}$/),
-  sourceMessage: z.string().min(1),
-})
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
@@ -23,20 +18,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const parsed = eventSchema.safeParse(await request.json())
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_event' }, { status: 400 })
+  let body: any = {}
+  try {
+    body = await request.json()
+  } catch {
+    const rawText = await request.text()
+    body = { sourceMessage: rawText }
+  }
+
+  let amount = typeof body.amount === 'number' ? body.amount : Number(body.amount)
+  let cardLast4 = String(body.cardLast4 || '').trim()
+  let sourceMessage = String(body.sourceMessage || body.raw || body.text || '').trim()
+  let provider = body.provider || '@CardXabarBot'
+  let cardType = body.cardType || 'UNKNOWN'
+
+  // If amount wasn't explicitly provided or if raw text was sent, parse via universal bank parser
+  if ((!amount || isNaN(amount) || amount <= 0) && sourceMessage) {
+    const parsedNotification = parseBankNotification(sourceMessage)
+    if (parsedNotification) {
+      amount = parsedNotification.amount
+      cardLast4 = parsedNotification.cardLast4 || cardLast4
+      cardType = parsedNotification.cardType || cardType
+      provider = parsedNotification.provider || provider
+    }
+  }
+
+  if (!amount || isNaN(amount) || amount <= 0) {
+    return NextResponse.json({ error: 'invalid_amount', message: 'To‘lov summasi aniqlanmadi' }, { status: 400 })
+  }
 
   // Find the most recent pending payment matching the exact amount
   const pendingPayments = await db
     .select()
     .from(payments)
-    .where(and(eq(payments.amount, parsed.data.amount), eq(payments.status, 'pending')))
+    .where(and(eq(payments.amount, Math.round(amount)), eq(payments.status, 'pending')))
     .orderBy(desc(payments.createdAt))
     .limit(1)
 
   const payment = pendingPayments[0]
   if (!payment || new Date(payment.expiresAt) < new Date()) {
-    return NextResponse.json({ matched: false, reason: 'payment_not_found' })
+    return NextResponse.json({ matched: false, reason: 'payment_not_found', amount, cardLast4, provider })
   }
 
   // Update payment status to paid
@@ -45,7 +66,7 @@ export async function POST(request: Request) {
     .set({
       status: 'paid',
       matchedAt: new Date(),
-      sourceMessage: parsed.data.sourceMessage,
+      sourceMessage: sourceMessage || `Avto-to‘lov (${provider}): ${amount} UZS`,
     })
     .where(and(eq(payments.id, payment.id), eq(payments.status, 'pending')))
 
@@ -100,8 +121,8 @@ export async function POST(request: Request) {
         paymentId: payment.id,
         title: `PayGo Premium - ${name}`,
         amount: payment.amount,
-        cardNumber: '9860350123453587',
-        cardOwner: 'AZizbek I',
+        cardNumber: '9860166655238557',
+        cardOwner: 'Sardor Tuyginov',
         date: new Date().toLocaleString('uz-UZ'),
         userId: payment.userId,
         status: 'PAID',
@@ -112,6 +133,7 @@ export async function POST(request: Request) {
         `🎉 <b>Tabriklaymiz! To‘lovingiz Muvaffaqiyatli Tasdiqlandi!</b>\n\n` +
         `💎 <b>Aktivlashtirilgan Tarif:</b> ${name}\n` +
         `⏳ <b>Amal qilish muddati:</b> ${premiumEndsAt.toLocaleDateString('uz-UZ')} gacha\n` +
+        `🤖 <b>To‘lov tizimi:</b> ${provider} (${cardType || 'Karta'})\n` +
         `🚀 <b>Imkoniyatlar:</b> Cheksiz do‘konlar, cheksiz to‘lovlar va to‘liq monitoring faollashtirildi!\n\n` +
         `📄 <i>Quyida rasmiy to‘lov chekingiz PDF shaklida yuborilmoqda.</i>`
       )
@@ -168,6 +190,8 @@ export async function POST(request: Request) {
           `🔔 <b>Yangi To‘lov Muvaffaqiyatli Qabul Qilindi!</b>\n\n` +
           `🏪 <b>Do‘kon:</b> ${shop.name}\n` +
           `💰 <b>Summa:</b> <code>${payment.amount.toLocaleString('uz-UZ')}</code> UZS\n` +
+          `💳 <b>Karta:</b> *${cardLast4 || '1641'} (${cardType})\n` +
+          `🤖 <b>Tizim:</b> ${provider}\n` +
           `🆔 <b>To‘lov ID:</b> <code>${payment.id}</code>\n` +
           `👤 <b>Mijoz Telegram ID:</b> <code>${payment.userId}</code>\n` +
           `⏰ <b>Vaqt:</b> ${new Date().toLocaleString('uz-UZ')}`
@@ -179,6 +203,8 @@ export async function POST(request: Request) {
             shop.telegramChannelId,
             `📢 <b>[${shop.name}] Yangi To‘lov Tasdiqlandi!</b>\n\n` +
             `💰 <b>Summa:</b> <code>${payment.amount.toLocaleString('uz-UZ')} UZS</code>\n` +
+            `💳 <b>Karta:</b> *${cardLast4 || '1641'} (${cardType})\n` +
+            `🤖 <b>Monitoring:</b> ${provider}\n` +
             `👤 <b>Mijoz ID:</b> <code>${payment.userId}</code>\n` +
             `🆔 <b>To‘lov ID:</b> <code>${payment.id}</code>\n` +
             `⏰ <b>Vaqt:</b> ${new Date().toLocaleString('uz-UZ')}`
@@ -216,6 +242,6 @@ export async function POST(request: Request) {
     createdAt: new Date().toISOString(),
     payment: { id: payment.id, amount: payment.amount, currency: payment.currency, status: 'paid' },
   }
-  return NextResponse.json({ matched: true, event, delivery: 'queued' })
+  return NextResponse.json({ matched: true, event, delivery: 'queued', provider, cardType, cardLast4 })
 }
 
