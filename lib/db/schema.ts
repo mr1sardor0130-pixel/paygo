@@ -68,6 +68,7 @@ export const systemTariffs = pgTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     description: text('description'),
+    features: text('features'), // JSON or newline-separated features list
     price: integer('price').notNull(), // UZS
     period: text('period').notNull().default('month'), // day, week, month, year
     cardNumber: text('cardNumber').notNull().default('9860350123453587'),

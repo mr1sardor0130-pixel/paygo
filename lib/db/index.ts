@@ -207,18 +207,23 @@ export async function ensureDbSchema() {
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );
 
+      ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "features" text;
+
       -- Ensure default superadmin 8021115446 exists
       INSERT INTO "system_roles" ("id", "telegramId", "role", "addedBy")
       VALUES ('superadmin-8021115446', '8021115446', 'superadmin', 'system')
       ON CONFLICT ("telegramId") DO NOTHING;
 
       -- Seed default tariffs if table empty
-      INSERT INTO "system_tariffs" ("id", "name", "description", "price", "period", "cardNumber", "cardOwner", "cardBank", "active")
+      INSERT INTO "system_tariffs" ("id", "name", "description", "features", "price", "period", "cardNumber", "cardOwner", "cardBank", "active")
       VALUES 
-        ('tariff-daily', 'Kunlik', '1 kunlik sinov va faol monitoring', 1000, 'day', '9860350123453587', 'AZizbek I', 'HUMOCARD', true),
-        ('tariff-weekly', 'Haftalik', '7 kunlik do‘kon integratsiyasi', 6500, 'week', '9860350123453587', 'AZizbek I', 'HUMOCARD', true),
-        ('tariff-monthly', 'Oylik VIP', '30 kunlik to‘liq cheksiz imkoniyat', 27858, 'month', '9860350123453587', 'AZizbek I', 'HUMOCARD', true)
-      ON CONFLICT ("id") DO NOTHING;
+        ('tariff-daily', 'Kunlik Sinov', '1 kunlik sinov, avto-to‘lov va monitoring', '["⚡️ @humocardbot orqali 1 soniyada avto-to‘lov", "🏪 3 tagacha do‘kon ochish", "🔗 Har bir do‘kon uchun alohida Webhook & Kanal", "👥 1 ta VIP Guruh (Pullik yozish / kirish)", "🎁 1 ta Donate / Ehson yig‘ish kampaniyasi", "0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga", "📄 PDF cheklar generatsiyasi"]', 5000, 'kun', '9860350123453587', 'AZizbek I', 'HUMOCARD', true),
+        ('tariff-weekly', 'Haftalik Standart', '7 kunlik biznes va faol savdo imkoniyati', '["⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)", "🏪 10 tagacha mustaqil do‘konlar", "🔗 Har bir do‘kon uchun maxsus Webhook & Kanal", "👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)", "🎁 Cheksiz Donate & Xayriya yig‘ish havolalari", "0% komissiya va 24/7 avtomatik monitoring", "📄 QR-kodli rasmiy PDF kvitansiyalar", "🛠 Dasturchilar uchun REST API & SDK"]', 25000, 'hafta', '9860350123453587', 'AZizbek I', 'HUMOCARD', true),
+        ('tariff-monthly', 'Oylik VIP (Cheksiz)', '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami', '["⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)", "🏪 CHEKSIZ do‘konlar yaratish va ulash", "🔗 Har bir do‘konga individual Webhook & Kanal", "👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi", "🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari", "💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash", "0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga", "📄 Brendlangan PDF cheklar va to‘lov tahlillari", "🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash"]', 79000, 'oy', '9860350123453587', 'AZizbek I', 'HUMOCARD', true)
+      ON CONFLICT ("id") DO UPDATE SET
+        "features" = EXCLUDED."features",
+        "description" = EXCLUDED."description"
+      WHERE "system_tariffs"."features" IS NULL;
     `)
     columnsEnsured = true
   } catch (err) {

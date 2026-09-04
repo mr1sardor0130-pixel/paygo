@@ -93,6 +93,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: `Do‘kon holati ${approved ? 'Tasdiqlandi' : 'Kutilmoqda holatiga o‘tkazildi'}` })
     }
 
+    // 1.2 DELETE SHOP (Admin Delete Shop)
+    if (action === 'delete_shop') {
+      const { shopId } = body
+      if (!shopId) {
+        return NextResponse.json({ error: 'Do‘kon ID kiritilmadi' }, { status: 400 })
+      }
+      await db.delete(shops).where(eq(shops.id, shopId))
+      return NextResponse.json({ ok: true, message: 'Do‘kon muvaffaqiyatli o‘chirildi!' })
+    }
+
     // 1.5 UPDATE FULL SHOP DETAILS (Admin Edit Shop)
     if (action === 'update_shop') {
       const { shopId, name, description, cardNumber, accountOwner, cardBank, webhookUrl, telegramChannelId, logoUrl, approved, tier } = body
@@ -178,44 +188,74 @@ export async function POST(request: Request) {
 
     // 4. CREATE / UPDATE TARIFF
     if (action === 'save_tariff') {
-      const { id, name, description, price, period, cardNumber, cardOwner, cardBank, active } = body
-      if (!name || !price) {
+      const { id, name, description, features, price, period, cardNumber, cardOwner, cardBank, active } = body
+      if (!name || price === undefined || price === null || price === '') {
         return NextResponse.json({ error: 'Tarif nomi va narxi majburiy' }, { status: 400 })
       }
 
+      const numPrice = Number(price)
+      if (isNaN(numPrice) || numPrice < 0) {
+        return NextResponse.json({ error: 'Tarif narxi musbat son bo‘lishi kerak' }, { status: 400 })
+      }
+
+      const cleanFeatures = typeof features === 'string' 
+        ? features 
+        : Array.isArray(features) 
+          ? JSON.stringify(features) 
+          : features || ''
+
+      const tariffData = {
+        name: String(name).trim(),
+        description: description ? String(description).trim() : '',
+        features: cleanFeatures,
+        price: Math.round(numPrice),
+        period: period || 'oy',
+        cardNumber: cardNumber ? String(cardNumber).replace(/\s+/g, '') : '9860350123453587',
+        cardOwner: cardOwner ? String(cardOwner).trim() : 'AZizbek I',
+        cardBank: cardBank ? String(cardBank).trim() : 'HUMOCARD',
+        active: active !== undefined ? Boolean(active) : true,
+        updatedAt: new Date(),
+      }
+
       if (id) {
-        // Update existing tariff
         await db
-          .update(systemTariffs)
-          .set({
-            name,
-            description,
-            price: Number(price),
-            period: period || 'month',
-            cardNumber: cardNumber || '9860350123453587',
-            cardOwner: cardOwner || 'AZizbek I',
-            cardBank: cardBank || 'HUMOCARD',
-            active: active !== undefined ? Boolean(active) : true,
-            updatedAt: new Date(),
+          .insert(systemTariffs)
+          .values({
+            id: String(id),
+            ...tariffData,
           })
-          .where(eq(systemTariffs.id, id))
-        return NextResponse.json({ ok: true, message: 'Tarif muvaffaqiyatli tahrirlandi' })
+          .onConflictDoUpdate({
+            target: systemTariffs.id,
+            set: tariffData,
+          })
+        return NextResponse.json({ ok: true, message: 'Tarif muvaffaqiyatli saqlandi!' })
       } else {
-        // Create new tariff
         const tariffId = `tariff-${randomUUID().slice(0, 8)}`
         await db.insert(systemTariffs).values({
           id: tariffId,
-          name,
-          description,
-          price: Number(price),
-          period: period || 'month',
-          cardNumber: cardNumber || '9860350123453587',
-          cardOwner: cardOwner || 'AZizbek I',
-          cardBank: cardBank || 'HUMOCARD',
-          active: active !== undefined ? Boolean(active) : true,
+          ...tariffData,
         })
-        return NextResponse.json({ ok: true, message: 'Yangi tarif yaratildi' })
+        return NextResponse.json({ ok: true, message: 'Yangi tarif muvaffaqiyatli yaratildi!' })
       }
+    }
+
+    // 4.5 BULK UPDATE TARIFF CARDS
+    if (action === 'bulk_update_tariff_card') {
+      const { cardNumber, cardOwner, cardBank } = body
+      if (!cardNumber) {
+        return NextResponse.json({ error: 'Karta raqami kiritilmadi' }, { status: 400 })
+      }
+
+      const cleanCard = String(cardNumber).replace(/\s+/g, '')
+      const updatePayload: any = {
+        cardNumber: cleanCard,
+        updatedAt: new Date(),
+      }
+      if (cardOwner) updatePayload.cardOwner = String(cardOwner).trim()
+      if (cardBank) updatePayload.cardBank = String(cardBank).trim()
+
+      await db.update(systemTariffs).set(updatePayload)
+      return NextResponse.json({ ok: true, message: 'Barcha tariflar uchun to‘lov kartasi muvaffaqiyatli yangilandi!' })
     }
 
     // 5. DELETE TARIFF
