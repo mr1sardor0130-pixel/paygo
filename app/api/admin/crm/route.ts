@@ -237,10 +237,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: 'Barcha nohaq berilgan avto-adminlar tozalandi!' })
     }
 
-    // 4. CREATE / UPDATE TARIFF (Super Admin ONLY)
+    // 4. CREATE / UPDATE TARIFF (Admin & Super Admin)
     if (action === 'save_tariff') {
-      if (!auth.isSuperAdmin) {
-        return NextResponse.json({ error: 'Faqat Bosh Superadmin tariflarni boshqara oladi!' }, { status: 403 })
+      if (!auth.ok) {
+        return NextResponse.json({ error: 'Faqat adminlar tariflarni boshqara oladi!' }, { status: 403 })
       }
       const t = body.tariff || body
       const { id, name, description, features, price, period, cardNumber, cardOwner, cardBank, active } = t
@@ -294,10 +294,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4.1 DELETE TARIFF (Super Admin ONLY)
+    // 4.1 DELETE TARIFF (Admin & Super Admin)
     if (action === 'delete_tariff') {
-      if (!auth.isSuperAdmin) {
-        return NextResponse.json({ error: 'Faqat Bosh Superadmin tariflarni o‘chira oladi!' }, { status: 403 })
+      if (!auth.ok) {
+        return NextResponse.json({ error: 'Faqat adminlar tariflarni o‘chira oladi!' }, { status: 403 })
       }
       const id = body.id || body.tariffId
       if (!id) return NextResponse.json({ error: 'Tarif ID ko‘rsatilmadi' }, { status: 400 })
@@ -305,10 +305,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: 'Tarif o‘chirildi!' })
     }
 
-    // 4.2 RESET DEFAULT TARIFFS (Super Admin ONLY)
+    // 4.2 RESET DEFAULT TARIFFS (Admin & Super Admin)
     if (action === 'reset_default_tariffs') {
-      if (!auth.isSuperAdmin) {
-        return NextResponse.json({ error: 'Faqat Bosh Superadmin birlamchi tariflarni tiklay oladi!' }, { status: 403 })
+      if (!auth.ok) {
+        return NextResponse.json({ error: 'Faqat adminlar birlamchi tariflarni tiklay oladi!' }, { status: 403 })
       }
       const defaults = [
         {
@@ -386,10 +386,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: 'Tariflar birlamchi holatga keltirildi!' })
     }
 
-    // 4.5 BULK UPDATE TARIFF CARDS (Super Admin ONLY)
+    // 4.5 BULK UPDATE TARIFF CARDS (Admin & Super Admin)
     if (action === 'bulk_update_tariff_card') {
-      if (!auth.isSuperAdmin) {
-        return NextResponse.json({ error: 'Faqat Bosh Superadmin to‘lov kartalarini o‘zgartira oladi!' }, { status: 403 })
+      if (!auth.ok) {
+        return NextResponse.json({ error: 'Faqat adminlar to‘lov kartalarini o‘zgartira oladi!' }, { status: 403 })
       }
       const { cardNumber, cardOwner, cardBank } = body
       if (!cardNumber) {

@@ -992,7 +992,7 @@ async function renderAdminTariffManagement(token: string, chatId: number | strin
     { text: `💳 Barcha kartalarni o‘zgartirish`, callback_data: `adm_tar_card_all` }
   ])
 
-  const adminAuthUrl = await generateAuthUrl(chatId, '/admin')
+  const adminAuthUrl = await generateAuthUrl(chatId, '/admin?tab=tariffs_mgmt')
   inlineButtons.push([
     { text: `🌐 Web CRM da Tariflar Boshqaruvi`, url: adminAuthUrl }
   ])
@@ -4682,6 +4682,11 @@ export async function POST(request: Request) {
     const inlineButtons = tariffList.map((t) => [
       { text: `💳 ${t.name} (${Number(t.price).toLocaleString('uz-UZ')} UZS) — To‘lov yaratish`, callback_data: `buy_tariff_${t.id}` }
     ])
+
+    try {
+      const userTariffUrl = await generateAuthUrl(chatId, '/tariffs')
+      inlineButtons.push([{ text: '🌐 Saytda 💎 Tariflar & Premium Ko‘rish', url: userTariffUrl }])
+    } catch {}
 
     await send(
       token,
