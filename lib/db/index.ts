@@ -2,8 +2,19 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import * as schema from './schema'
 
+const connectionString = process.env.DATABASE_URL || ''
+const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
+
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connectionString || undefined,
+  ssl: connectionString && !isLocal ? { rejectUnauthorized: false } : undefined,
+  connectionTimeoutMillis: 7000,
+  idleTimeoutMillis: 15000,
+  max: 10,
+})
+
+pool.on('error', (err) => {
+  console.warn('Postgres pool background error:', err.message || err)
 })
 
 export const db = drizzle(pool, { schema })

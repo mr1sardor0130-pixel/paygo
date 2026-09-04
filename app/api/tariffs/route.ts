@@ -36,7 +36,25 @@ async function resolveUserFromRequest(request: Request): Promise<{ userId: strin
 
 export async function GET(request: Request) {
   await ensureDbSchema()
-  const { telegramId, isAdmin } = await resolveUserFromRequest(request)
+  const { searchParams } = new URL(request.url)
+  const { telegramId: authTgId, isAdmin } = await resolveUserFromRequest(request)
+  const queryTgId = searchParams.get('telegramId')
+  const targetTgId = queryTgId || authTgId
+
+  if (searchParams.get('checkPayment') === 'true' && targetTgId) {
+    try {
+      const profs = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, targetTgId)).limit(1)
+      const prof = profs[0]
+      const isPremium = prof?.tier === 'premium' && prof?.premiumEndsAt && new Date(prof.premiumEndsAt) > new Date()
+      return NextResponse.json({
+        ok: true,
+        isPremium: Boolean(isPremium),
+        premiumEndsAt: prof?.premiumEndsAt,
+      })
+    } catch {
+      return NextResponse.json({ ok: true, isPremium: false })
+    }
+  }
 
   let tariffs: any[] = []
   try {
@@ -320,6 +338,161 @@ export async function POST(request: Request) {
       premiumEndsAt: newEndsAt.toISOString(),
       message: 'Admin sinov to‘lovi tasdiqlandi! Premium VIP faollashtirildi.',
     })
+  }
+
+  // 4. ADMIN: UPSERT TARIFF
+  if (action === 'upsert_tariff') {
+    const tariffData = body.tariff
+    if (!tariffData || !tariffData.name) {
+      return NextResponse.json({ error: 'Tarif ma’lumotlari to‘liq emas' }, { status: 400 })
+    }
+
+    const tariffIdToSave = tariffData.id || `tariff-${Date.now()}`
+    try {
+      await db
+        .insert(systemTariffs)
+        .values({
+          id: tariffIdToSave,
+          name: tariffData.name,
+          description: tariffData.description || '',
+          price: Number(tariffData.price) || 0,
+          period: tariffData.period || 'oy',
+          cardNumber: tariffData.cardNumber || '9860350123453587',
+          cardOwner: tariffData.cardOwner || 'AZizbek I',
+          cardBank: tariffData.cardBank || 'HUMOCARD',
+          features: typeof tariffData.features === 'string' ? tariffData.features : JSON.stringify(tariffData.features || []),
+          active: tariffData.active !== false,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: systemTariffs.id,
+          set: {
+            name: tariffData.name,
+            description: tariffData.description || '',
+            price: Number(tariffData.price) || 0,
+            period: tariffData.period || 'oy',
+            cardNumber: tariffData.cardNumber || '9860350123453587',
+            cardOwner: tariffData.cardOwner || 'AZizbek I',
+            cardBank: tariffData.cardBank || 'HUMOCARD',
+            features: typeof tariffData.features === 'string' ? tariffData.features : JSON.stringify(tariffData.features || []),
+            active: tariffData.active !== false,
+            updatedAt: new Date(),
+          },
+        })
+
+      return NextResponse.json({ ok: true, message: 'Tarif saqlandi' })
+    } catch (e: any) {
+      console.error('Upsert tariff error:', e)
+      return NextResponse.json({ error: e.message || 'Tarifni saqlab bo‘lmadi' }, { status: 500 })
+    }
+  }
+
+  // 5. ADMIN: DELETE TARIFF
+  if (action === 'delete_tariff') {
+    const targetTariffId = body.tariffId
+    if (!targetTariffId) {
+      return NextResponse.json({ error: 'Tarif ID kiritilmadi' }, { status: 400 })
+    }
+    try {
+      await db.delete(systemTariffs).where(eq(systemTariffs.id, targetTariffId))
+      return NextResponse.json({ ok: true, message: 'Tarif o‘chirildi' })
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || 'O‘chirishda xatolik' }, { status: 500 })
+    }
+  }
+
+  // 6. ADMIN: BULK UPDATE CARD
+  if (action === 'bulk_update_card') {
+    const { cardNumber, cardOwner, cardBank } = body
+    if (!cardNumber) {
+      return NextResponse.json({ error: 'Karta raqami kiritilmadi' }, { status: 400 })
+    }
+    try {
+      await db.update(systemTariffs).set({
+        cardNumber: cardNumber.replace(/\s+/g, ''),
+        cardOwner: cardOwner || 'AZizbek I',
+        cardBank: cardBank || 'HUMOCARD',
+        updatedAt: new Date(),
+      })
+      return NextResponse.json({ ok: true, message: 'Barcha tariflar kartasi yangilandi' })
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || 'Kartalarni yangilab bo‘lmadi' }, { status: 500 })
+    }
+  }
+
+  // 7. ADMIN: RESET DEFAULT TARIFFS
+  if (action === 'reset_default_tariffs') {
+    try {
+      await db.delete(systemTariffs)
+      await db.insert(systemTariffs).values([
+        {
+          id: 'tariff-daily',
+          name: 'Kunlik Sinov',
+          description: '1 kunlik sinov, avto-to‘lov va monitoring',
+          features: JSON.stringify([
+            '⚡️ @humocardbot orqali 1 soniyada avto-to‘lov',
+            '🏪 3 tagacha do‘kon ochish',
+            '🔗 Har bir do‘kon uchun alohida Webhook & Kanal',
+            '👥 1 ta VIP Guruh (Pullik yozish / kirish)',
+            '🎁 1 ta Donate / Ehson yig‘ish kampaniyasi',
+            '0% komissiya, mablag‘ to‘g‘ridan-to‘g‘ri kartangizga',
+            '📄 PDF cheklar generatsiyasi',
+          ]),
+          price: 5000,
+          period: 'kun',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+        {
+          id: 'tariff-weekly',
+          name: 'Haftalik Standart',
+          description: '7 kunlik biznes va faol savdo imkoniyati',
+          features: JSON.stringify([
+            '⚡️ 1 soniyada avto-to‘lov tasdiqlash (@humocardbot)',
+            '🏪 10 tagacha mustaqil do‘konlar',
+            '🔗 Har bir do‘kon uchun maxsus Webhook & Kanal',
+            '👥 5 tagacha VIP Guruh / Kanal (Pullik yozish)',
+            '🎁 Cheksiz Donate & Xayriya yig‘ish havolalari',
+            '0% komissiya va 24/7 avtomatik monitoring',
+            '📄 QR-kodli rasmiy PDF kvitansiyalar',
+            '🛠 Dasturchilar uchun REST API & SDK',
+          ]),
+          price: 25000,
+          period: 'hafta',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+        {
+          id: 'tariff-monthly',
+          name: 'Oylik VIP (Cheksiz)',
+          description: '30 kunlik to‘liq cheksiz imkoniyatlar to‘plami',
+          features: JSON.stringify([
+            '⚡️ Avtomatlashtirilgan 24/7 Avto-to‘lov (0 kutish)',
+            '🏪 CHEKSIZ do‘konlar yaratish va ulash',
+            '🔗 Har bir do‘konga individual Webhook & Kanal',
+            '👥 CHEKSIZ VIP Guruhlar va Pullik yozish monetizatsiyasi',
+            '🎁 CHEKSIZ Donate / Ehson yig‘ish kampaniyalari',
+            '💳 Har bir do‘konga alohida HUMO/UZCARD karta ulash',
+            '0% komissiya — 100% to‘g‘ridan-to‘g‘ri kartangizga',
+            '📄 Brendlangan PDF cheklar va to‘lov tahlillari',
+            '🚀 Yuqori ustuvorlikdagi 24/7 VIP texnik qo‘llab-quvvatlash',
+          ]),
+          price: 79000,
+          period: 'oy',
+          cardNumber: '9860350123453587',
+          cardOwner: 'AZizbek I',
+          cardBank: 'HUMOCARD',
+          active: true,
+        },
+      ])
+      return NextResponse.json({ ok: true, message: 'Birlamchi tariflar tiklandi' })
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || 'Tiklashda xatolik' }, { status: 500 })
+    }
   }
 
   return NextResponse.json({ error: 'Noma’lum amal' }, { status: 400 })
