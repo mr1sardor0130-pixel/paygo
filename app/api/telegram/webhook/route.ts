@@ -411,9 +411,9 @@ async function renderUserTariffs(token: string, chatId: number | string, userIdS
     },
   ])
 
-  const crmAuthUrl = await generateAuthUrl(userIdStr, '/admin')
+  const crmAuthUrl = await generateAuthUrl(userIdStr, '/tariffs')
   inlineKeyboard.push([
-    { text: '🌐 Web CRM & To‘lov Sahifasi', url: crmAuthUrl }
+    { text: '🌐 Saytda 💎 Tariflar & Premium', url: crmAuthUrl }
   ])
 
   await send(token, chatId, text, { inline_keyboard: inlineKeyboard })
@@ -1211,6 +1211,7 @@ async function renderVipRooms(token: string, chatId: number | string) {
   } catch {}
 
   if (!rooms.length) {
+    const userVipPanelUrl = await generateAuthUrl(chatId, '/panel?tab=vip_rooms')
     await send(
       token,
       chatId,
@@ -1219,7 +1220,8 @@ async function renderVipRooms(token: string, chatId: number | string) {
       `ℹ️ <i>Agar siz o‘z guruhingizda pullik yozish yoki VIP a’zolik tizimini yoqmoqchi bo‘lsangiz, Sayt Veb CRM paneli orqali yangi guruh qo‘shishingiz mumkin.</i>`,
       {
         inline_keyboard: [
-          [{ text: '🌐 Sayt Veb CRM ga o‘tish', url: `${APP_URL}/admin` }],
+          [{ text: '📱 VIP Guruhlar Boshqaruvi', web_app: { url: userVipPanelUrl } }],
+          [{ text: '🌐 Sayt Veb CRM ga o‘tish', url: userVipPanelUrl }],
         ],
       }
     )
@@ -2602,14 +2604,15 @@ export async function POST(request: Request) {
       const senderIdStr = String(message.from?.id || '')
       const isSysAdmin = await isAdminTelegramId(senderIdStr)
       if (isSysAdmin) {
+        const vipAuthUrl = await generateAuthUrl(senderIdStr, '/panel?tab=vip_rooms')
         await send(
           token,
           message.chat.id,
           `👑 <b>Guruhni VIP Tizimiga Ulash:</b>\n\n` +
           `• Guruh ID: <code>${message.chat.id}</code>\n` +
           `• Nomi: <b>${message.chat.title || 'Telegram Guruh'}</b>\n\n` +
-          `Ushbu guruhni Veb CRM panelida "VIP Guruh & Pullik Yozish" bo‘limida osongina sozlab, narxlarni belgilashingiz mumkin:`,
-          { inline_keyboard: [[{ text: '🌐 Web CRM da sozlash', url: `${APP_URL}/admin` }]] }
+          `Ushbu guruhni Veb panelida "VIP Guruh & Pullik Yozish" bo‘limida osongina sozlab, narxlarni belgilashingiz mumkin:`,
+          { inline_keyboard: [[{ text: '🌐 Web Panelda sozlash', url: vipAuthUrl }]] }
         )
       }
       return NextResponse.json({ ok: true })
@@ -4693,7 +4696,7 @@ export async function POST(request: Request) {
       chatId,
       `💎 <b>PayGo Maxsus Premium Tariflari:</b>\n\n${tTxt}\n\n` +
       `ℹ️ <i>Tarifga to‘lov qilish uchun quyidagi tugmalardan birini bosing va 5 daqiqalik to‘lov buyurtmasini yarating. Userbot orqali to‘lovingiz avtomatik tasdiqlanadi yoki qo‘lda tekshirishingiz mumkin:</i>\n\n` +
-      `🌐 Boshqaruv CRM: <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
+      `🌐 Sayt orqali to‘lov: <a href="${APP_URL}/tariffs">${APP_URL}/tariffs</a>`,
       { inline_keyboard: inlineButtons }
     )
     return NextResponse.json({ ok: true })

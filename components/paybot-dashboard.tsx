@@ -44,12 +44,18 @@ import {
   Layers,
   HelpCircle,
   Filter,
+  ShieldAlert,
 } from 'lucide-react'
 import Link from 'next/link'
 
-type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels'
+export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels'
 
-export function PaybotDashboard() {
+export interface PaybotDashboardProps {
+  initialTab?: TabType
+  adminOnly?: boolean
+}
+
+export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboardProps = {}) {
   // Auth state
   const [token, setToken] = useState<string>('')
   const [currentUser, setCurrentUser] = useState<any>(null)
@@ -60,7 +66,7 @@ export function PaybotDashboard() {
   const [authError, setAuthError] = useState<string | null>(null)
 
   // App tabs & UI state
-  const [activeTab, setActiveTab] = useState<TabType>('shop_settings')
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'shop_settings')
   const [loading, setLoading] = useState(false)
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -743,11 +749,15 @@ export function PaybotDashboard() {
 
   // Load CRM Data (for Admins)
   const loadCrm = async (adminId?: string) => {
+    const currentAdminId = adminId || currentUser?.telegramId || currentUser?.userId
+    if (!currentAdminId) return
     setLoading(true)
     try {
-      const currentAdminId = adminId || currentUser?.telegramId || '8021115446'
-      const res = await fetch(`/api/admin/crm?adminId=${currentAdminId}`, {
-        headers: { 'x-telegram-user-id': currentAdminId },
+      const res = await fetch(`/api/admin/crm?adminId=${encodeURIComponent(currentAdminId)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': currentAdminId,
+        },
       })
       const data = await res.json()
       if (data.ok) {
@@ -1129,27 +1139,6 @@ export function PaybotDashboard() {
             <Send size={16} /> ✈️ @Pay_Gouzbot orqali kirish (1-klikda)
           </a>
 
-          {/* DIRECT WEB CRM PANEL OPEN BUTTON */}
-          <button
-            type="button"
-            onClick={async () => {
-              setAuthLoading(true)
-              const enteredId = directTelegramIdInput.trim() || '8021115446'
-              try {
-                await verifyUser(token, enteredId)
-                showToast('Ma’lumotlar tekshirildi')
-              } catch {
-                showToast('Ulanishda xatolik yuz berdi')
-              } finally {
-                setAuthLoading(false)
-              }
-            }}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-emerald-400 font-extrabold py-3 text-xs border border-slate-700 shadow-md transition cursor-pointer active:scale-[0.99]"
-          >
-            <Sparkles size={16} className="text-emerald-400" />
-            <span>🌐 Web CRM panelini ochish</span>
-          </button>
-
           <div className="relative my-6 text-center">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-[#e2e8f0]"></div>
@@ -1167,7 +1156,7 @@ export function PaybotDashboard() {
                 type="text"
                 value={directTelegramIdInput}
                 onChange={(e) => setDirectTelegramIdInput(e.target.value)}
-                placeholder="Masalan: 8021115446"
+                placeholder="Telegram ID raqamingizni kiriting"
                 className="w-full rounded-xl border border-[#cbd5e1] px-4 py-2.5 text-sm outline-none focus:border-[#1769e0] focus:ring-2 focus:ring-blue-100"
               />
             </div>
@@ -1191,6 +1180,72 @@ export function PaybotDashboard() {
               <span className="font-mono text-[#64748b]">paygo-pearl.vercel.app</span>
             </div>
             <p>PayGo • HUMO To‘lov Avtomatlashtirish Platformasi</p>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  // -------------------------------------------------------------
+  // STRICT ADMIN ROUTE SECURITY GUARD (/admin & /admin/*)
+  // -------------------------------------------------------------
+  if (!authLoading && currentUser && adminOnly && !currentUser.isAdmin) {
+    return (
+      <main className="min-h-screen bg-[#0b1329] text-slate-100 flex flex-col justify-center items-center px-4 py-12">
+        <div className="w-full max-w-lg bg-[#152238] border border-rose-500/40 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+          <div className="mx-auto grid size-16 place-items-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/30 shadow-lg shadow-rose-500/10">
+            <ShieldAlert size={36} />
+          </div>
+
+          <div>
+            <span className="inline-block rounded-full bg-rose-500/20 text-rose-300 text-[11px] font-extrabold px-3 py-1 uppercase tracking-wider mb-2 border border-rose-500/30">
+              🚫 RUXSAT CHEKLANGAN (ADMIN CRM)
+            </span>
+            <h2 className="text-xl font-bold text-white">Faqat Tizim Ma'murlari Uchun</h2>
+            <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+              Sizning hisobingiz (<b>@{currentUser.username || currentUser.telegramId}</b>) PayGo ma'muriyat paneliga kirish huquqiga ega emas. Xavfsizlik maqsadida ushbu sahifadagi ma'lumotlar bloklangan.
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-700/60 text-left text-xs space-y-2">
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Sizning Telegram ID:</span>
+              <span className="font-mono text-white font-bold">{currentUser.telegramId || currentUser.userId}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Hisob maqomi:</span>
+              <span className="text-amber-400 font-semibold">{currentUser.tier === 'premium' ? '💎 Premium Foydalanuvchi' : 'Oddiy Foydalanuvchi'}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Adminlik holati:</span>
+              <span className="text-rose-400 font-semibold">❌ Ruxsat yo‘q</span>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <Link
+              href="/panel"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1769e0] hover:bg-[#1254b7] py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition active:scale-[0.99]"
+            >
+              <Store size={18} />
+              <span>👤 Shaxsiy Foydalanuvchi Panelimga O‘tish (/panel)</span>
+            </Link>
+
+            <Link
+              href="/tariffs"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 hover:bg-amber-600 py-3 text-xs font-bold text-slate-950 transition active:scale-[0.99]"
+            >
+              <Crown size={16} />
+              <span>💎 Tariflar va Premium Obunalar</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-xs text-slate-400 hover:text-white transition pt-1 block mx-auto cursor-pointer"
+            >
+              Boshqa hisob bilan kirish (Chiqish)
+            </button>
           </div>
         </div>
       </main>
