@@ -571,13 +571,33 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Faqat Bosh Superadmin majburiy kanal qo‘sha oladi!' }, { status: 403 })
       }
       const { id, name, channelId, inviteUrl, type, active } = body
-      if (!name || !channelId || !inviteUrl) {
-        return NextResponse.json({ error: 'Kanal nomi, ID si va taklif havolasi majburiy' }, { status: 400 })
+      if (!name || !channelId) {
+        return NextResponse.json({ error: 'Kanal nomi va ID/Username majburiy' }, { status: 400 })
       }
 
-      const formattedChannelId = String(channelId).trim()
-      const formattedInvite = String(inviteUrl).trim()
-      const formattedName = String(name).trim()
+      let formattedChannelId = String(channelId || '').trim()
+      let formattedInvite = String(inviteUrl || '').trim()
+      const formattedName = String(name || '').trim()
+
+      if (formattedChannelId.startsWith('https://t.me/')) {
+        const username = formattedChannelId.replace('https://t.me/', '').replace('/', '')
+        formattedChannelId = '@' + username
+        if (!formattedInvite) {
+          formattedInvite = `https://t.me/${username}`
+        }
+      }
+
+      if (!formattedInvite) {
+        if (formattedChannelId.startsWith('@')) {
+          formattedInvite = `https://t.me/${formattedChannelId.slice(1)}`
+        } else if (formattedChannelId.startsWith('http')) {
+          formattedInvite = formattedChannelId
+        } else if (!formattedChannelId.startsWith('-') && isNaN(Number(formattedChannelId))) {
+          formattedInvite = `https://t.me/${formattedChannelId}`
+        } else {
+          formattedInvite = `https://t.me/Paygorasmiy`
+        }
+      }
 
       if (id) {
         await db

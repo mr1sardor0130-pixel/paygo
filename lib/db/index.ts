@@ -173,6 +173,9 @@ export async function ensureDbSchema() {
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );
 
+      UPDATE "mandatory_channels" SET "inviteUrl" = 'https://t.me/Paygorasmiy' WHERE "inviteUrl" IS NULL OR "inviteUrl" = '' OR "inviteUrl" NOT LIKE 'http%';
+      UPDATE "mandatory_channels" SET "channelId" = '@Paygorasmiy', "inviteUrl" = 'https://t.me/Paygorasmiy' WHERE "channelId" = '8021115446';
+
       CREATE TABLE IF NOT EXISTS "fundraisers" (
         "id" text PRIMARY KEY,
         "shopId" text NOT NULL,

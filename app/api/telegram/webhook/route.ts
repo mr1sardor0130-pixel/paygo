@@ -987,9 +987,32 @@ async function renderAdminTariffDetail(token: string, chatId: number | string, t
   await send(token, chatId, text, { inline_keyboard: buttons })
 }
 
+function getSafeChannelInviteUrl(ch: any): string {
+  if (ch.inviteUrl && typeof ch.inviteUrl === 'string' && ch.inviteUrl.trim().startsWith('http')) {
+    return ch.inviteUrl.trim()
+  }
+  const cleanId = String(ch.channelId || '').trim()
+  if (cleanId.startsWith('http')) {
+    return cleanId
+  }
+  if (cleanId.startsWith('@')) {
+    return `https://t.me/${cleanId.slice(1)}`
+  }
+  if (!cleanId.startsWith('-') && isNaN(Number(cleanId))) {
+    return `https://t.me/${cleanId}`
+  }
+  return 'https://t.me/Paygorasmiy'
+}
+
 // Check Mandatory Subscription for User
 async function checkMandatorySubscription(token: string, userIdStr: string): Promise<{ ok: boolean; missingChannels: any[] }> {
   try {
+    // Admins and Super Admins are ALWAYS exempt from mandatory subscription
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (isAdmin) {
+      return { ok: true, missingChannels: [] }
+    }
+
     const isSubEnabledSetting = await db.select().from(systemSettings).where(eq(systemSettings.key, 'mandatory_sub_enabled')).limit(1)
     const isEnabled = isSubEnabledSetting.length > 0 && isSubEnabledSetting[0].value === 'true'
     if (!isEnabled) {
@@ -1005,9 +1028,26 @@ async function checkMandatorySubscription(token: string, userIdStr: string): Pro
 
     for (const ch of allChans) {
       try {
-        const url = `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(ch.channelId)}&user_id=${userIdStr}`
-        const res = await fetch(url, { method: 'GET' })
-        const data = await res.json()
+        let rawId = String(ch.channelId || '').trim()
+        if (rawId.startsWith('https://t.me/')) {
+          rawId = '@' + rawId.replace('https://t.me/', '').replace('/', '')
+        }
+        if (!rawId.startsWith('@') && !rawId.startsWith('-') && isNaN(Number(rawId))) {
+          rawId = '@' + rawId
+        }
+
+        // Try primary check
+        let url = `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(rawId)}&user_id=${userIdStr}`
+        let res = await fetch(url, { method: 'GET' })
+        let data = await res.json()
+
+        // If numeric ID without -100 was passed, try with -100 prefix if primary failed
+        if (!data.ok && !rawId.startsWith('@') && !rawId.startsWith('-') && !isNaN(Number(rawId))) {
+          url = `https://api.telegram.org/bot${token}/getChatMember?chat_id=-100${encodeURIComponent(rawId)}&user_id=${userIdStr}`
+          res = await fetch(url, { method: 'GET' })
+          data = await res.json()
+        }
+
         if (data.ok && data.result) {
           const status = data.result.status
           if (['creator', 'administrator', 'member', 'restricted'].includes(status)) {
@@ -1015,10 +1055,23 @@ async function checkMandatorySubscription(token: string, userIdStr: string): Pro
             continue
           }
         }
-        missingChannels.push(ch)
+
+        // If error is because bot is NOT an admin in the channel or chat not found (misconfigured channel),
+        // we should NOT block users permanently due to configuration error.
+        if (!data.ok) {
+          const desc = String(data.description || '').toLowerCase()
+          if (desc.includes('bot is not a member') || desc.includes('chat not found') || desc.includes('not enough rights') || desc.includes('method is available only for supergroups')) {
+            console.warn(`[MandatorySub] Bot cannot check channel ${rawId} (${desc}). Skipping to avoid blocking users.`);
+            continue
+          }
+        }
+
+        missingChannels.push({
+          ...ch,
+          inviteUrl: getSafeChannelInviteUrl(ch),
+        })
       } catch (err) {
         console.warn(`Error checking sub for ${ch.channelId}:`, err)
-        missingChannels.push(ch)
       }
     }
 
@@ -3440,6 +3493,30 @@ export async function POST(request: Request) {
       )
       return NextResponse.json({ ok: true })
     }
+  }
+
+  // -------------------------------------------------------------
+  // MANUAL / EXPLICIT CHECK MANDATORY SUBSCRIPTION COMMAND
+  // -------------------------------------------------------------
+  if (text === '✅ Obunani tekshirish' || text === 'Obunani tekshirish' || text === 'Tekshirish' || raw === '/check') {
+    const subCheck = await checkMandatorySubscription(token, userIdStr)
+    if (subCheck.ok) {
+      await send(token, chatId, '✅ <b>Obuna muvaffaqiyatli tasdiqlandi!</b>\n\nPayGo tizimidan foydalanishingiz mumkin:', menu)
+    } else {
+      const buttons = subCheck.missingChannels.map((ch) => [
+        { text: `📢 ${ch.name}`, url: ch.inviteUrl },
+      ])
+      buttons.push([{ text: '✅ Obunani tekshirish', callback_data: 'check_mandatory_sub' }])
+      await send(
+        token,
+        chatId,
+        `⚠️ <b>Botdan to‘liq foydalanish uchun rasmiy kanallarimizga obuna bo‘ling:</b>\n\n` +
+        subCheck.missingChannels.map((c, i) => `${i + 1}. <b>${c.name}</b>`).join('\n') +
+        `\n\nObuna bo‘lgach, <b>"✅ Obunani tekshirish"</b> tugmasini bosing:`,
+        { inline_keyboard: buttons }
+      )
+    }
+    return NextResponse.json({ ok: true })
   }
 
   // -------------------------------------------------------------
