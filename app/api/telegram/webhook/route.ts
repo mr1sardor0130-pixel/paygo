@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, ensureDbSchema, pool } from '@/lib/db'
+import { uploadToImgBB } from '@/lib/imgbb'
 import {
   payments,
   shops,
@@ -3122,10 +3123,22 @@ export async function POST(request: Request) {
         const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`)
         const fileJson = await fileRes.json()
         if (fileJson.ok && fileJson.result?.file_path) {
-          const photoUrl = `https://api.telegram.org/file/bot${token}/${fileJson.result.file_path}`
+          const telegramUrl = `https://api.telegram.org/file/bot${token}/${fileJson.result.file_path}`
+          let photoUrl = await uploadToImgBB(telegramUrl)
+          if (!photoUrl) {
+            try {
+              const imgRes = await fetch(telegramUrl)
+              const arrayBuffer = await imgRes.arrayBuffer()
+              const base64 = Buffer.from(arrayBuffer).toString('base64')
+              const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
+              photoUrl = `data:${contentType};base64,${base64}`
+            } catch (downloadErr) {
+              photoUrl = telegramUrl
+            }
+          }
           await db.update(shops).set({ logoUrl: photoUrl }).where(eq(shops.userId, userIdStr))
           await stateDelete(chatId)
-          await send(token, chatId, `✅ <b>Do‘kon logotipi rasm orqali muvaffaqiyatli saqlandi!</b>`, menu)
+          await send(token, chatId, `✅ <b>Do‘kon logotipi rasmiy bulutga (ImgBB) saqlandi!</b>`, menu)
           return NextResponse.json({ ok: true })
         }
       } catch (err) {
@@ -4519,7 +4532,21 @@ export async function POST(request: Request) {
         const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${highestPhoto.file_id}`)
         const fileData = await fileRes.json()
         if (fileData.ok && fileData.result?.file_path) {
-          logoUrl = `https://api.telegram.org/file/bot${token}/${fileData.result.file_path}`
+          const telegramUrl = `https://api.telegram.org/file/bot${token}/${fileData.result.file_path}`
+          const imgbbUrl = await uploadToImgBB(telegramUrl)
+          if (imgbbUrl) {
+            logoUrl = imgbbUrl
+          } else {
+            try {
+              const imgRes = await fetch(telegramUrl)
+              const arrayBuffer = await imgRes.arrayBuffer()
+              const base64 = Buffer.from(arrayBuffer).toString('base64')
+              const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
+              logoUrl = `data:${contentType};base64,${base64}`
+            } catch (downloadErr) {
+              logoUrl = telegramUrl
+            }
+          }
         }
       } catch {}
     }

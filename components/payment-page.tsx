@@ -61,6 +61,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [simulating, setSimulating] = useState(false)
   const [simulationResult, setSimulationResult] = useState<string | null>(null)
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
+  const [logoError, setLogoError] = useState(false)
 
   // Auto-redirect to returnUrl on successful payment
   // If there is an ad/promo banner, wait 3 seconds; if no ad banner, fast 1-second redirect
@@ -232,10 +233,11 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
         {/* Brand Header */}
         <header className="mb-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            {data?.shop?.logoUrl ? (
+            {data?.shop?.logoUrl && !logoError ? (
               <img
                 src={data.shop.logoUrl}
                 alt={shopName}
+                onError={() => setLogoError(true)}
                 className="size-12 rounded-2xl object-cover border border-[#cbd5e1] shadow-sm bg-white shrink-0"
               />
             ) : (

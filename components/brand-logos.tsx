@@ -8,7 +8,7 @@ import { ExternalLink, Check, ShieldCheck } from 'lucide-react'
    ========================================================================== */
 
 /**
- * HUMO Logo (Reads custom uploaded logo from localStorage or uses default)
+ * HUMO Logo (Reads custom uploaded logo or default vector SVG)
  */
 export function HumoLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
   const [imgError, setImgError] = useState(false)
@@ -34,30 +34,19 @@ export function HumoLogo({ className = "h-6", customUrl }: { className?: string;
     )
   }
 
-  if (imgError) {
-    return (
-      <svg viewBox="0 0 100 30" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100" height="30" rx="5" fill="#022B18" />
-        <path d="M12 7V23M12 15H20M20 7V23" stroke="#00C853" strokeWidth="3" strokeLinecap="round" />
-        <path d="M26 7V16C26 19.5 28.5 22 31.5 22C34.5 22 37 19.5 37 16V7" stroke="#00C853" strokeWidth="3" strokeLinecap="round" />
-        <path d="M43 23V7L50 16L57 7V23" stroke="#00C853" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="70" cy="15" r="7" stroke="#FF6D00" strokeWidth="3" />
-      </svg>
-    )
-  }
-
   return (
-    <img
-      src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Humo_logo.png"
-      alt="HUMO"
-      className={`${className} object-contain inline-block`}
-      onError={() => setImgError(true)}
-    />
+    <svg viewBox="0 0 100 32" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="32" rx="6" fill="#023b20" />
+      <path d="M14 8V24M14 16H22M22 8V24" stroke="#00E676" strokeWidth="3.2" strokeLinecap="round" />
+      <path d="M28 8V17C28 20.5 30.5 23 33.5 23C36.5 23 39 20.5 39 17V8" stroke="#00E676" strokeWidth="3.2" strokeLinecap="round" />
+      <path d="M45 24V8L52 17L59 8V24" stroke="#00E676" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="72" cy="16" r="7.5" stroke="#FF6D00" strokeWidth="3.2" />
+    </svg>
   )
 }
 
 /**
- * UZCARD Logo (Reads custom uploaded logo from localStorage or uses default)
+ * UZCARD Logo (Reads custom uploaded logo or default vector SVG)
  */
 export function UzcardLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
   const [imgError, setImgError] = useState(false)
@@ -83,27 +72,16 @@ export function UzcardLogo({ className = "h-6", customUrl }: { className?: strin
     )
   }
 
-  if (imgError) {
-    return (
-      <svg viewBox="0 0 110 30" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="110" height="30" rx="5" fill="#003D75" />
-        <text x="10" y="20" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="900" fontSize="14" letterSpacing="1">UZCARD</text>
-        <g transform="translate(82, 6)">
-          <rect width="18" height="18" rx="3" fill="#00A3E0" />
-          <rect y="4" width="18" height="4" fill="#002A54" />
-          <circle cx="13" cy="13" r="2" fill="#FFFFFF" />
-        </g>
-      </svg>
-    )
-  }
-
   return (
-    <img
-      src="https://upload.wikimedia.org/wikipedia/commons/d/d4/UZCARD_logo.png"
-      alt="UZCARD"
-      className={`${className} object-contain inline-block`}
-      onError={() => setImgError(true)}
-    />
+    <svg viewBox="0 0 110 32" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="110" height="32" rx="6" fill="#003366" />
+      <text x="10" y="21" fill="#FFFFFF" fontFamily="system-ui, sans-serif" fontWeight="900" fontSize="13" letterSpacing="1.2">UZCARD</text>
+      <g transform="translate(80, 6)">
+        <rect width="20" height="20" rx="4" fill="#00A3E0" />
+        <rect y="4" width="20" height="4.5" fill="#001F3F" />
+        <circle cx="14" cy="14" r="2.5" fill="#FFFFFF" />
+      </g>
+    </svg>
   )
 }
 

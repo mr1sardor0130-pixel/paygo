@@ -212,38 +212,47 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     }
   }, [tariffPayModal])
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Fayl hajmi 5MB dan oshmasligi kerak!')
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Fayl hajmi 10MB dan oshmasligi kerak!')
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string
-      if (!dataUrl) return
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
 
-      if (targetKey === 'logoUrl') {
-        setShopForm(prev => ({ ...prev, logoUrl: dataUrl }))
-      } else if (targetKey === 'paygo') {
-        setPaygoOfficialLogo(dataUrl)
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('paygo_official_logo', dataUrl)
-        }
-      } else {
-        setBrandLogos(prev => {
-          const next = { ...prev, [targetKey]: dataUrl }
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      const finalUrl = data?.url || null
+
+      if (finalUrl) {
+        if (targetKey === 'logoUrl') {
+          setShopForm(prev => ({ ...prev, logoUrl: finalUrl }))
+        } else if (targetKey === 'paygo') {
+          setPaygoOfficialLogo(finalUrl)
           if (typeof window !== 'undefined') {
-            localStorage.setItem(`paygo_${targetKey}_logo`, dataUrl)
+            localStorage.setItem('paygo_official_logo', finalUrl)
           }
-          return next
-        })
+        } else {
+          setBrandLogos(prev => {
+            const next = { ...prev, [targetKey]: finalUrl }
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`paygo_${targetKey}_logo`, finalUrl)
+            }
+            return next
+          })
+        }
       }
+    } catch (err) {
+      console.error('File upload error:', err)
     }
-    reader.readAsDataURL(file)
   }
 
   const handleRemoveLogo = (targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
@@ -5343,16 +5352,20 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0]
                           if (file) {
-                            const reader = new FileReader()
-                            reader.onload = (ev) => {
-                              if (ev.target?.result) {
-                                setEditingShop((prev: any) => ({ ...prev, logoUrl: ev.target?.result as string }))
+                            try {
+                              const formData = new FormData()
+                              formData.append('file', file)
+                              const res = await fetch('/api/upload', { method: 'POST', body: formData })
+                              const data = await res.json()
+                              if (data?.url) {
+                                setEditingShop((prev: any) => ({ ...prev, logoUrl: data.url }))
                               }
+                            } catch (err) {
+                              console.error('Upload error:', err)
                             }
-                            reader.readAsDataURL(file)
                           }
                         }}
                         className="hidden"
@@ -5565,19 +5578,24 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                             type="file"
                             accept="image/*"
                             className="hidden"
-                            onChange={(e) => {
+                            onChange={async (e) => {
                               const file = e.target.files?.[0]
                               if (!file) return
-                              if (file.size > 5 * 1024 * 1024) {
-                                alert('Fayl 5MB dan oshmasligi kerak!')
+                              if (file.size > 10 * 1024 * 1024) {
+                                alert('Fayl 10MB dan oshmasligi kerak!')
                                 return
                               }
-                              const reader = new FileReader()
-                              reader.onload = (ev) => {
-                                const dataUrl = ev.target?.result as string
-                                if (dataUrl) setNewShopForm(prev => ({ ...prev, logoUrl: dataUrl }))
+                              try {
+                                const formData = new FormData()
+                                formData.append('file', file)
+                                const res = await fetch('/api/upload', { method: 'POST', body: formData })
+                                const data = await res.json()
+                                if (data?.url) {
+                                  setNewShopForm(prev => ({ ...prev, logoUrl: data.url }))
+                                }
+                              } catch (err) {
+                                console.error('Upload error:', err)
                               }
-                              reader.readAsDataURL(file)
                             }}
                           />
                         </label>
@@ -5707,19 +5725,22 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0]
                         if (!file) return
-                        if (file.size > 5 * 1024 * 1024) {
-                          alert('Fayl hajmi 5MB dan oshmasligi kerak!')
+                        if (file.size > 10 * 1024 * 1024) {
+                          alert('Fayl hajmi 10MB dan oshmasligi kerak!')
                           return
                         }
-                        const reader = new FileReader()
-                        reader.onload = (ev) => {
-                          const dataUrl = ev.target?.result as string
-                          if (dataUrl) setLogoInputUrl(dataUrl)
+                        try {
+                          const formData = new FormData()
+                          formData.append('file', file)
+                          const res = await fetch('/api/upload', { method: 'POST', body: formData })
+                          const data = await res.json()
+                          if (data?.url) setLogoInputUrl(data.url)
+                        } catch (err) {
+                          console.error('Upload error:', err)
                         }
-                        reader.readAsDataURL(file)
                       }}
                     />
                   </label>
