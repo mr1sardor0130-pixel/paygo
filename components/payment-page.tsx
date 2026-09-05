@@ -26,6 +26,7 @@ type PaymentData = {
   amount: number
   currency: string
   status: 'pending' | 'paid' | 'expired'
+  isTest?: boolean
   expiresAt: string
   matchedAt?: string
   returnUrl?: string | null
@@ -229,28 +230,43 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
     <main className="min-h-screen bg-[#f5f7fb] px-4 py-8 text-[#152238] antialiased">
       <div className="mx-auto max-w-lg">
         {/* Brand Header */}
-        <header className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <header className="mb-6 flex items-center justify-between gap-4">
+          {/* Left Side: PayGo System Brand */}
+          <div className="flex items-center gap-2.5">
+            <div className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-[#1769e0] to-[#124ba8] text-lg font-black text-white shadow-md shadow-blue-500/20 shrink-0">
+              P
+            </div>
+            <div>
+              <p className="font-mono text-xs font-black tracking-[.15em] text-[#1769e0] uppercase">
+                PAYGO SYSTEM
+              </p>
+              <div className="flex items-center gap-1 text-[11px] font-bold text-[#16865b]">
+                <ShieldCheck size={13} className="text-[#1ea672]" /> Himoyalangan to‘lov
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Merchant / Shop Details */}
+          <div className="flex items-center gap-2.5 text-right">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#94a3b8]">
+                Xarid do‘koni
+              </p>
+              <p className="text-xs font-extrabold text-[#152238] max-w-[120px] sm:max-w-[180px] truncate" title={shopName}>
+                {shopName}
+              </p>
+            </div>
             {data?.shop?.logoUrl ? (
               <img
                 src={data.shop.logoUrl}
                 alt={shopName}
-                className="size-11 rounded-2xl object-cover border border-[#e2e8f0] shadow-sm"
+                className="size-11 rounded-2xl object-cover border border-[#e2e8f0] shadow-sm shrink-0"
               />
             ) : (
-              <div className="grid size-11 place-items-center rounded-2xl bg-[#1769e0] text-base font-bold text-white shadow-md shadow-blue-500/20">
-                P
+              <div className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-sm font-black text-slate-700 border border-slate-200 shrink-0">
+                {shopName.charAt(0).toUpperCase()}
               </div>
             )}
-            <div>
-              <p className="font-mono text-[11px] font-bold tracking-[.18em] text-[#1769e0]">
-                PAYGO • HUMO
-              </p>
-              <p className="text-xs font-medium text-[#718096]">{shopName}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#16865b] shadow-sm border border-[#e3e8f0]">
-            <ShieldCheck size={15} className="text-[#1ea672]" /> Himoyalangan to‘lov
           </div>
         </header>
 
@@ -498,32 +514,34 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 To‘lov qilinganini tekshirish
               </button>
 
-              {/* Instant Simulation Button for Testing */}
-              <div className="mt-5 rounded-2xl border border-dashed border-[#2563eb]/40 bg-[#f0f7ff] p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles size={16} className="text-[#2563eb]" />
-                    <span className="text-xs font-bold text-[#1e40af]">
-                      Test Rejimi (Simulyatsiya):
-                    </span>
+              {/* Test Mode Simulation Button (ONLY visible if payment is a Test payment) */}
+              {data?.isTest && (
+                <div className="mt-4 rounded-2xl border border-dashed border-[#2563eb]/40 bg-[#f0f7ff] p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={16} className="text-[#2563eb]" />
+                      <span className="text-xs font-bold text-[#1e40af]">
+                        Test To‘lov Rejimi (Simulyatsiya):
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <p className="mt-1 text-[11px] text-[#3b82f6]">
-                  Haqiqiy pul o‘tkazmasdan to‘lovni sinab ko‘rish va Webhook / Telegram Kanalga JSON yuborilishini tekshirish uchun bosing:
-                </p>
-                <button
-                  onClick={handleSimulatePayment}
-                  disabled={simulating}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#2563eb] py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#1d4ed8] transition disabled:opacity-50"
-                >
-                  {simulating ? 'Tasdiqlanmoqda...' : '⚡️ Test To‘lovni Tasdiqlash (Simulyatsiya)'}
-                </button>
-                {simulationResult && (
-                  <p className="mt-2 text-center text-xs font-medium text-[#16865b]">
-                    {simulationResult}
+                  <p className="mt-1 text-[11px] text-[#3b82f6]">
+                    Ushbu to‘lov test rejimida yaratilgan. Haqiqiy pul o‘tkazmasdan to‘lovni sinab ko‘rish va Webhook / Telegram Kanalga JSON yuborilishini tekshirish uchun bosing:
                   </p>
-                )}
-              </div>
+                  <button
+                    onClick={handleSimulatePayment}
+                    disabled={simulating}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#2563eb] py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#1d4ed8] transition disabled:opacity-50 active:scale-[0.99]"
+                  >
+                    {simulating ? 'Tasdiqlanmoqda...' : '⚡️ Test To‘lovni Tasdiqlash (Simulyatsiya)'}
+                  </button>
+                  {simulationResult && (
+                    <p className="mt-2 text-center text-xs font-medium text-[#16865b]">
+                      {simulationResult}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Instructions */}
               <div className="mt-5 space-y-2 rounded-xl bg-[#f8fafc] p-4 text-xs leading-5 text-[#64748b] border border-[#e2e8f0]">

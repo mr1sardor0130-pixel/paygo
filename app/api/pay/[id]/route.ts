@@ -75,6 +75,7 @@ export async function GET(
       amount: payment.amount,
       currency: payment.currency || 'UZS',
       status,
+      isTest: Boolean(payment.isTest),
       expiresAt: payment.expiresAt,
       matchedAt: payment.matchedAt,
       returnUrl: resolveReturnUrl(payment.returnUrl, shop?.returnUrl, shop?.webhookUrl),
@@ -115,6 +116,21 @@ export async function POST(
     }
 
     const payment = paymentRows[0]
+
+    // If it's NOT a test payment, require worker secret for confirmation
+    if (!payment.isTest) {
+      const workerSecret = process.env.PAYBOT_WORKER_SECRET || 'paybot-secret-dev'
+      const authHeader = request.headers.get('x-worker-secret') || request.headers.get('authorization')?.replace('Bearer ', '')
+      if (authHeader !== workerSecret) {
+        return NextResponse.json(
+          {
+            error: 'unauthorized',
+            message: 'Haqiqiy to‘lov faqat Userbot / HUMO Bank SMS xabarnomasi kelganda avtomatik tasdiqlanadi.',
+          },
+          { status: 401 }
+        )
+      }
+    }
     if (payment.status === 'paid') {
       return NextResponse.json({ ok: true, status: 'already_paid' })
     }

@@ -239,7 +239,7 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
 
   const handleOpenApp = (appName: string, url: string) => {
     // 1. Copy card number automatically
-    if (cleanCard) {
+    if (cleanCard && typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(cleanCard)
     }
 
@@ -247,10 +247,12 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
     const msg = `Karta (${cleanCard}) nusxalandi! ${appName} ga o‘tilmoqda...`
     setToastMessage(msg)
 
-    // 3. Open mobile payment app / website
-    setTimeout(() => {
-      window.open(url, '_blank')
-    }, 400)
+    // 3. Open mobile payment app / website synchronously without delay to bypass popup blockers
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      window.location.href = url
+    }
 
     setTimeout(() => {
       setToastMessage(null)
