@@ -8,15 +8,16 @@ interface RateLimitRecord {
 
 const ipMap = new Map<string, RateLimitRecord>()
 
-// Cleanup stale IP entries every 30 seconds to prevent memory leaks
-setInterval(() => {
-  const now = Date.now()
-  for (const [ip, record] of ipMap.entries()) {
-    if (now > record.resetAt) {
-      ipMap.delete(ip)
+// Helper for opportunistic cleanup to avoid top-level timers in Edge runtime
+function cleanupStaleEntries(now: number) {
+  if (ipMap.size > 500) {
+    for (const [ip, record] of ipMap.entries()) {
+      if (now > record.resetAt) {
+        ipMap.delete(ip)
+      }
     }
   }
-}, 30000)
+}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -35,6 +36,7 @@ export function middleware(request: NextRequest) {
   const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : '127.0.0.1'
 
   const now = Date.now()
+  cleanupStaleEntries(now)
   const windowMs = 10000 // 10 seconds window
   let maxRequests = 100   // 100 requests per 10s default limit (~10 req/sec)
 
