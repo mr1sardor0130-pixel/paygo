@@ -1091,7 +1091,7 @@ async function generateAuthUrl(userIdStr: string, path: string = '/panel'): Prom
   } catch (e) {
     console.warn('Auth token insert warning:', e)
   }
-  return `${APP_URL}${path}?auth_token=${token}&userId=${userIdStr}`
+  return `${APP_URL}${path}?auth_token=${token}`
 }
 
 // Notify Super Admin on new or updated shop with 1-click inline buttons
@@ -3740,7 +3740,7 @@ export async function POST(request: Request) {
             chatId,
             `✅ <b>Veb-panelga muvaffaqiyatli kirdingiz!</b>\n\n` +
             `Brauzeringizdagi oyna avtomatik tarzda ochildi. Barcha do‘koningiz va to‘lov ma’lumotlarini boshqarishingiz mumkin.\n\n` +
-            `🔗 Agar oyna ochilmagan bo‘lsa: <a href="${APP_URL}/panel?auth_token=${authToken}&userId=${userIdStr}">Veb-panelga o‘tish</a>`,
+            `🔗 Agar oyna ochilmagan bo‘lsa: <a href="${APP_URL}/panel?auth_token=${authToken}">Veb-panelga o‘tish</a>`,
             menu
           )
           return NextResponse.json({ ok: true })

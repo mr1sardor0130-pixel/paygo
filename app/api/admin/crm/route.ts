@@ -6,50 +6,22 @@ import { eq, desc, sql } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId, cleanBogusAdmins } from '@/lib/admin'
 import { sendTelegramMessage } from '@/lib/telegram-notifier'
 
+import { resolveAuthUser } from '@/lib/auth-server'
+
 export const dynamic = 'force-dynamic'
 
 // Helper to authenticate admin with strict session & token verification
 async function checkAuth(request: Request) {
-  const authHeader = request.headers.get('authorization') || ''
-  const token = authHeader.replace('Bearer ', '').trim()
-  const telegramHeader = request.headers.get('x-telegram-user-id') || new URL(request.url).searchParams.get('adminId') || ''
-
-  let verifiedTelegramId: string | null = null
-
-  // 1. Verify token if present
-  if (token) {
-    const sessionRows = await db.select().from(authSessions).where(eq(authSessions.token, token)).limit(1)
-    if (sessionRows.length && sessionRows[0] && sessionRows[0].userId !== 'pending') {
-      verifiedTelegramId = sessionRows[0].telegramId || sessionRows[0].userId
-    }
-  }
-
-  // 2. If no token, check if authenticated session exists for telegramHeader
-  if (!verifiedTelegramId && telegramHeader) {
-    const cleanId = String(telegramHeader).trim()
-    const recentSession = await db
-      .select()
-      .from(authSessions)
-      .where(eq(authSessions.telegramId, cleanId))
-      .orderBy(desc(authSessions.createdAt))
-      .limit(1)
-
-    if (recentSession.length > 0 && recentSession[0].userId !== 'pending') {
-      verifiedTelegramId = cleanId
-    } else if (cleanId === '8021115446') {
-      // Superadmin fallback for bot webhook callbacks
-      verifiedTelegramId = cleanId
-    }
-  }
-
-  if (!verifiedTelegramId) {
+  const authUser = await resolveAuthUser(request)
+  if (!authUser) {
     return { ok: false, isSuperAdmin: false, telegramId: '' }
   }
 
+  const verifiedTelegramId = authUser.telegramId || authUser.userId
   const ok = await isAdminTelegramId(verifiedTelegramId)
   const isSuperAdmin = isSuperAdminTelegramId(verifiedTelegramId)
 
-  return { ok, isSuperAdmin, telegramId: verifiedTelegramId }
+  return { ok: ok || isSuperAdmin, isSuperAdmin, telegramId: verifiedTelegramId }
 }
 
 // GET: Fetch all shops, payments, tariffs, roles, mandatory channels and statistics

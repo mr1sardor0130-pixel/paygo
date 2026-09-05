@@ -1,29 +1,15 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { paidAccessRooms, paidAccessMembers, authSessions } from '@/lib/db/schema'
+import { paidAccessRooms, paidAccessMembers } from '@/lib/db/schema'
 import { eq, desc } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
+import { resolveAuthUser } from '@/lib/auth-server'
 
 export const dynamic = 'force-dynamic'
 
 async function resolveUser(request: Request) {
-  await ensureDbSchema()
-  const token = request.headers.get('authorization')?.replace('Bearer ', '').trim() || ''
-  const telegramHeader = request.headers.get('x-telegram-user-id') || ''
-
-  if (token) {
-    const rows = await db.select().from(authSessions).where(eq(authSessions.token, token)).limit(1)
-    if (rows.length && rows[0] && rows[0].userId !== 'pending') {
-      return { userId: rows[0].userId, telegramId: rows[0].telegramId || rows[0].userId }
-    }
-  }
-
-  if (telegramHeader) {
-    return { userId: telegramHeader, telegramId: telegramHeader }
-  }
-
-  return null
+  return await resolveAuthUser(request)
 }
 
 export async function GET(request: Request) {

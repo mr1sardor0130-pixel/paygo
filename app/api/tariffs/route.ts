@@ -6,32 +6,20 @@ import { randomUUID } from 'crypto'
 import { isAdminTelegramId } from '@/lib/admin'
 import { getSystemTariffs, getTariffById, DEFAULT_TARIFFS } from '@/lib/tariffs'
 
+import { resolveAuthUser } from '@/lib/auth-server'
+
 export const dynamic = 'force-dynamic'
 
 async function resolveUserFromRequest(request: Request): Promise<{ userId: string; telegramId: string; isAdmin: boolean }> {
-  const authHeader = request.headers.get('authorization') || ''
-  const token = authHeader.replace('Bearer ', '').trim()
-  const telegramHeader = request.headers.get('x-telegram-user-id') || ''
-
-  let userId = ''
-  let telegramId = ''
-
-  if (token) {
-    try {
-      const rows = await db.select().from(authSessions).where(eq(authSessions.token, token)).limit(1)
-      if (rows.length && rows[0].userId !== 'pending') {
-        userId = rows[0].userId
-        telegramId = rows[0].telegramId || rows[0].userId
-      }
-    } catch {}
+  const authUser = await resolveAuthUser(request)
+  if (!authUser) {
+    return { userId: '', telegramId: '', isAdmin: false }
   }
 
-  if (!userId && telegramHeader) {
-    userId = telegramHeader
-    telegramId = telegramHeader
-  }
+  const userId = authUser.userId
+  const telegramId = authUser.telegramId || userId
+  const isAdmin = await isAdminTelegramId(telegramId)
 
-  const isAdmin = await isAdminTelegramId(telegramId || userId)
   return { userId, telegramId, isAdmin }
 }
 
