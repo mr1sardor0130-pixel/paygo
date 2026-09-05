@@ -73,6 +73,7 @@ export async function ensureDbSchema() {
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "accountOwner" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "logoUrl" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "webhookUrl" text;
+      ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "returnUrl" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "telegramChannelId" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "userbotSession" text;
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "tier" text DEFAULT 'free';

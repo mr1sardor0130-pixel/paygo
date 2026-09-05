@@ -62,12 +62,16 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
 
   // Auto-redirect to returnUrl on successful payment
+  // If there is an ad/promo banner, wait 3 seconds; if no ad banner, fast 1-second redirect
+  const hasAdBanner = true
+  const initialRedirectDelay = hasAdBanner ? 3 : 1
+
   useEffect(() => {
     if (data?.status === 'paid' && data?.returnUrl) {
-      setRedirectCountdown(5)
+      setRedirectCountdown(initialRedirectDelay)
       const interval = setInterval(() => {
         setRedirectCountdown((prev) => {
-          if (prev === null) return null
+          if (prev === null) return initialRedirectDelay
           if (prev <= 1) {
             window.location.href = data.returnUrl!
             return 0
@@ -77,7 +81,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
       }, 1000)
       return () => clearInterval(interval)
     }
-  }, [data?.status, data?.returnUrl])
+  }, [data?.status, data?.returnUrl, initialRedirectDelay])
 
   // Fetch payment data
   const fetchPayment = async () => {

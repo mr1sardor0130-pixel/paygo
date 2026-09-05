@@ -16,6 +16,24 @@ function formatCard(raw: string): string {
   return digits || '9860 3501 2345 3587'
 }
 
+function resolveReturnUrl(paymentReturnUrl?: string | null, shopReturnUrl?: string | null, webhookUrl?: string | null): string | null {
+  if (paymentReturnUrl && paymentReturnUrl.trim().startsWith('http')) {
+    return paymentReturnUrl.trim()
+  }
+  if (shopReturnUrl && shopReturnUrl.trim().startsWith('http')) {
+    return shopReturnUrl.trim()
+  }
+  if (webhookUrl && webhookUrl.trim().startsWith('http')) {
+    try {
+      const u = new URL(webhookUrl.trim())
+      return `${u.protocol}//${u.host}`
+    } catch {
+      // fallback
+    }
+  }
+  return null
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -59,7 +77,7 @@ export async function GET(
       status,
       expiresAt: payment.expiresAt,
       matchedAt: payment.matchedAt,
-      returnUrl: payment.returnUrl || null,
+      returnUrl: resolveReturnUrl(payment.returnUrl, shop?.returnUrl, shop?.webhookUrl),
       shop: {
         id: shop?.id ?? 'default-shop',
         name: shop?.name ?? 'HUMO To‘lov tizimi',

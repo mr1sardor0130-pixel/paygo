@@ -119,6 +119,7 @@ export async function POST(request: Request) {
         accountOwner: body.accountOwner?.trim() || 'Hisob egasi',
         logoUrl: body.logoUrl?.trim() || null,
         webhookUrl: body.webhookUrl?.trim() || null,
+        returnUrl: body.returnUrl?.trim() || null,
         telegramChannelId: body.telegramChannelId?.trim() || null,
         approved: true,
       })
@@ -220,6 +221,7 @@ export async function POST(request: Request) {
       if (body.cardBank !== undefined) updates.cardBank = body.cardBank.trim()
       if (body.logoUrl !== undefined) updates.logoUrl = body.logoUrl.trim()
       if (body.webhookUrl !== undefined) updates.webhookUrl = body.webhookUrl.trim()
+      if (body.returnUrl !== undefined) updates.returnUrl = body.returnUrl.trim()
       if (body.telegramChannelId !== undefined) updates.telegramChannelId = body.telegramChannelId.trim()
 
       await db.update(shops).set(updates).where(eq(shops.id, shop.id))

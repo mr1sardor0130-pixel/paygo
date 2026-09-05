@@ -118,6 +118,7 @@ export const shops = pgTable(
     cardBank: text('cardBank').default('HUMOCARD'),
     accountOwner: text('accountOwner'),
     webhookUrl: text('webhookUrl'),
+    returnUrl: text('returnUrl'),
     telegramChannelId: text('telegramChannelId'),
     userbotSession: text('userbotSession'),
     tier: text('tier').notNull().default('free'), // free, premium

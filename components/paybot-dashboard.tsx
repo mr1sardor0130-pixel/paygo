@@ -84,6 +84,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     cardBank: 'HUMOCARD',
     logoUrl: '',
     webhookUrl: '',
+    returnUrl: '',
     telegramChannelId: '',
   })
   const [logoModalShop, setLogoModalShop] = useState<any>(null)
@@ -98,6 +99,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     cardBank: 'HUMOCARD',
     logoUrl: '',
     webhookUrl: '',
+    returnUrl: '',
     telegramChannelId: '',
   })
   const [shopData, setShopData] = useState<any>(null)
@@ -425,6 +427,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             cardBank: data.shop.cardBank || 'HUMOCARD',
             logoUrl: data.shop.logoUrl || '',
             webhookUrl: data.shop.webhookUrl || '',
+            returnUrl: data.shop.returnUrl || '',
             telegramChannelId: data.shop.telegramChannelId || '',
           })
         }
@@ -457,6 +460,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       cardBank: selected.cardBank || 'HUMOCARD',
       logoUrl: selected.logoUrl || '',
       webhookUrl: selected.webhookUrl || '',
+      returnUrl: selected.returnUrl || '',
       telegramChannelId: selected.telegramChannelId || '',
     })
     showToast(`Faol do‘kon tanlandi: ${selected.name}`)
@@ -2114,6 +2118,22 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                       />
                       <p className="mt-1 text-[11px] text-[#94a3b8]">
                         To‘lov muvaffaqiyatli bo‘lganda ushbu manzilga <code>POST</code> JSON yuboriladi.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-[#475569] mb-1 block">
+                        🔗 Qaytish va Avto-yo‘naltirish URL (Return URL)
+                      </label>
+                      <input
+                        type="url"
+                        value={shopForm.returnUrl}
+                        onChange={(e) => setShopForm({ ...shopForm, returnUrl: e.target.value })}
+                        placeholder="https://via-lac.wentric.uz/billing"
+                        className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2.5 text-sm outline-none focus:border-[#1769e0]"
+                      />
+                      <p className="mt-1 text-[11px] text-[#94a3b8]">
+                        To‘lov muvaffaqiyatli tasdiqlangach mijoz tezda (1-3 soniya ichida) ushbu saytingizga avtomatik yo‘naltiriladi.
                       </p>
                     </div>
 
@@ -5584,6 +5604,19 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     value={newShopForm.webhookUrl}
                     onChange={(e) => setNewShopForm({ ...newShopForm, webhookUrl: e.target.value })}
                     placeholder="https://example.com/api/payment-callback"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Qaytish Sayt URL / Return URL (Ixtiyoriy)
+                  </label>
+                  <input
+                    type="url"
+                    value={newShopForm.returnUrl}
+                    onChange={(e) => setNewShopForm({ ...newShopForm, returnUrl: e.target.value })}
+                    placeholder="https://via-lac.wentric.uz/billing"
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-[#1769e0]"
                   />
                 </div>
