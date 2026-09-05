@@ -59,6 +59,7 @@ export async function GET(
       status,
       expiresAt: payment.expiresAt,
       matchedAt: payment.matchedAt,
+      returnUrl: payment.returnUrl || null,
       shop: {
         id: shop?.id ?? 'default-shop',
         name: shop?.name ?? 'HUMO To‘lov tizimi',
@@ -156,10 +157,11 @@ export async function POST(
       signature: signPayload(JSON.stringify({ id: payment.id, amount: payment.amount }), secret),
     }
 
-    // 1. Deliver Webhook if shop has webhookUrl
-    if (shop?.webhookUrl) {
+    // 1. Deliver Webhook if payment has webhookUrl or shop has webhookUrl
+    const targetWebhookUrl = payment.webhookUrl || shop?.webhookUrl
+    if (targetWebhookUrl) {
       try {
-        await deliverWebhook(shop.webhookUrl, secret, webhookPayload)
+        await deliverWebhook(targetWebhookUrl, secret, webhookPayload)
       } catch (webhookErr) {
         console.warn('Webhook delivery error:', webhookErr)
       }

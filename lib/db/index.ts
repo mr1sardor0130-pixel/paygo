@@ -78,6 +78,8 @@ export async function ensureDbSchema() {
       ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "tier" text DEFAULT 'free';
       
       ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "isTest" BOOLEAN DEFAULT false;
+      ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "returnUrl" text;
+      ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "webhookUrl" text;
       
       CREATE TABLE IF NOT EXISTS "auth_sessions" (
         "token" text PRIMARY KEY,

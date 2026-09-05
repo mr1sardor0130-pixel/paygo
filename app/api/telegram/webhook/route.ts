@@ -578,13 +578,17 @@ async function renderReferralInfo(token: string, chatId: number | string, userId
     currentTierInfo = `💎 <b>PREMIUM VIP</b> (Amal qilish muddati: <code>${new Date(profile.premiumEndsAt).toLocaleString('uz-UZ')}</code> gacha)`
   }
 
+  const redeemedSets = Math.floor((profile?.rewardedDays || 0) / 7)
+  const usedRefs = redeemedSets * 3
+  const availableRefs = Math.max(0, refCount - usedRefs)
+
   const text =
     `🤝 <b>PayGo Taklif va Referal Tizimi</b>\n\n` +
     `👤 <b>Hozirgi maqomingiz:</b>\n${currentTierInfo}\n\n` +
     `🔗 <b>Sizning Shaxsiy Taklif Havolangiz:</b>\n` +
     `<code>${refLink}</code>\n\n` +
     `👥 <b>Siz taklif qilgan do‘stlar soni:</b> <code>${refCount} ta</code>\n` +
-    `🎁 <b>Yig‘ilgan (hali ishlatilmagan) do‘stlar:</b> <code>${(profile?.referralCount || 0) - (profile?.rewardedDays || 0) * 3} ta</code>\n\n` +
+    `🎁 <b>Yig‘ilgan (hali ishlatilmagan) do‘stlar:</b> <code>${availableRefs} ta</code>\n\n` +
     `─────────────\n\n` +
     `🎁 <b>Maxsus Sovg‘alar va Mukofotlar:</b>\n\n` +
     `• 👥 <b>3 ta do‘st</b> ➔ <b>+7 KUNLIK Premium VIP</b> uzaytirish!\n\n` +

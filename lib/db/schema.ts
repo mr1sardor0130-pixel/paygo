@@ -140,6 +140,8 @@ export const payments = pgTable(
     multiplier: integer('multiplier').notNull().default(1),
     status: text('status').notNull().default('pending'), // pending, paid, expired, rejected, archived
     isTest: boolean('isTest').default(false),
+    returnUrl: text('returnUrl'),
+    webhookUrl: text('webhookUrl'),
     expiresAt: timestamp('expiresAt').notNull(),
     matchedAt: timestamp('matchedAt'),
     sourceMessage: text('sourceMessage'),

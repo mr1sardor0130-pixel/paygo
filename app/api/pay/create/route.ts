@@ -26,23 +26,38 @@ async function resolveUser(request: Request) {
   return null
 }
 
-export async function POST(request: Request) {
+async function handleRequest(request: Request, method: 'GET' | 'POST') {
   try {
     await ensureDbSchema()
-    const user = await resolveUser(request)
-    const body = await request.json().catch(() => ({}))
+    const url = new URL(request.url)
+    const searchParams = url.searchParams
 
-    // 1. Amount Validation (Security constraint: 1,000 UZS - 500,000,000 UZS)
-    const rawAmount = body.amount ? Number(String(body.amount).replace(/\D/g, '')) : 15000
+    let body: any = {}
+    if (method === 'POST') {
+      body = await request.json().catch(() => ({}))
+    }
+
+    const user = await resolveUser(request)
+
+    // Parse amount: support both searchParams and body keys
+    const amountVal = searchParams.get('amount') || body.amount
+    let rawAmount = 15000
+    if (amountVal !== undefined && amountVal !== null) {
+      if (typeof amountVal === 'number') {
+        rawAmount = amountVal
+      } else {
+        rawAmount = Number(String(amountVal).replace(/\D/g, ''))
+      }
+    }
     const amount = Number.isFinite(rawAmount) && rawAmount >= 1000 ? Math.min(rawAmount, 500000000) : 15000
 
-    const apiKeyHeader = request.headers.get('x-api-key') || ''
-    const shopSlugHeader = request.headers.get('x-shop-slug') || body.shopSlug || ''
-    const shopIdRequested = body.shopId || ''
+    // Parse IDs and keys
+    const shopIdRequested = searchParams.get('shopId') || searchParams.get('shop_id') || body.shopId || body.shop_id || ''
+    const shopSlugHeader = request.headers.get('x-shop-slug') || searchParams.get('shopSlug') || body.shopSlug || ''
 
     let shop = null
 
-    // 2. Resolve Shop by shopId or shopSlug if provided
+    // Resolve Shop by shopId or shopSlug if provided
     if (shopIdRequested) {
       const found = await db.select().from(shops).where(eq(shops.id, shopIdRequested)).limit(1)
       if (found.length > 0) shop = found[0]
@@ -53,8 +68,8 @@ export async function POST(request: Request) {
       if (found.length > 0) shop = found[0]
     }
 
-    // 3. Fallback to user's shop or system default
-    const userId = user?.userId || body.userId || (shop ? shop.userId : 'guest-merchant')
+    // Resolve User ID
+    const userId = searchParams.get('userId') || searchParams.get('user_id') || user?.userId || body.userId || (shop ? shop.userId : 'guest-merchant')
 
     if (!shop && user?.userId) {
       const userShops = await db.select().from(shops).where(eq(shops.userId, user.userId)).limit(1)
@@ -86,9 +101,12 @@ export async function POST(request: Request) {
     const paymentId = `pay_${randomUUID().replace(/-/g, '').slice(0, 12)}`
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // Exactly 5 minutes validity
 
-    // Store custom metadata if provided by merchant
-    const orderId = body.orderId || body.order_id || null
-    const description = body.description || body.comment || null
+    // Parse additional URLs and custom order metadata
+    const orderId = searchParams.get('merchantOrderId') || searchParams.get('orderId') || searchParams.get('order_id') || body.orderId || body.order_id || null
+    const description = searchParams.get('description') || searchParams.get('comment') || body.description || body.comment || null
+    const returnUrl = searchParams.get('returnUrl') || searchParams.get('return_url') || body.returnUrl || body.return_url || null
+    const webhookUrl = searchParams.get('webhookUrl') || searchParams.get('webhook_url') || body.webhookUrl || body.webhook_url || null
+
     const sourceMessage = orderId ? `Buyurtma: #${orderId}${description ? ` - ${description}` : ''}` : null
 
     await db.insert(payments).values({
@@ -100,6 +118,8 @@ export async function POST(request: Request) {
       status: 'pending',
       expiresAt,
       sourceMessage,
+      returnUrl,
+      webhookUrl,
       createdAt: new Date(),
     })
 
@@ -117,6 +137,18 @@ export async function POST(request: Request) {
     const cleanBaseUrl = baseUrl.replace(/\/$/, '')
     const payUrl = `${cleanBaseUrl}/pay/${paymentId}`
 
+    // Check if caller expects JSON or a browser redirection (clicked a link on browser)
+    const acceptHeader = request.headers.get('accept') || ''
+    const isJsonExpected =
+      searchParams.get('json') === 'true' ||
+      acceptHeader.includes('application/json') ||
+      method === 'POST'
+
+    if (!isJsonExpected) {
+      // Browser clicked direct link: auto-redirect to payment visual checkout screen!
+      return NextResponse.redirect(payUrl)
+    }
+
     return NextResponse.json({
       ok: true,
       id: paymentId,
@@ -128,6 +160,8 @@ export async function POST(request: Request) {
       expiresAt: expiresAt.toISOString(),
       payUrl,
       paymentUrl: payUrl,
+      returnUrl,
+      webhookUrl,
       shop: {
         id: shop.id,
         slug: shop.slug,
@@ -144,4 +178,12 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function GET(request: Request) {
+  return handleRequest(request, 'GET')
+}
+
+export async function POST(request: Request) {
+  return handleRequest(request, 'POST')
 }
