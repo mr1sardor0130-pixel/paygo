@@ -166,6 +166,10 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   const [shopSearchQuery, setShopSearchQuery] = useState('')
   const [shopStatusFilter, setShopStatusFilter] = useState<'all' | 'approved' | 'pending'>('all')
 
+  // Webhook delivery logs states
+  const [logs, setLogs] = useState<any[]>([])
+  const [logsLoading, setLogsLoading] = useState(false)
+
   // Load Tariffs
   const loadTariffs = async () => {
     try {
@@ -559,6 +563,31 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       // safe bypass
     } finally {
       setVipLoading(false)
+    }
+  }
+
+  // Fetch My Logs
+  const fetchMyLogs = async (authToken?: string, uid?: string) => {
+    const effToken = authToken || token
+    const effUid = uid || currentUser?.telegramId || currentUser?.userId || ''
+    setLogsLoading(true)
+    try {
+      const res = await fetch('/api/logs', {
+        headers: {
+          Authorization: `Bearer ${effToken}`,
+          'x-telegram-user-id': effUid,
+        },
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setLogs(data.logs || [])
+      } else {
+        showToast(data.message || 'Loglarni yuklab bo‘lmadi', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    } finally {
+      setLogsLoading(false)
     }
   }
 
@@ -1510,6 +1539,20 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             }`}
           >
             <FileCode size={15} /> 📚 Webhook Doksi (JSON)
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('logs')
+              fetchMyLogs()
+            }}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === 'logs'
+                ? 'bg-[#1769e0] text-white shadow-sm'
+                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
+            }`}
+          >
+            <Radio size={15} /> 📋 Tizim Loglari & Webhooklar
           </button>
 
           <Link
@@ -2879,6 +2922,117 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm">
+              <div>
+                <h1 className="text-lg font-black tracking-tight text-[#152238] flex items-center gap-2">
+                  <Radio className="text-[#1769e0] animate-pulse" size={20} /> Webhook & To‘lov Monitoring Loglari
+                </h1>
+                <p className="mt-1 text-xs text-[#718096]">
+                  Do‘konlaringizga yuborilgan barcha webhook xabarnomalari holati va qabul qiluvchi server javoblarini real vaqtda kuzating.
+                </p>
+              </div>
+
+              <button
+                onClick={() => fetchMyLogs()}
+                disabled={logsLoading}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition shadow-sm"
+              >
+                <RefreshCw size={14} className={logsLoading ? 'animate-spin text-[#1769e0]' : ''} />
+                Yangilash
+              </button>
+            </div>
+
+            {logsLoading && logs.length === 0 ? (
+              <div className="grid h-64 place-items-center rounded-3xl border border-[#e3e8f0] bg-white shadow-sm">
+                <div className="text-center">
+                  <RefreshCw className="mx-auto mb-3 animate-spin text-[#1769e0]" size={36} />
+                  <p className="text-xs font-semibold text-[#64748b]">Loglar yuklanmoqda...</p>
+                </div>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="overflow-hidden rounded-3xl border border-[#e3e8f0] bg-white p-12 text-center shadow-sm">
+                <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-[#f1f5f9] text-[#64748b]">
+                  <Webhook size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-[#152238]">Loglar mavjud emas</h3>
+                <p className="mx-auto mt-2 max-w-md text-xs text-[#718096]">
+                  Hozircha do‘konlaringiz uchun hech qanday webhook jo‘natilmagan. Mijozlaringiz birinchi to‘lovlarni amalga oshirgandan keyin webhook loglari bu yerda kovanadi.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-3xl border border-[#e3e8f0] bg-white shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#e2e8f0] bg-[#f8fafc] text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                        <th className="px-6 py-4">Taqvim & Vaqt</th>
+                        <th className="px-6 py-4">Do‘kon & Summa</th>
+                        <th className="px-6 py-4">To‘lov ID</th>
+                        <th className="px-6 py-4">Natija</th>
+                        <th className="px-6 py-4">Server Javobi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e2e8f0]">
+                      {logs.map((log) => {
+                        const isSuccess = log.status === 'success'
+                        const logDate = new Date(log.createdAt).toLocaleString('uz-UZ')
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50/50 transition">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-xs font-semibold text-[#152238] block">{logDate}</span>
+                              <span className="text-[10px] font-mono text-[#8995a7]">{log.id}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-xs font-bold text-[#152238] block">{log.shopName}</span>
+                              <span className="text-xs font-semibold text-[#16865b] bg-[#eaf8f1] px-1.5 py-0.5 rounded">
+                                +{new Intl.NumberFormat('uz-UZ').format(log.amount)} UZS
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[#64748b] font-semibold">{log.paymentId}</span>
+                                <button
+                                  onClick={() => {
+                                    if (typeof navigator !== 'undefined') {
+                                      navigator.clipboard.writeText(log.paymentId)
+                                      showToast('To‘lov ID nusxalandi', 'success')
+                                    }
+                                  }}
+                                  className="text-[#a0aec0] hover:text-[#1769e0] transition"
+                                >
+                                  <Copy size={12} />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {isSuccess ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-[#eaf8f1] px-2.5 py-1 text-[11px] font-bold text-[#16865b]">
+                                  <span className="size-1.5 rounded-full bg-[#1ea672]" /> Muvaffaqiyatli
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-[#fee2e2] px-2.5 py-1 text-[11px] font-bold text-[#dc2626]">
+                                  <span className="size-1.5 rounded-full bg-[#ef4444]" /> Xatolik
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 max-w-xs">
+                              <div className="rounded-lg bg-[#f8fafc] border border-[#e2e8f0] p-2 font-mono text-[10px] text-slate-700 overflow-x-auto whitespace-pre-wrap max-h-16 shadow-inner">
+                                {log.response || 'Javob matni yo‘q'}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

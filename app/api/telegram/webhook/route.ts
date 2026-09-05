@@ -17,8 +17,9 @@ import {
   paidAccessRooms,
   paidAccessMembers,
   businessConnections,
+  deliveryLogs,
 } from '@/lib/db/schema'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, inArray } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
 import { getSystemTariffs, getTariffById, DEFAULT_TARIFFS } from '@/lib/tariffs'
 import {
@@ -135,7 +136,7 @@ const menu = {
     [{ text: '💳 Mening kartam' }, { text: '🔐 Userbot ulash' }],
     [{ text: '🤝 Referal (Tekin Premium)' }, { text: '💎 Tariflar' }],
     [{ text: '💎 VIP Guruhlar' }, { text: '📣 Kanal ulash' }],
-    [{ text: '🧪 Webhook Test' }, { text: '🔗 Webhook sozlash' }],
+    [{ text: '🧪 Webhook Test' }, { text: '🔗 Webhook sozlash' }, { text: '📋 Webhook Loglari' }],
     [{ text: '🌐 Veb-panelga kirish' }, { text: '📊 Statistika' }],
     [{ text: '🏆 Liderlar' }, { text: '❤️ Qo‘llab-quvvatlash (Ehson)' }],
     [{ text: '🤖 Bot haqida & FAQ' }, { text: '📚 API hujjat' }],
@@ -752,6 +753,83 @@ async function isBusinessChatbotConnectedForUser(userIdStr: string): Promise<boo
     console.warn('isBusinessChatbotConnectedForUser check error:', e)
   }
   return false
+}
+
+// Render and send Webhook delivery logs in JSON format for the bot (limit to top 50 logs)
+async function showLogsInBot(token: string, chatId: string | number, userIdStr: string) {
+  try {
+    await ensureDbSchema()
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+    const shopIds = userShops.map(s => s.id)
+
+    if (shopIds.length === 0) {
+      await send(
+        token,
+        chatId,
+        `⚠️ <b>Sizda hali bitta ham do‘kon yo‘q.</b>\n\nWebhook loglarini ko‘rish uchun avval do‘kon yarating.`,
+        menu
+      )
+      return
+    }
+
+    const logs = await db
+      .select({
+        id: deliveryLogs.id,
+        paymentId: deliveryLogs.paymentId,
+        status: deliveryLogs.status,
+        response: deliveryLogs.response,
+        createdAt: deliveryLogs.createdAt,
+        amount: payments.amount,
+        shopName: shops.name,
+      })
+      .from(deliveryLogs)
+      .innerJoin(payments, eq(deliveryLogs.paymentId, payments.id))
+      .innerJoin(shops, eq(payments.shopId, shops.id))
+      .where(inArray(payments.shopId, shopIds))
+      .orderBy(desc(deliveryLogs.createdAt))
+      .limit(50)
+
+    if (logs.length === 0) {
+      await send(
+        token,
+        chatId,
+        `📋 <b>Sizning Webhook Loglaringiz:</b>\n\n` +
+        `Hozircha do‘konlaringiz uchun hech qanday webhook jo‘natilmagan. Mijozlaringiz birinchi to‘lovlarni amalga oshirgandan keyin webhook loglari bu yerda aks etadi.`,
+        menu
+      )
+      return
+    }
+
+    const formattedLogs = logs.map(log => ({
+      logId: log.id,
+      paymentId: log.paymentId,
+      shop: log.shopName,
+      amount: `${log.amount.toLocaleString('uz-UZ')} UZS`,
+      status: log.status === 'success' ? 'SUCCESS' : 'FAILED',
+      response: log.response ? log.response.slice(0, 100) + (log.response.length > 100 ? '...' : '') : 'N/A',
+      time: new Date(log.createdAt).toLocaleString('uz-UZ'),
+    }))
+
+    const jsonText = JSON.stringify(formattedLogs, null, 2)
+    const authUrl = await generateAuthUrl(userIdStr)
+
+    await send(
+      token,
+      chatId,
+      `📋 <b>Sizning Oxirgi Webhook Loglaringiz (Top 50 log):</b>\n\n` +
+      `<pre><code class="language-json">${jsonText}</code></pre>\n\n` +
+      `🔗 <i>Barcha loglarni batafsil va qulay boshqarish uchun saytimizning (Web Panel) "Tizim Loglari & Webhooklar" bo‘limiga o‘ting!</i>`,
+      {
+        inline_keyboard: [
+          [{ text: '📋 Web Paneldan ko‘rish', url: `${APP_URL}/panel?tab=logs` }],
+          [{ text: '🌐 Web Dashboard', url: authUrl }]
+        ]
+      }
+    )
+  } catch (err: any) {
+    console.error('Bot show logs error:', err)
+    await send(token, chatId, `⚠️ <b>Loglarni yuklashda xatolik:</b> ${err?.message || 'Server xatosi'}`, menu)
+  }
 }
 
 // Render and send Webhook settings details with Vercel variable guidance
@@ -2952,6 +3030,12 @@ export async function POST(request: Request) {
     text === 'Webhook sozlash' ||
     raw === '/webhook'
 
+  const isLogsCmd =
+    norm.includes('loglar') ||
+    norm.includes('webhook log') ||
+    text === '📋 Webhook Loglari' ||
+    raw === '/logs'
+
   const isDocsCmd =
     norm.includes('api hujjat') ||
     norm.includes('hujjat') ||
@@ -3916,6 +4000,11 @@ export async function POST(request: Request) {
   // -------------------------------------------------------------
   if (isWebhookCmd) {
     await showWebhookSettings(token, chatId, userIdStr)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (isLogsCmd) {
+    await showLogsInBot(token, chatId, userIdStr)
     return NextResponse.json({ ok: true })
   }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db } from '@/lib/db'
-import { payments, userProfiles, shops, donations, fundraisers } from '@/lib/db/schema'
+import { payments, userProfiles, shops, donations, fundraisers, deliveryLogs } from '@/lib/db/schema'
 import { deliverWebhook, type PaymentEvent } from '@/lib/webhook'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
@@ -212,7 +212,8 @@ export async function POST(request: Request) {
         }
 
         // Webhook delivery if configured (JSON payload with userId, shopId, etc.)
-        if (shop.webhookUrl) {
+        const targetWebhookUrl = payment.webhookUrl || shop.webhookUrl
+        if (targetWebhookUrl) {
           const event: PaymentEvent = {
             eventId: randomUUID(),
             type: 'payment.paid',
@@ -222,13 +223,34 @@ export async function POST(request: Request) {
               shopId: shop.id,
               userId: payment.userId,
               amount: payment.amount,
-              currency: payment.currency,
+              currency: payment.currency || 'UZS',
               status: 'paid',
               isTest: payment.isTest || false,
               matchedAt: new Date().toISOString(),
             },
           }
-          await deliverWebhook(shop.webhookUrl, shop.id, event)
+          try {
+            const secret = process.env.PAYBOT_WORKER_SECRET || 'paybot-secret-dev'
+            const result = await deliverWebhook(targetWebhookUrl, secret, event)
+            await db.insert(deliveryLogs).values({
+              id: `log_${randomUUID().replace(/-/g, '').slice(0, 12)}`,
+              paymentId: payment.id,
+              target: 'webhook',
+              status: result.ok ? 'success' : 'failed',
+              response: `HTTP ${result.status} - ${result.response}`,
+              createdAt: new Date(),
+            })
+          } catch (webhookErr: any) {
+            console.error('Real webhook dispatch error:', webhookErr)
+            await db.insert(deliveryLogs).values({
+              id: `log_${randomUUID().replace(/-/g, '').slice(0, 12)}`,
+              paymentId: payment.id,
+              target: 'webhook',
+              status: 'failed',
+              response: webhookErr?.message || 'Connection failed',
+              createdAt: new Date(),
+            })
+          }
         }
       }
     } catch (shopErr) {
