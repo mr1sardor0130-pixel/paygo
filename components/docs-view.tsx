@@ -455,6 +455,66 @@ echo json_encode(['ok' => true]);
                 To‘lov holatini tekshirish (<code className="text-slate-300">pending</code>, <code className="text-emerald-400">paid</code>, <code className="text-red-400">expired</code>).
               </p>
             </div>
+
+            {/* Error responses section */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h2 className="text-lg font-bold text-white mb-2">REST API Xatoliklar va Javoblar Ro‘yxati</h2>
+              <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                So‘rovlar davomida xatolik yuz berganda server quyidagi <code>JSON</code> formatda xatolik tafsilotlarini va HTTP status kodini qaytaradi:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Standard Error JSON */}
+                <div className="space-y-2">
+                  <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Standart Xatolik JSON Formati</span>
+                  <pre className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-red-400 overflow-x-auto">
+{`{
+  "error": "Xatolik haqida batafsil ma’lumot",
+  "code": "ERROR_CODE",
+  "status": 400
+}`}
+                  </pre>
+                </div>
+
+                {/* Table of common errors */}
+                <div className="space-y-3">
+                  <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tez-tez uchraydigan xato kodlari</span>
+                  <div className="space-y-2 text-xs">
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex justify-between items-center gap-4">
+                      <div>
+                        <span className="font-semibold text-red-400">400 Bad Request</span>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Summa kiritilmagan yoki noto‘g‘ri formatda</p>
+                      </div>
+                      <code className="text-[10px] bg-slate-900 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">INVALID_AMOUNT</code>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex justify-between items-center gap-4">
+                      <div>
+                        <span className="font-semibold text-red-400">401 Unauthorized</span>
+                        <p className="text-[10px] text-slate-400 mt-0.5">X-Telegram-User-Id sarlavhasi yetishmaydi</p>
+                      </div>
+                      <code className="text-[10px] bg-slate-900 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">MISSING_USER_ID</code>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex justify-between items-center gap-4">
+                      <div>
+                        <span className="font-semibold text-red-400">404 Not Found</span>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Do‘kon yoki to‘lov topilmadi</p>
+                      </div>
+                      <code className="text-[10px] bg-slate-900 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">SHOP_NOT_FOUND</code>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex justify-between items-center gap-4">
+                      <div>
+                        <span className="font-semibold text-red-400">410 Gone / Expired</span>
+                        <p className="text-[10px] text-slate-400 mt-0.5">To‘lov muddati (5 daqiqa) tugagan</p>
+                      </div>
+                      <code className="text-[10px] bg-slate-900 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">PAYMENT_EXPIRED</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

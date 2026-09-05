@@ -750,6 +750,72 @@ async function isBusinessChatbotConnectedForUser(userIdStr: string): Promise<boo
   return false
 }
 
+// Render and send Webhook settings details with Vercel variable guidance
+async function showWebhookSettings(token: string, chatId: number, userIdStr: string, shopId?: string) {
+  const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+  
+  if (!userShops.length) {
+    await send(
+      token,
+      chatId,
+      '⚠️ <b>Sizda hali bitta ham do‘kon yo‘q.</b>\n\nWebhook sozlash uchun avval do‘kon yarating.'
+    )
+    return
+  }
+
+  // If multiple shops and no shopId specified, prompt to select
+  if (userShops.length > 1 && !shopId) {
+    const inline_keyboard = userShops.map(shop => [
+      { text: `🔗 ${shop.name} (Webhook)`, callback_data: `webhook_shop_select_${shop.id}` }
+    ])
+    await send(
+      token,
+      chatId,
+      '🔗 <b>Sizda bir nechta do‘kon mavjud.</b>\n\nQaysi do‘konning Webhook va Vercel sozlamalarini ko‘rmoqchisiz?',
+      { inline_keyboard }
+    )
+    return
+  }
+
+  // Use specified shop, or first shop
+  let s = userShops[0]
+  if (shopId) {
+    const found = userShops.find(shop => shop.id === shopId)
+    if (found) s = found
+  }
+
+  const currentWebhook = s.webhookUrl || 'Mavjud emas'
+  const authUrl = await generateAuthUrl(userIdStr, '/panel')
+  const activeSecret = process.env.PAYBOT_WORKER_SECRET || 'paybot-secret-dev'
+
+  await send(
+    token,
+    chatId,
+    `🔗 <b>PayGo Webhook Sozlamalari</b>\n\n` +
+    `🏢 <b>Tanlangan do‘kon:</b> ${s.name}\n` +
+    `🌐 <b>Hozirgi Webhook URL:</b> <code>${currentWebhook}</code>\n\n` +
+    `🛠 <b>Vercel / Next.js Environment (Nusxa olish uchun bosing):</b>\n\n` +
+    `• <code>PAYGO_CHECKOUT_URL</code>:\n` +
+    `<code>${APP_URL}/api/pay/create</code>\n\n` +
+    `• <code>PAYGO_SHOP_ID</code>:\n` +
+    `<code>${s.id}</code>\n\n` +
+    `• <code>PAYGO_WEBHOOK_SECRET</code>:\n` +
+    `<code>${activeSecret}</code>\n\n` +
+    `⚠️ <i>Tepada har bir qiymat alohida blokda berildi, ustiga bossangiz faqat qiymat nusxalanadi (ortiqcha belgilarsiz).</i>\n\n` +
+    `📦 <b>Webhook JSON formati:</b>\n` +
+    `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "eventId": "evt_98f4e21a",\n  "createdAt": "2026-08-30T11:05:00Z",\n  "payment": {\n    "id": "pay_7fa83210",\n    "amount": 50000,\n    "currency": "UZS",\n    "status": "paid",\n    "cardLast4": "3587"\n  },\n  "signature": "sha256_hash"\n}</code></pre>\n\n` +
+    `📄 <b>JSON Schema fayli:</b> <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n` +
+    `🌐 <b>To‘liq API Hujjati:</b> <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>`,
+    {
+      inline_keyboard: [
+        [{ text: '✏️ Webhook URL sozlash', callback_data: `edit_shop_webhook_${s.id}` }],
+        ...(userShops.length > 1 ? [[{ text: '🔄 Boshqa do‘konni tanlash', callback_data: 'webhook_select_shop_back' }]] : []),
+        [{ text: '🌐 Web Panel orqali sozlash', url: authUrl }],
+      ]
+    }
+  )
+}
+
 // Render and send detailed shop information
 async function showShopDetails(token: string, chatId: number, userIdStr: string, shopId?: string) {
   let userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
@@ -789,6 +855,7 @@ async function showShopDetails(token: string, chatId: number, userIdStr: string,
   const isConnected = await isUserbotConnectedForUser(userIdStr)
   const formattedCard = formatCard(s.cardNumber || s.cardLast4 || '9860350123453587')
   const authUrl = await generateAuthUrl(userIdStr)
+  const activeSecret = process.env.PAYBOT_WORKER_SECRET || 'paybot-secret-dev'
 
   const text = `🏪 <b>Do‘kon Ma’lumotlari va Sozlamalari:</b>\n\n` +
     `🏷 <b>Nomi:</b> ${s.name}\n` +
@@ -798,8 +865,14 @@ async function showShopDetails(token: string, chatId: number, userIdStr: string,
     `🔗 <b>Webhook URL:</b> ${s.webhookUrl ? `<code>${s.webhookUrl}</code>` : '❌ O‘rnatilmagan'}\n` +
     `📣 <b>Telegram Kanal:</b> ${s.telegramChannelId ? `<code>${s.telegramChannelId}</code>` : '❌ Ulanmagan'}\n` +
     `🤖 <b>Userbot (@CardXabarBot / @humocardbot):</b> ${isConnected ? '🟢 Ulangan va Faol' : '🔴 Ulanmagan'}\n` +
-    `⚡️ <b>Holat:</b> ${s.approved ? '✅ Tasdiqlangan' : '⏳ Kutilmoqda'}\n` +
-    `🆔 <b>Shop ID:</b> <code>${s.id}</code>\n\n` +
+    `⚡️ <b>Holat:</b> ${s.approved ? '✅ Tasdiqlangan' : '⏳ Kutilmoqda'}\n\n` +
+    `🛠 <b>Vercel / Next.js Environment (Nusxa olish uchun bosing):</b>\n` +
+    `• <code>PAYGO_CHECKOUT_URL</code>:\n` +
+    `<code>${APP_URL}/api/pay/create</code>\n\n` +
+    `• <code>PAYGO_SHOP_ID</code>:\n` +
+    `<code>${s.id}</code>\n\n` +
+    `• <code>PAYGO_WEBHOOK_SECRET</code>:\n` +
+    `<code>${activeSecret}</code>\n\n` +
     `Tahrirlash va boshqarish uchun quyidagi tugmalardan foydalaning:`
 
   const reply_markup = {
@@ -2022,6 +2095,17 @@ export async function POST(request: Request) {
     
     if (data === 'view_my_shop') {
       await showShopDetails(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('webhook_shop_select_')) {
+      const shopId = data.replace('webhook_shop_select_', '')
+      await showWebhookSettings(token, chatId, userIdStr, shopId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'webhook_select_shop_back') {
+      await showWebhookSettings(token, chatId, userIdStr)
       return NextResponse.json({ ok: true })
     }
 
@@ -3387,9 +3471,10 @@ export async function POST(request: Request) {
       `⚡️ <b>PayGo nima?</b>\n` +
       `PayGo — HUMO bank kartalariga kelib tushadigan to‘lov xabarnomalarini 1 soniya ichida avtomatik ravishda Webhook va Telegram kanallarga yetkazib beruvchi zamonaviy SaaS platformasi.\n\n` +
       `🔄 <b>Tizim qanday ishlaydi?</b>\n` +
-      `1️⃣ <b>Do‘kon ochasiz:</b> Karta raqamingiz va Webhook URL manzilingizni kiritasiz.\n` +
-      `2️⃣ <b>Userbot ulaysiz:</b> Telegram raqamingiz orqali 1 marta SMS kod bilan ulaysiz.\n` +
-      `3️⃣ <b>Avto-xabarnoma:</b> Kartangizga o‘tkazma tushishi bilan SMS/Push ma’lumoti Webhook va Kanalingizga 1 soniyada yetib boradi!\n\n` +
+      `1️⃣ <b>Do‘kon ochasiz:</b> Karta raqamingizni kiritasiz.\n` +
+      `2️⃣ <b>API orqali ulaysiz:</b> Saytingiz yoki Vercel AI loyihangiz unikal to‘lov havolalari yaratish uchun <code>PAYGO_CHECKOUT_URL</code> ga so‘rov yuboradi.\n` +
+      `3️⃣ <b>Mijoz to‘laydi:</b> Mijozga 5 daqiqalik chiroyli to‘lov sahifasi taqdim etiladi.\n` +
+      `4️⃣ <b>Userbot & Webhook:</b> Mijoz pul o‘tkazgan zahoti, monitoring botimiz to‘lovni tasdiqlaydi va sizning saytingizga 1 soniyada Webhook xabarini yuboradi!\n\n` +
       `❓ <b>Tez-tez beriladigan savollar:</b>\n\n` +
       `• <b>PayGo xavfsizmi? Pulimga tegadimi?</b>\n` +
       `Yo‘q! PayGo platformasi bank hisobingizga yoki pulingizga daxl qilmaydi. Userbot faqat kelgan SMS va Push xabarnomalarni o‘qiydi.\n\n` +
@@ -3826,34 +3911,7 @@ export async function POST(request: Request) {
   // WEBHOOK SOZLASH & DOKUMENTATSIYA
   // -------------------------------------------------------------
   if (isWebhookCmd) {
-    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr)).limit(1)
-    const currentWebhook = userShops[0]?.webhookUrl || 'Mavjud emas'
-    const shopId = userShops[0]?.id || ''
-    const authUrl = await generateAuthUrl(userIdStr, '/panel')
-    const activeSecret = process.env.PAYBOT_WORKER_SECRET || 'paybot-secret-dev'
-
-    await send(
-      token,
-      chatId,
-      `🔗 <b>PayGo Webhook Sozlamalari</b>\n\n` +
-      `To‘lov muvaffaqiyatli tasdiqlanganda serveringizga <code>POST</code> so‘rovi orqali to‘liq JSON ma’lumot yuboriladi.\n\n` +
-      `🌐 <b>Hozirgi Webhook URL:</b> <code>${currentWebhook}</code>\n\n` +
-      `🛠 <b>Vercel / Next.js loyihangiz uchun tayyor o‘zgaruvchilar (Environment Variables):</b>\n` +
-      `<code>PAYGO_CHECKOUT_URL=${APP_URL}/api/pay/create</code>\n` +
-      `<code>PAYGO_SHOP_ID=${shopId || 'Sizda_hali_do‘kon_yo‘q'}</code>\n` +
-      `<code>PAYGO_WEBHOOK_SECRET=${activeSecret}</code>\n\n` +
-      `⚠️ <i>Yuqoridagi o‘zgaruvchilarni Vercel panelingizga (Environment Variables bo‘limiga) xuddi shunday nusxalab joylang.</i>\n\n` +
-      `📦 <b>Webhook JSON formati:</b>\n` +
-      `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "eventId": "evt_98f4e21a",\n  "createdAt": "2026-08-30T11:05:00Z",\n  "payment": {\n    "id": "pay_7fa83210",\n    "amount": 50000,\n    "currency": "UZS",\n    "status": "paid",\n    "cardLast4": "3587"\n  },\n  "signature": "sha256_hash"\n}</code></pre>\n\n` +
-      `📄 <b>JSON Schema fayli:</b> <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n` +
-      `🌐 <b>To‘liq API Hujjati:</b> <a href="${APP_URL}/api/docs">${APP_URL}/api/docs</a>`,
-      {
-        inline_keyboard: [
-          [{ text: '✏️ Webhook URL sozlash', callback_data: shopId ? `edit_shop_webhook_${shopId}` : 'edit_shop_webhook' }],
-          [{ text: '🌐 Web Panel orqali sozlash', url: authUrl }],
-        ],
-      }
-    )
+    await showWebhookSettings(token, chatId, userIdStr)
     return NextResponse.json({ ok: true })
   }
 
