@@ -1111,6 +1111,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         body: JSON.stringify({
           amount: amt,
           userId: currentUser?.telegramId,
+          isTest: true,
         }),
       })
 

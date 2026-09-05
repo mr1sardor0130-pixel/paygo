@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
 import { payments, shops, deliveryLogs, donations, fundraisers } from '@/lib/db/schema'
-import { eq, sql } from 'drizzle-orm'
+import { eq, or, and, sql } from 'drizzle-orm'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 
 export const runtime = 'nodejs'
