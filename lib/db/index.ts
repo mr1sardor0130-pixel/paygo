@@ -236,6 +236,18 @@ export async function ensureDbSchema() {
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS "business_connections" (
+        "id" text PRIMARY KEY,
+        "userId" text NOT NULL,
+        "userChatId" text NOT NULL,
+        "canReply" boolean NOT NULL DEFAULT true,
+        "isEnabled" boolean NOT NULL DEFAULT true,
+        "username" text,
+        "firstName" text,
+        "connectedAt" timestamp NOT NULL DEFAULT NOW(),
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );
+
       ALTER TABLE "system_tariffs" ADD COLUMN IF NOT EXISTS "features" text;
 
       -- CYBER SECURITY RULES:

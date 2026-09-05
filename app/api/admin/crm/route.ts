@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles, systemSettings, mandatoryChannels, authSessions } from '@/lib/db/schema'
+import { shops, payments, systemRoles, systemTariffs, userbotConnections, userProfiles, systemSettings, mandatoryChannels, authSessions, businessConnections } from '@/lib/db/schema'
 import { eq, desc, sql } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId, cleanBogusAdmins } from '@/lib/admin'
 import { sendTelegramMessage } from '@/lib/telegram-notifier'
@@ -68,6 +68,7 @@ export async function GET(request: Request) {
     const allTariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.createdAt))
     const allRoles = await db.select().from(systemRoles).orderBy(desc(systemRoles.createdAt))
     const allConnections = await db.select().from(userbotConnections).orderBy(desc(userbotConnections.createdAt))
+    const allBusinessConns = await db.select().from(businessConnections).orderBy(desc(businessConnections.connectedAt))
     const allMandatoryChannels = await db.select().from(mandatoryChannels).orderBy(desc(mandatoryChannels.createdAt))
     const settingsRows = await db.select().from(systemSettings)
 
@@ -92,6 +93,7 @@ export async function GET(request: Request) {
         paidPayments: paidPayments.length,
         totalVolume,
         activeUserbots: allConnections.filter((c) => c.status === 'active').length,
+        activeBusinessBots: allBusinessConns.filter((c) => c.isEnabled).length,
         totalAdmins: allRoles.length,
         mandatoryChannelsCount: allMandatoryChannels.length,
       },
@@ -100,6 +102,7 @@ export async function GET(request: Request) {
       tariffs: allTariffs,
       roles: allRoles,
       userbots: allConnections,
+      businessBots: allBusinessConns,
       users: allUsers,
       mandatoryChannels: allMandatoryChannels,
       officialSettings: {

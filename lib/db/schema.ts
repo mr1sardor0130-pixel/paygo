@@ -362,6 +362,19 @@ export const paidAccessMembers = pgTable('paid_access_members', {
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 })
 
+// Telegram Business Chatbot Connections (Telegram Business API)
+export const businessConnections = pgTable('business_connections', {
+  id: text('id').primaryKey(), // business_connection_id
+  userId: text('userId').notNull(), // Telegram User ID (e.g. 12345678)
+  userChatId: text('userChatId').notNull(),
+  canReply: boolean('canReply').notNull().default(true),
+  isEnabled: boolean('isEnabled').notNull().default(true),
+  username: text('username'),
+  firstName: text('firstName'),
+  connectedAt: timestamp('connectedAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
 // Relations
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),

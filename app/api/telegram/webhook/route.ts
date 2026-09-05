@@ -16,6 +16,7 @@ import {
   mandatoryChannels,
   paidAccessRooms,
   paidAccessMembers,
+  businessConnections,
 } from '@/lib/db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
@@ -32,6 +33,7 @@ import {
 } from '@/lib/userbot-onboarding'
 import { checkShopLimit, checkTransactionLimits, getUserLimitsStatus } from '@/lib/utils/limits'
 import { startHumoUserbot, stopHumoUserbot, isUserbotActive } from '@/lib/telegram-userbot'
+import { parseBankNotification } from '@/lib/telegram-humo-parser'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
 
@@ -80,6 +82,22 @@ type Update = {
   update_id: number
   message?: Message
   callback_query?: CallbackQuery
+  business_connection?: {
+    id: string
+    user: { id: number; first_name?: string; username?: string }
+    user_chat_id: number
+    date: number
+    can_reply: boolean
+    is_enabled: boolean
+  }
+  business_message?: {
+    message_id: number
+    from?: { id: number; is_bot: boolean; first_name?: string; username?: string }
+    chat?: { id: number; first_name?: string; type: string }
+    date: number
+    text?: string
+    business_connection_id: string
+  }
 }
 
 type Flow = {
@@ -717,6 +735,21 @@ async function isUserbotConnectedForUser(userIdStr: string): Promise<boolean> {
   return isUserbotActive(userIdStr)
 }
 
+// Check if user has an active Telegram Business chatbot connection
+async function isBusinessChatbotConnectedForUser(userIdStr: string): Promise<boolean> {
+  try {
+    const conns = await db
+      .select()
+      .from(businessConnections)
+      .where(and(eq(businessConnections.userId, userIdStr), eq(businessConnections.isEnabled, true)))
+      .limit(1)
+    return conns.length > 0
+  } catch (e) {
+    console.warn('isBusinessChatbotConnectedForUser check error:', e)
+  }
+  return false
+}
+
 // Render and send detailed shop information
 async function showShopDetails(token: string, chatId: number, userIdStr: string, shopId?: string) {
   let userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
@@ -807,9 +840,41 @@ async function showShopDetails(token: string, chatId: number, userIdStr: string,
 
 // Render and send Userbot status or onboarding flow
 async function showUserbotStatus(token: string, chatId: number, userIdStr: string) {
-  const isConnected = await isUserbotConnectedForUser(userIdStr)
+  const isBusinessConnected = await isBusinessChatbotConnectedForUser(userIdStr)
+  const isUserbotConnected = await isUserbotConnectedForUser(userIdStr)
 
-  if (isConnected) {
+  if (isBusinessConnected) {
+    // Get the details of business connection
+    const conns = await db
+      .select()
+      .from(businessConnections)
+      .where(and(eq(businessConnections.userId, userIdStr), eq(businessConnections.isEnabled, true)))
+      .limit(1)
+    const conn = conns[0]
+
+    await send(
+      token,
+      chatId,
+      `🤖 <b>Monitoring: 🟢 Business Chatbot Faol</b>\n\n` +
+      `✅ Sizning Telegram Business akkauntingiz muvaffaqiyatli ulangan va ishlamoqda.\n` +
+      `⚡️ <b>@CardXabarBot</b> hamda <b>@humocardbot</b> xabarlari lahzada avtomat tasdiqlanadi va Webhook hamda kanalingizga yuboriladi!\n\n` +
+      `👤 <b>Ulovchi:</b> ${conn.firstName || ''} (${conn.username ? `@${conn.username}` : userIdStr})\n` +
+      `🕒 <b>Ulanish vaqti:</b> ${conn.connectedAt.toLocaleString('uz-UZ')}\n` +
+      `🛡 <b>Tizim:</b> Telegram Business API (Xavfsiz va barqaror, 0% bloklanish ehtimoli)\n\n` +
+      `⚙️ <i>Agar monitoringni o‘chirmoqchi bo‘lsangiz, Telegram sozlamalaridan (Telegram Business -> Chatbots) PayGo botini olib tashlashingiz kifoya.</i>`,
+      {
+        inline_keyboard: [
+          [
+            { text: '🧪 Test to‘lov', callback_data: 'test_pay' },
+            { text: '🏪 Mening do‘konim', callback_data: 'view_my_shop' },
+          ],
+        ],
+      }
+    )
+    return
+  }
+
+  if (isUserbotConnected) {
     await send(
       token,
       chatId,
@@ -832,18 +897,27 @@ async function showUserbotStatus(token: string, chatId: number, userIdStr: strin
     return
   }
 
-  // Not connected yet: start fresh onboarding
-  beginOnboarding(userIdStr)
-  const newFlow: Flow = { step: 'userbot_api_id', userbot: {} }
-  await stateSet(chatId, newFlow)
+  // Not connected yet: show elegant Choice Screen
   await send(
     token,
     chatId,
-    `🔐 <b>Telegram Userbot ulash (1/4)</b>\n\n` +
-    `Userbot <b>@CardXabarBot</b> (UZCARD + HUMO) va <b>@humocardbot</b> dan kelgan to‘lov xabarnomalarini avtomatik o‘qib, to‘lovlarni 1 soniyada tasdiqlaydi.\n\n` +
-    `1️⃣ Iltimos, <b>Telegram API ID</b> raqamingizni yuboring:\n` +
-    `(Uni <a href="https://my.telegram.org">my.telegram.org</a> saytidan olasiz, masalan: <code>12345678</code>)`,
-    back
+    `🛡 <b>Karta monitoringini sozlash</b>\n\n` +
+    `Mijozlar to‘lov qilganda holatni 1 soniyada avto-tasdiqlash uchun quyidagi 2 xil ulanish usulidan birini tanlang:\n\n` +
+    `🚀 <b>Usul 1: Telegram Business Chatbot (Tavsiya etiladi)</b>\n` +
+    `• Telegram Premium egalari uchun eng zo‘r va mutlaqo xavfsiz usul.\n` +
+    `• Hech qanday SMS kod yoki API sozlamalar talab etilmaydi.\n` +
+    `• Akkauntingiz Telegram tomonidan bloklanish xavfi 0%.\n\n` +
+    `🔐 <b>Usul 2: Standart Userbot (API ID orqali)</b>\n` +
+    `• Oddiy Telegram akkauntlar uchun an’anaviy usul.\n` +
+    `• <a href="https://my.telegram.org">my.telegram.org</a> saytidan API_ID olib, SMS-kod orqali ulanadi.\n` +
+    `• Serverda maxsus virtual brauzer (sessiya) orqali ishlaydi.`,
+    {
+      inline_keyboard: [
+        [{ text: '🚀 1-Usul: Telegram Business (Qo‘llanma)', callback_data: 'conn_method_business' }],
+        [{ text: '🔐 2-Usul: Standart Userbotni ulash', callback_data: 'conn_method_userbot_start' }],
+        [{ text: '↩️ Orqaga', callback_data: 'view_my_shop' }],
+      ],
+    }
   )
 }
 
@@ -1409,6 +1483,119 @@ export async function POST(request: Request) {
 
   await ensureDbSchema()
 
+  // -------------------------------------------------------------
+  // TELEGRAM BUSINESS CONNECTION & MESSAGE HANDLERS
+  // -------------------------------------------------------------
+  if (update.business_connection) {
+    const conn = update.business_connection
+    const connId = conn.id
+    const userId = String(conn.user.id)
+    const userChatId = String(conn.user_chat_id)
+    const canReply = conn.can_reply
+    const isEnabled = conn.is_enabled
+    const username = conn.user.username || null
+    const firstName = conn.user.first_name || null
+
+    await db
+      .insert(businessConnections)
+      .values({
+        id: connId,
+        userId,
+        userChatId,
+        canReply,
+        isEnabled,
+        username,
+        firstName,
+        connectedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: businessConnections.id,
+        set: {
+          isEnabled,
+          canReply,
+          username,
+          firstName,
+          updatedAt: new Date(),
+        },
+      })
+
+    if (isEnabled) {
+      await send(
+        token,
+        Number(userChatId),
+        `🎉 <b>PayGo Business Chatbot muvaffaqiyatli ulandi!</b>\n\n` +
+        `🤖 Sizning Telegram Business akkauntingiz tizimga muvaffaqiyatli bog‘landi.\n` +
+        `🔔 <b>Avtomatik monitoring faol:</b> Endi @CardXabarBot hamda @humocardbot orqali keladigan barcha UZCARD va HUMO kirim xabarlari avtomatik tahlil qilinib, to‘lovlar 1 soniyada tasdiqlanadi!\n\n` +
+        `💡 <i>Telegram Premium foydalanuvchisi bo‘lganingiz uchun sizga mutlaqo xavfsiz va tezkor to‘g‘ridan-to‘g‘ri integratsiya taqdim etildi. SMS-kod yoki Userbot API kalitlari mutlaqo talab etilmaydi!</i>`
+      )
+    } else {
+      await send(
+        token,
+        Number(userChatId),
+        `🛑 <b>PayGo Business Chatbot tizimdan uzildi.</b>\n\n` +
+        `Agar xizmatni qayta tiklamoqchi bo‘lsangiz, Telegram sozlamalaridan chatbotni qayta faollashtiring.`
+      )
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
+  if (update.business_message) {
+    const bm = update.business_message
+    const btext = bm.text || ''
+    const bconnId = bm.business_connection_id
+
+    // Find if the business connection is active
+    const activeConns = await db
+      .select()
+      .from(businessConnections)
+      .where(and(eq(businessConnections.id, bconnId), eq(businessConnections.isEnabled, true)))
+      .limit(1)
+
+    if (activeConns.length > 0) {
+      const conn = activeConns[0]
+      const ownerUserId = conn.userId
+
+      // Check if it's a payment/bank notification
+      const parsed = parseBankNotification(btext)
+      if (parsed && parsed.amount > 0) {
+        const internalUrl = APP_URL
+          ? `${APP_URL}/api/internal/payment-events`
+          : 'http://localhost:3000/api/internal/payment-events'
+        const workerSecret = process.env.PAYBOT_WORKER_SECRET || 'paybot-secret-dev'
+
+        try {
+          const res = await fetch(internalUrl, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-worker-secret': workerSecret,
+            },
+            body: JSON.stringify({
+              amount: parsed.amount,
+              cardLast4: parsed.cardLast4 || '1641',
+              cardType: parsed.cardType || 'UNKNOWN',
+              provider: parsed.provider || '@CardXabarBot',
+              sourceMessage: btext,
+              terminal: parsed.terminal,
+              rrn: parsed.rrn,
+              balance: parsed.balance,
+              date: parsed.date,
+              time: parsed.time,
+            }),
+          })
+          const data = await res.json()
+          console.log('[BusinessBot Webhook] payment-events ingest success:', data)
+        } catch (err) {
+          console.error('[BusinessBot Webhook] payment-events ingest error:', err)
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
   // Non-blocking hourly auto-promo trigger check
   triggerAutoPromoIfNeeded(token).catch((err) => console.error('AutoPromo background trigger error:', err))
 
@@ -1840,6 +2027,44 @@ export async function POST(request: Request) {
 
     if (data === 'userbot_connect_prompt') {
       await showUserbotStatus(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'conn_method_business') {
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'PayGo_bot'
+      await send(
+        token,
+        chatId,
+        `🚀 <b>Qo‘llanma: Telegram Business Chatbot ulash</b>\n\n` +
+        `Sizda <b>Telegram Premium</b> bo‘lsa, ushbu usul eng xavfsiz va eng tezkoridir!\n\n` +
+        `<b>Ulash uchun 3 ta oddiy qadam:</b>\n\n` +
+        `1️⃣ Telefoningizda Telegram <b>Sozlamalar (Settings)</b> bo‘limiga kiring.\n` +
+        `2️⃣ <b>Telegram Business</b> -> <b>Chatbots (Chat-botlar)</b> menyusini tanlang.\n` +
+        `3️⃣ Qidiruvga <code>@${botUsername}</code> yozing va ushbu botni tanlab saqlang!\n\n` +
+        `🎯 <i>Ulashingiz bilan bot sizga "Muvaffaqiyatli ulandi" deb xabar yuboradi va tizim 1 soniyada avtomatik monitoringni boshlaydi!</i>`,
+        {
+          inline_keyboard: [
+            [{ text: '⭐ Telegram Business sozlamasini ochish', url: `tg://settings/business` }],
+            [{ text: '↩️ Orqaga', callback_data: 'userbot_connect_prompt' }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'conn_method_userbot_start') {
+      beginOnboarding(userIdStr)
+      const newFlow: Flow = { step: 'userbot_api_id', userbot: {} }
+      await stateSet(chatId, newFlow)
+      await send(
+        token,
+        chatId,
+        `🔐 <b>Telegram Userbot ulash (1/4)</b>\n\n` +
+        `Userbot <b>@CardXabarBot</b> (UZCARD + HUMO) va <b>@humocardbot</b> dan kelgan to‘lov xabarnomalarini avtomatik o‘qib, to‘lovlarni 1 soniyada tasdiqlaydi.\n\n` +
+        `1️⃣ Iltimos, <b>Telegram API ID</b> raqamingizni yuboring:\n` +
+        `(Uni <a href="https://my.telegram.org">my.telegram.org</a> saytidan olasiz, masalan: <code>12345678</code>)`,
+        back
+      )
       return NextResponse.json({ ok: true })
     }
 
