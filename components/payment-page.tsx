@@ -230,43 +230,30 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
     <main className="min-h-screen bg-[#f5f7fb] px-4 py-8 text-[#152238] antialiased">
       <div className="mx-auto max-w-lg">
         {/* Brand Header */}
-        <header className="mb-6 flex items-center justify-between gap-4">
-          {/* Left Side: PayGo System Brand */}
-          <div className="flex items-center gap-2.5">
-            <div className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-[#1769e0] to-[#124ba8] text-lg font-black text-white shadow-md shadow-blue-500/20 shrink-0">
-              P
-            </div>
-            <div>
-              <p className="font-mono text-xs font-black tracking-[.15em] text-[#1769e0] uppercase">
-                PAYGO SYSTEM
-              </p>
-              <div className="flex items-center gap-1 text-[11px] font-bold text-[#16865b]">
-                <ShieldCheck size={13} className="text-[#1ea672]" /> Himoyalangan to‘lov
-              </div>
-            </div>
-          </div>
-
-          {/* Right Side: Merchant / Shop Details */}
-          <div className="flex items-center gap-2.5 text-right">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#94a3b8]">
-                Xarid do‘koni
-              </p>
-              <p className="text-xs font-extrabold text-[#152238] max-w-[120px] sm:max-w-[180px] truncate" title={shopName}>
-                {shopName}
-              </p>
-            </div>
+        <header className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             {data?.shop?.logoUrl ? (
               <img
                 src={data.shop.logoUrl}
                 alt={shopName}
-                className="size-11 rounded-2xl object-cover border border-[#e2e8f0] shadow-sm shrink-0"
+                className="size-12 rounded-2xl object-cover border border-[#cbd5e1] shadow-sm bg-white shrink-0"
               />
             ) : (
-              <div className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-sm font-black text-slate-700 border border-slate-200 shrink-0">
-                {shopName.charAt(0).toUpperCase()}
+              <div className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-[#1769e0] to-[#124ba8] text-lg font-black text-white shadow-md shadow-blue-500/20 shrink-0">
+                {shopName ? shopName.charAt(0).toUpperCase() : 'P'}
               </div>
             )}
+            <div className="min-w-0">
+              <p className="font-mono text-[11px] font-extrabold tracking-[.18em] text-[#1769e0] uppercase">
+                PAYGO • HUMO
+              </p>
+              <p className="text-sm font-extrabold text-[#152238] truncate" title={shopName}>
+                {shopName}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-[#16865b] shadow-sm border border-[#e2e8f0] shrink-0">
+            <ShieldCheck size={15} className="text-[#1ea672]" /> Himoyalangan to‘lov
           </div>
         </header>
 

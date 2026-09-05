@@ -57,9 +57,30 @@ export async function GET(
       const shopRows = await db
         .select()
         .from(shops)
-        .where(eq(shops.id, payment.shopId))
+        .where(
+          or(
+            eq(shops.id, payment.shopId),
+            eq(shops.userId, payment.shopId),
+            eq(shops.slug, payment.shopId)
+          )
+        )
         .limit(1)
       shop = shopRows[0] || null
+    }
+
+    if (!shop && payment.userId) {
+      const shopRows = await db
+        .select()
+        .from(shops)
+        .where(eq(shops.userId, payment.userId))
+        .limit(1)
+      shop = shopRows[0] || null
+    }
+
+    // Fallback: if still no shop found, fetch default shop
+    if (!shop) {
+      const allShops = await db.select().from(shops).limit(1)
+      shop = allShops[0] || null
     }
 
     const isExpired =
