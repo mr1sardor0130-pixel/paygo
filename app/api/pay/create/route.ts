@@ -7,6 +7,16 @@ import { eq } from 'drizzle-orm'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-telegram-user-id, x-shop-slug, x-worker-secret',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
+}
+
 async function resolveUser(request: Request) {
   await ensureDbSchema()
   const token = request.headers.get('authorization')?.replace('Bearer ', '').trim() || ''
@@ -49,7 +59,12 @@ async function handleRequest(request: Request, method: 'GET' | 'POST') {
         rawAmount = Number(String(amountVal).replace(/\D/g, ''))
       }
     }
-    const amount = Number.isFinite(rawAmount) && rawAmount >= 1000 ? Math.min(rawAmount, 500000000) : 15000
+    // Support minimum 100 UZS (for test payments or small transactions)
+    const amount = Number.isFinite(rawAmount) && rawAmount >= 100 ? Math.min(rawAmount, 500000000) : 15000
+
+    // Check if test payment
+    const isTestVal = searchParams.get('isTest') || searchParams.get('test') || body.isTest || body.test
+    const isTest = isTestVal === 'true' || isTestVal === true || isTestVal === '1' || amount <= 500
 
     // Parse IDs and keys
     const shopIdRequested = searchParams.get('shopId') || searchParams.get('shop_id') || body.shopId || body.shop_id || ''
@@ -98,8 +113,10 @@ async function handleRequest(request: Request, method: 'GET' | 'POST') {
       }
     }
 
+    const customExpiryMin = Number(searchParams.get('expiresInMinutes') || searchParams.get('expiry') || body.expiresInMinutes || body.expiry)
+    const expiryMinutes = Number.isFinite(customExpiryMin) && customExpiryMin > 0 ? customExpiryMin : 30 // Default 30 minutes
     const paymentId = `pay_${randomUUID().replace(/-/g, '').slice(0, 12)}`
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // Exactly 5 minutes validity
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000)
 
     // Parse additional URLs and custom order metadata
     const orderId = searchParams.get('merchantOrderId') || searchParams.get('orderId') || searchParams.get('order_id') || body.orderId || body.order_id || null
@@ -116,6 +133,7 @@ async function handleRequest(request: Request, method: 'GET' | 'POST') {
       amount,
       currency: 'UZS',
       status: 'pending',
+      isTest,
       expiresAt,
       sourceMessage,
       returnUrl,
@@ -149,33 +167,37 @@ async function handleRequest(request: Request, method: 'GET' | 'POST') {
       return NextResponse.redirect(payUrl)
     }
 
-    return NextResponse.json({
-      ok: true,
-      id: paymentId,
-      amount,
-      currency: 'UZS',
-      status: 'pending',
-      orderId,
-      description,
-      expiresAt: expiresAt.toISOString(),
-      payUrl,
-      paymentUrl: payUrl,
-      returnUrl,
-      webhookUrl,
-      shop: {
-        id: shop.id,
-        slug: shop.slug,
-        name: shop.name,
-        cardNumber: shop.cardNumber,
-        cardOwner: shop.accountOwner || 'HUMO hisob egasi',
-        cardBank: shop.cardBank || 'HUMOCARD',
+    return NextResponse.json(
+      {
+        ok: true,
+        id: paymentId,
+        amount,
+        currency: 'UZS',
+        status: 'pending',
+        isTest,
+        orderId,
+        description,
+        expiresAt: expiresAt.toISOString(),
+        payUrl,
+        paymentUrl: payUrl,
+        returnUrl,
+        webhookUrl,
+        shop: {
+          id: shop.id,
+          slug: shop.slug,
+          name: shop.name,
+          cardNumber: shop.cardNumber,
+          cardOwner: shop.accountOwner || 'HUMO hisob egasi',
+          cardBank: shop.cardBank || 'HUMOCARD',
+        },
       },
-    })
+      { headers: CORS_HEADERS }
+    )
   } catch (error: any) {
     console.error('Payment create error:', error)
     return NextResponse.json(
       { ok: false, error: error?.message || 'To‘lov yaratishda server xatosi yuz berdi' },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     )
   }
 }
@@ -187,3 +209,4 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   return handleRequest(request, 'POST')
 }
+

@@ -8,6 +8,16 @@ import { deliverWebhook, signPayload } from '@/lib/webhook'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-worker-secret, x-telegram-user-id',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
+}
+
 function formatCard(raw: string): string {
   const digits = (raw || '').replace(/\D/g, '')
   if (digits.length >= 16) {
