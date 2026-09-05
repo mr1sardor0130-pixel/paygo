@@ -1,6 +1,16 @@
 import React from 'react';
 import Link from 'next/link';
 import { Shield, Scale, FileText, Lock, CheckCircle, Info } from 'lucide-react';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Foydalanish Shartlari va Ommaviy Oferta — PayGo',
+  description: 'PayGo platformasining rasmiy foydalanish shartlari, shaxsiy ma’lumotlar maxfiylik siyosati va SaaS litsenziya shartnomasi haqida batafsil ma’lumot.',
+  openGraph: {
+    title: 'Foydalanish Shartlari va Ommaviy Oferta — PayGo',
+    description: 'PayGo platformasidan foydalanish shartlari, huquqiy asoslari va xavfsizlik kafolatlari.',
+  },
+}
 
 export default function LegalPage() {
   return (

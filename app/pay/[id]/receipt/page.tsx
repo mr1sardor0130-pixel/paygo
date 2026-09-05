@@ -6,6 +6,9 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
   title: 'Rasmiy To‘lov Cheki — PayGo',
   description: 'PayGo HUMO to‘lov tizimi orqali tasdiqlangan rasmiy elektron chek va kvitansiya.',
+  robots: {
+    index: false,
+  },
 }
 
 export default async function ReceiptPage({
