@@ -3830,6 +3830,7 @@ export async function POST(request: Request) {
     const currentWebhook = userShops[0]?.webhookUrl || 'Mavjud emas'
     const shopId = userShops[0]?.id || ''
     const authUrl = await generateAuthUrl(userIdStr, '/panel')
+    const activeSecret = process.env.PAYBOT_WORKER_SECRET || 'paybot-secret-dev'
 
     await send(
       token,
@@ -3837,6 +3838,11 @@ export async function POST(request: Request) {
       `🔗 <b>PayGo Webhook Sozlamalari</b>\n\n` +
       `To‘lov muvaffaqiyatli tasdiqlanganda serveringizga <code>POST</code> so‘rovi orqali to‘liq JSON ma’lumot yuboriladi.\n\n` +
       `🌐 <b>Hozirgi Webhook URL:</b> <code>${currentWebhook}</code>\n\n` +
+      `🛠 <b>Vercel / Next.js loyihangiz uchun tayyor o‘zgaruvchilar (Environment Variables):</b>\n` +
+      `<code>PAYGO_CHECKOUT_URL=${APP_URL}/api/pay/create</code>\n` +
+      `<code>PAYGO_SHOP_ID=${shopId || 'Sizda_hali_do‘kon_yo‘q'}</code>\n` +
+      `<code>PAYGO_WEBHOOK_SECRET=${activeSecret}</code>\n\n` +
+      `⚠️ <i>Yuqoridagi o‘zgaruvchilarni Vercel panelingizga (Environment Variables bo‘limiga) xuddi shunday nusxalab joylang.</i>\n\n` +
       `📦 <b>Webhook JSON formati:</b>\n` +
       `<pre><code class="language-json">{\n  "event": "payment.paid",\n  "eventId": "evt_98f4e21a",\n  "createdAt": "2026-08-30T11:05:00Z",\n  "payment": {\n    "id": "pay_7fa83210",\n    "amount": 50000,\n    "currency": "UZS",\n    "status": "paid",\n    "cardLast4": "3587"\n  },\n  "signature": "sha256_hash"\n}</code></pre>\n\n` +
       `📄 <b>JSON Schema fayli:</b> <a href="${APP_URL}/api/docs/webhook-schema.json">${APP_URL}/api/docs/webhook-schema.json</a>\n` +

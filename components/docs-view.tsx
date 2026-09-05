@@ -290,6 +290,52 @@ echo json_encode(['ok' => true]);
                   X-PayGo-Signature: sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
                 </div>
               </section>
+
+              <section className="bg-gradient-to-r from-blue-950/40 to-slate-900 border border-blue-500/30 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="flex h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                  <h2 className="text-lg font-bold text-white">⚡️ Vercel & Next.js Environment Sozlamalari</h2>
+                </div>
+                <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                  Agar siz o‘z ilovangizni (masalan, <b>https://paygo-pearl.vercel.app/</b>) Vercel-ga yuklagan bo‘lsangiz, loyihangiz mukammal ishlashi uchun Vercel boshqaruv panelidagi <b>Settings &gt; Environment Variables</b> bo‘limiga quyidagi kalitlarni qo‘shing:
+                </p>
+                
+                <div className="space-y-3">
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">1. To‘lov yaratish API manzili (PAYGO_CHECKOUT_URL)</span>
+                    <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs font-mono text-blue-400">
+                      <code>PAYGO_CHECKOUT_URL=https://ais-pre-oapzgyrs4oc6cvqy3luuko-611987619493.asia-southeast1.run.app/api/pay/create</code>
+                      <button onClick={() => copyText("PAYGO_CHECKOUT_URL=https://ais-pre-oapzgyrs4oc6cvqy3luuko-611987619493.asia-southeast1.run.app/api/pay/create", "env1")} className="text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">
+                        {copied === "env1" ? "Nusxalandi" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">2. Do‘kon unikal raqami (PAYGO_SHOP_ID)</span>
+                    <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs font-mono text-emerald-400">
+                      <code>PAYGO_SHOP_ID=shop_xxx (Mening do‘konlarim bo‘limidan oling)</code>
+                      <button onClick={() => copyText("PAYGO_SHOP_ID=shop_xxx", "env2")} className="text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">
+                        {copied === "env2" ? "Nusxalandi" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">3. Webhook Maxfiy Kaliti (PAYGO_WEBHOOK_SECRET)</span>
+                    <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs font-mono text-purple-400">
+                      <code>PAYGO_WEBHOOK_SECRET=paybot-secret-dev</code>
+                      <button onClick={() => copyText("PAYGO_WEBHOOK_SECRET=paybot-secret-dev", "env3")} className="text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">
+                        {copied === "env3" ? "Nusxalandi" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 text-[11px] leading-relaxed text-slate-400 bg-blue-500/5 border border-blue-500/10 p-3 rounded-lg">
+                  💡 <b>Eslatma:</b> Ushbu o‘zgaruvchilar yordamida Vercel loyihangiz PayGo API serveriga xavfsiz to‘lov havolasi yaratish so‘rovlarini yubora oladi hamda qaytib kelayotgan xabarlarning xavfsizligini tekshiradi.
+                </div>
+              </section>
             </div>
 
             <div className="space-y-6">
