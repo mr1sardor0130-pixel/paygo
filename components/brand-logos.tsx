@@ -8,20 +8,11 @@ import { ExternalLink, Check, ShieldCheck } from 'lucide-react'
    ========================================================================== */
 
 /**
- * HUMO Logo (Reads custom uploaded logo or default vector SVG)
+ * HUMO Logo (Reads custom uploaded logo or default official PNG)
  */
 export function HumoLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
   const [imgError, setImgError] = useState(false)
-  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
-
-  useEffect(() => {
-    if (customUrl) {
-      setLogoUrl(customUrl)
-      return
-    }
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_humo_logo') : null
-    if (saved) setLogoUrl(saved)
-  }, [customUrl])
+  const logoUrl = customUrl || "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Humo_logo.png/1200px-Humo_logo.png"
 
   if (logoUrl && !imgError) {
     return (
@@ -30,6 +21,7 @@ export function HumoLogo({ className = "h-6", customUrl }: { className?: string;
         alt="HUMO"
         className={`${className} object-contain inline-block`}
         onError={() => setImgError(true)}
+        referrerPolicy="no-referrer"
       />
     )
   }
@@ -46,20 +38,11 @@ export function HumoLogo({ className = "h-6", customUrl }: { className?: string;
 }
 
 /**
- * UZCARD Logo (Reads custom uploaded logo or default vector SVG)
+ * UZCARD Logo (Reads custom uploaded logo or default official PNG)
  */
 export function UzcardLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
   const [imgError, setImgError] = useState(false)
-  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
-
-  useEffect(() => {
-    if (customUrl) {
-      setLogoUrl(customUrl)
-      return
-    }
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_uzcard_logo') : null
-    if (saved) setLogoUrl(saved)
-  }, [customUrl])
+  const logoUrl = customUrl || "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Uzcard_logo.png/1200px-Uzcard_logo.png"
 
   if (logoUrl && !imgError) {
     return (
@@ -68,6 +51,7 @@ export function UzcardLogo({ className = "h-6", customUrl }: { className?: strin
         alt="UZCARD"
         className={`${className} object-contain inline-block`}
         onError={() => setImgError(true)}
+        referrerPolicy="no-referrer"
       />
     )
   }
@@ -90,13 +74,13 @@ export function UzcardLogo({ className = "h-6", customUrl }: { className?: strin
  */
 export function PayGoLogo({ className = "h-6" }: { className?: string }) {
   return (
-    <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect width="180" height="180" rx="37" fill="#1769e0" />
-      <g style={{ transform: 'scale(90%)', transformOrigin: 'center' }}>
+    <div className={`relative flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#1769e0] to-[#124ba8] shadow-md ${className}`}>
+      <svg width="100%" height="100%" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M101.141 53H136.632C151.023 53 162.689 64.6662 162.689 79.0573V112.904H148.112V79.0573C148.112 78.7105 148.098 78.3662 148.072 78.0251L112.581 112.898C112.701 112.902 112.821 112.904 112.941 112.904H148.112V126.672H112.941C98.5504 126.672 86.5638 114.891 86.5638 100.5V66.7434H101.141V100.5C101.141 101.15 101.191 101.792 101.289 102.422L137.56 66.7816C137.255 66.7563 136.945 66.7434 136.632 66.7434H101.141V53Z" fill="white" />
         <path d="M65.2926 124.136L14 66.7372H34.6355L64.7495 100.436V66.7372H80.1365V118.47C80.1365 126.278 70.4953 129.958 65.2926 124.136Z" fill="white" />
-      </g>
-    </svg>
+      </svg>
+      <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none" />
+    </div>
   )
 }
 
@@ -104,25 +88,16 @@ export function PayGoLogo({ className = "h-6" }: { className?: string }) {
  * Payme Logo (Reads custom uploaded logo or fallback)
  */
 export function PaymeLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  if (customUrl) {
-    return (
-      <img
-        src={customUrl}
-        alt="Payme"
-        className={`${className} object-contain inline-block`}
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
+  const logoUrl = customUrl || "https://upload.wikimedia.org/wikipedia/commons/2/23/Paymeuz_logo.png";
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="h-full aspect-square bg-[#002B28] rounded-lg flex items-center justify-center p-[20%]">
-        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M20 50L40 70L80 30" stroke="#19D3C5" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      <span className="font-black text-[#002B28] text-lg tracking-tighter uppercase leading-none">payme</span>
+    <div className="flex items-center">
+      <img
+        src={logoUrl}
+        alt="Payme"
+        className={`${className} object-contain inline-block brightness-110 contrast-125`}
+        referrerPolicy="no-referrer"
+      />
     </div>
   )
 }
@@ -131,26 +106,16 @@ export function PaymeLogo({ className = "h-6", customUrl }: { className?: string
  * Click Logo (Reads custom uploaded logo or fallback)
  */
 export function ClickLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  if (customUrl) {
-    return (
-      <img
-        src={customUrl}
-        alt="Click"
-        className={`${className} object-contain inline-block`}
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
+  const logoUrl = customUrl || "https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Click_Uzbekistan_logo.png/640px-Click_Uzbekistan_logo.png";
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="h-full aspect-square bg-white rounded-full flex items-center justify-center p-[15%] shadow-sm">
-        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="42" stroke="#008BE3" strokeWidth="12" />
-          <circle cx="50" cy="50" r="18" fill="#00FFCC" />
-        </svg>
-      </div>
-      <span className="font-black text-white text-lg tracking-tight lowercase leading-none">click</span>
+    <div className="flex items-center px-1.5 py-1 bg-white/10 rounded-lg">
+      <img
+        src={logoUrl}
+        alt="Click"
+        className={`${className} object-contain inline-block brightness-125`}
+        referrerPolicy="no-referrer"
+      />
     </div>
   )
 }
@@ -159,29 +124,17 @@ export function ClickLogo({ className = "h-6", customUrl }: { className?: string
  * Uzum Bank Logo (Reads custom uploaded logo or fallback)
  */
 export function UzumBankLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  if (customUrl) {
-    return (
-      <img
-        src={customUrl}
-        alt="Uzum Bank"
-        className={`${className} object-contain inline-block`}
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
+  const logoUrl = customUrl || "https://upload.wikimedia.org/wikipedia/commons/1/1d/Uzum_logo.png";
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="h-full aspect-square bg-[#FFC700] rounded-xl flex items-center justify-center p-[15%]">
-        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M50 15C30.67 15 15 30.67 15 50C15 69.33 30.67 85 50 85C69.33 85 85 69.33 85 50" stroke="#7000FF" strokeWidth="14" strokeLinecap="round" />
-          <circle cx="50" cy="50" r="12" fill="#7000FF" />
-        </svg>
-      </div>
-      <div className="flex flex-col items-start leading-[0.8]">
-        <span className="text-[#FFC700] font-black text-base tracking-tighter">uzum</span>
-        <span className="text-white font-bold text-[10px] tracking-widest uppercase opacity-80">bank</span>
-      </div>
+      <img
+        src={logoUrl}
+        alt="Uzum"
+        className="h-[120%] w-auto object-contain brightness-110"
+        referrerPolicy="no-referrer"
+      />
+      <span className="text-white font-black text-xl tracking-tighter uppercase italic italic-accent">bank</span>
     </div>
   )
 }
