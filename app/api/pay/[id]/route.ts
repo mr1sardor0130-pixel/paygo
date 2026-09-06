@@ -101,6 +101,18 @@ export async function GET(
       shop?.cardNumber ||
       (shop?.cardLast4 ? `986035012345${shop.cardLast4}` : '9860350123453587')
 
+    // Get site logo from system_settings
+    let siteLogo = 'https://i.ibb.co/sd8RnH9N/Pix-WYE0d-PXzy-DGc8-OLd6-I6-NXw5y-Og3y6.webp'
+    try {
+      const { systemSettings } = await import('@/lib/db/schema')
+      const settingsRows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'site_logo')).limit(1)
+      if (settingsRows[0]?.value) {
+        siteLogo = settingsRows[0].value
+      }
+    } catch (err) {
+      console.warn('Failed to fetch site_logo:', err)
+    }
+
     return NextResponse.json({
       id: payment.id,
       amount: payment.amount,
@@ -109,6 +121,7 @@ export async function GET(
       isTest: Boolean(payment.isTest),
       expiresAt: payment.expiresAt,
       matchedAt: payment.matchedAt,
+      siteLogo,
       returnUrl: resolveReturnUrl(payment.returnUrl, shop?.returnUrl, shop?.webhookUrl),
       shop: {
         id: shop?.id ?? 'default-shop',

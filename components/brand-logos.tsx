@@ -49,54 +49,29 @@ export function HumoLogo({ className = "h-6", customUrl }: { className?: string;
  * UZCARD Logo (Reads custom uploaded logo or default vector SVG)
  */
 export function UzcardLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  const [imgError, setImgError] = useState(false)
-  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
-
-  useEffect(() => {
-    if (customUrl) {
-      setLogoUrl(customUrl)
-      return
-    }
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_uzcard_logo') : null
-    if (saved) setLogoUrl(saved)
-  }, [customUrl])
-
-  if (logoUrl && !imgError) {
-    return (
-      <img
-        src={logoUrl}
-        alt="UZCARD"
-        className={`${className} object-contain inline-block`}
-        onError={() => setImgError(true)}
-      />
-    )
-  }
-
+  const url = customUrl || 'https://i.ibb.co/0VJX9CBH/Uzcard-Logo-white-text-643x700.png'
   return (
-    <svg viewBox="0 0 110 32" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="110" height="32" rx="6" fill="#003366" />
-      <text x="10" y="21" fill="#FFFFFF" fontFamily="system-ui, sans-serif" fontWeight="900" fontSize="13" letterSpacing="1.2">UZCARD</text>
-      <g transform="translate(80, 6)">
-        <rect width="20" height="20" rx="4" fill="#00A3E0" />
-        <rect y="4" width="20" height="4.5" fill="#001F3F" />
-        <circle cx="14" cy="14" r="2.5" fill="#FFFFFF" />
-      </g>
-    </svg>
+    <img
+      src={url}
+      alt="UZCARD"
+      className={`${className} object-contain inline-block`}
+      referrerPolicy="no-referrer"
+    />
   )
 }
 
 /**
  * PayGo Official Logo
  */
-export function PayGoLogo({ className = "h-6" }: { className?: string }) {
+export function PayGoLogo({ className = "h-6", url }: { className?: string; url?: string }) {
+  const logoUrl = url || 'https://i.ibb.co/sd8RnH9N/Pix-WYE0d-PXzy-DGc8-OLd6-I6-NXw5y-Og3y6.webp'
   return (
-    <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect width="180" height="180" rx="37" fill="#1769e0" />
-      <g style={{ transform: 'scale(90%)', transformOrigin: 'center' }}>
-        <path d="M101.141 53H136.632C151.023 53 162.689 64.6662 162.689 79.0573V112.904H148.112V79.0573C148.112 78.7105 148.098 78.3662 148.072 78.0251L112.581 112.898C112.701 112.902 112.821 112.904 112.941 112.904H148.112V126.672H112.941C98.5504 126.672 86.5638 114.891 86.5638 100.5V66.7434H101.141V100.5C101.141 101.15 101.191 101.792 101.289 102.422L137.56 66.7816C137.255 66.7563 136.945 66.7434 136.632 66.7434H101.141V53Z" fill="white" />
-        <path d="M65.2926 124.136L14 66.7372H34.6355L64.7495 100.436V66.7372H80.1365V118.47C80.1365 126.278 70.4953 129.958 65.2926 124.136Z" fill="white" />
-      </g>
-    </svg>
+    <img
+      src={logoUrl}
+      alt="PayGo"
+      className={`${className} object-contain`}
+      referrerPolicy="no-referrer"
+    />
   )
 }
 
@@ -104,26 +79,14 @@ export function PayGoLogo({ className = "h-6" }: { className?: string }) {
  * Payme Logo (Reads custom uploaded logo or fallback)
  */
 export function PaymeLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  if (customUrl) {
-    return (
-      <img
-        src={customUrl}
-        alt="Payme"
-        className={`${className} object-contain inline-block`}
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
-
+  const url = customUrl || 'https://i.ibb.co/s9QfXv64/payme-uz-logo.jpg'
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="h-full aspect-square bg-[#002B28] rounded-lg flex items-center justify-center p-[20%]">
-        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M20 50L40 70L80 30" stroke="#19D3C5" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      <span className="font-black text-[#002B28] text-lg tracking-tighter uppercase leading-none">payme</span>
-    </div>
+    <img
+      src={url}
+      alt="Payme"
+      className={`${className} object-contain inline-block`}
+      referrerPolicy="no-referrer"
+    />
   )
 }
 
@@ -131,27 +94,14 @@ export function PaymeLogo({ className = "h-6", customUrl }: { className?: string
  * Click Logo (Reads custom uploaded logo or fallback)
  */
 export function ClickLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  if (customUrl) {
-    return (
-      <img
-        src={customUrl}
-        alt="Click"
-        className={`${className} object-contain inline-block`}
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
-
+  const url = customUrl || 'https://i.ibb.co/50BC2y7/click-white-1.jpg'
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="h-full aspect-square bg-white rounded-full flex items-center justify-center p-[15%] shadow-sm">
-        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="42" stroke="#008BE3" strokeWidth="12" />
-          <circle cx="50" cy="50" r="18" fill="#00FFCC" />
-        </svg>
-      </div>
-      <span className="font-black text-white text-lg tracking-tight lowercase leading-none">click</span>
-    </div>
+    <img
+      src={url}
+      alt="Click"
+      className={`${className} object-contain inline-block`}
+      referrerPolicy="no-referrer"
+    />
   )
 }
 
@@ -159,30 +109,14 @@ export function ClickLogo({ className = "h-6", customUrl }: { className?: string
  * Uzum Bank Logo (Reads custom uploaded logo or fallback)
  */
 export function UzumBankLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  if (customUrl) {
-    return (
-      <img
-        src={customUrl}
-        alt="Uzum Bank"
-        className={`${className} object-contain inline-block`}
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
-
+  const url = customUrl || 'https://i.ibb.co/WvtSkNq2/ex3h2e6g2nohuqmg5429lihq1q7mdduy.png'
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="h-full aspect-square bg-[#FFC700] rounded-xl flex items-center justify-center p-[15%]">
-        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M50 15C30.67 15 15 30.67 15 50C15 69.33 30.67 85 50 85C69.33 85 85 69.33 85 50" stroke="#7000FF" strokeWidth="14" strokeLinecap="round" />
-          <circle cx="50" cy="50" r="12" fill="#7000FF" />
-        </svg>
-      </div>
-      <div className="flex flex-col items-start leading-[0.8]">
-        <span className="text-[#FFC700] font-black text-base tracking-tighter">uzum</span>
-        <span className="text-white font-bold text-[10px] tracking-widest uppercase opacity-80">bank</span>
-      </div>
-    </div>
+    <img
+      src={url}
+      alt="Uzum Bank"
+      className={`${className} object-contain inline-block`}
+      referrerPolicy="no-referrer"
+    />
   )
 }
 
@@ -192,13 +126,13 @@ export function UzumBankLogo({ className = "h-6", customUrl }: { className?: str
 
 export function AcceptedBrandsBar({ className = "" }: { className?: string }) {
   return (
-    <div className={`flex flex-wrap items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-slate-900/80 border border-slate-800 ${className}`}>
-      <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
-        <ShieldCheck size={14} className="text-emerald-400" /> Qabul qilinadigan kartalar:
+    <div className={`flex flex-wrap items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white border border-slate-200 shadow-sm ${className}`}>
+      <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+        <ShieldCheck size={14} className="text-emerald-500" /> Qabul qilinadigan kartalar:
       </span>
-      <div className="flex items-center gap-3 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
+      <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
         <HumoLogo className="h-5 w-auto" />
-        <div className="w-px h-4 bg-slate-700"></div>
+        <div className="w-px h-4 bg-slate-200"></div>
         <UzcardLogo className="h-5 w-auto" />
       </div>
     </div>
@@ -243,18 +177,19 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
 
   return (
     <div className={`space-y-3 ${className}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-          <span>⚡️ To‘lov ilovalari orqali tezkor o‘tish</span>
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+          <Zap size={14} className="text-yellow-500 fill-yellow-500" />
+          <span>To‘lov ilovalari orqali tezkor o‘tish</span>
         </span>
-        <span className="text-[11px] text-emerald-400 font-medium">Bosing va o‘ting →</span>
+        <span className="text-[11px] text-emerald-600 font-bold">Bosing va o‘ting →</span>
       </div>
 
       {/* Toast Banner */}
       {toastMessage && (
-        <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center justify-between animate-fadeIn">
+        <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center justify-between animate-fadeIn">
           <span>{toastMessage}</span>
-          <Check size={14} className="text-emerald-400 shrink-0" />
+          <Check size={14} className="text-emerald-500 shrink-0" />
         </div>
       )}
 
@@ -264,34 +199,32 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
         <button
           type="button"
           onClick={() => handleOpenApp('Payme', 'https://payme.uz')}
-          className="group relative flex h-14 items-center justify-between px-4 rounded-2xl bg-[#19D3C5] hover:brightness-105 active:scale-[0.98] transition-all shadow-sm border border-white/10 cursor-pointer"
+          className="group relative flex h-16 items-center justify-between px-4 rounded-2xl bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm border border-slate-200 cursor-pointer"
         >
-          <PaymeLogo className="h-8" />
-          <ExternalLink size={16} className="text-[#002B28] opacity-40 group-hover:opacity-100 transition" />
+          <PaymeLogo className="h-10" />
+          <ExternalLink size={16} className="text-slate-400 group-hover:text-slate-600 transition" />
         </button>
 
         {/* CLICK BUTTON */}
         <button
           type="button"
           onClick={() => handleOpenApp('Click', 'https://my.click.uz')}
-          className="group relative flex h-14 items-center justify-between px-4 rounded-2xl bg-[#008BE3] hover:brightness-105 active:scale-[0.98] transition-all shadow-sm border border-white/10 cursor-pointer"
+          className="group relative flex h-16 items-center justify-center px-4 rounded-2xl bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm border border-slate-200 cursor-pointer"
         >
-          <ClickLogo className="h-8" />
-          <ExternalLink size={16} className="text-white opacity-40 group-hover:opacity-100 transition" />
+          <ClickLogo className="h-10" />
         </button>
 
         {/* UZUM BANK BUTTON */}
         <button
           type="button"
           onClick={() => handleOpenApp('Uzum Bank', 'https://uzumbank.uz')}
-          className="group relative flex h-14 items-center justify-between px-4 rounded-2xl bg-[#7000FF] hover:brightness-105 active:scale-[0.98] transition-all shadow-sm border border-white/10 cursor-pointer"
+          className="group relative flex h-16 items-center justify-center px-4 rounded-2xl bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm border border-slate-200 cursor-pointer"
         >
-          <UzumBankLogo className="h-10" />
-          <ExternalLink size={16} className="text-white opacity-40 group-hover:opacity-100 transition" />
+          <UzumBankLogo className="h-12" />
         </button>
       </div>
 
-      <p className="text-[11px] text-slate-400 text-center leading-normal">
+      <p className="text-[11px] text-slate-400 text-center leading-normal font-medium">
         💡 Tugmani bosishingiz bilan karta raqami nusxalanadi va to‘lov ilovasi ochiladi.
       </p>
     </div>

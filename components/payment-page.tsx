@@ -29,6 +29,7 @@ type PaymentData = {
   isTest?: boolean
   expiresAt: string
   matchedAt?: string
+  siteLogo?: string | null
   returnUrl?: string | null
   shop: {
     id: string
@@ -62,6 +63,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [simulationResult, setSimulationResult] = useState<string | null>(null)
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
   const [logoError, setLogoError] = useState(false)
+  const [siteLogoError, setSiteLogoError] = useState(false)
 
   // Auto-redirect to returnUrl on successful payment
   // If there is an ad/promo banner, wait 3 seconds; if no ad banner, fast 1-second redirect
@@ -231,9 +233,19 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
     <main className="min-h-screen bg-[#f5f7fb] px-4 py-8 text-[#152238] antialiased">
       <div className="mx-auto max-w-lg">
         {/* Brand Header */}
-        <header className="mb-6 flex items-center justify-between gap-3 bg-white/50 backdrop-blur-sm p-3 rounded-2xl border border-white/50 shadow-sm">
+        <header className="mb-6 flex items-center justify-between gap-3 bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-white/50 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
-            <PayGoLogo className="size-10 rounded-xl shadow-sm shrink-0" />
+            {data?.siteLogo && !siteLogoError ? (
+              <img
+                src={data.siteLogo}
+                alt="PayGo"
+                onError={() => setSiteLogoError(true)}
+                className="size-10 rounded-xl shadow-sm object-contain bg-white p-1"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <PayGoLogo className="size-10 rounded-xl shadow-sm shrink-0" />
+            )}
             <div className="min-w-0">
               <p className="font-mono text-[10px] font-extrabold tracking-[.15em] text-[#1769e0] uppercase leading-none mb-1">
                 PAYGO SECURE
@@ -249,10 +261,11 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 src={data.shop.logoUrl}
                 alt={shopName}
                 onError={() => setLogoError(true)}
-                className="size-8 rounded-lg object-cover border border-[#cbd5e1] bg-white shrink-0"
+                className="size-9 rounded-lg object-cover border border-[#cbd5e1] bg-white shrink-0 p-0.5"
+                referrerPolicy="no-referrer"
               />
             )}
-            <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-[#16865b] shadow-xs border border-[#e2e8f0] shrink-0">
+            <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-bold text-[#16865b] shadow-xs border border-[#e2e8f0] shrink-0">
               <ShieldCheck size={13} className="text-[#1ea672]" /> Himoyalangan
             </div>
           </div>
