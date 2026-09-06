@@ -86,6 +86,21 @@ export function UzcardLogo({ className = "h-6", customUrl }: { className?: strin
 }
 
 /**
+ * PayGo Official Logo
+ */
+export function PayGoLogo({ className = "h-6" }: { className?: string }) {
+  return (
+    <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <rect width="180" height="180" rx="37" fill="#1769e0" />
+      <g style={{ transform: 'scale(90%)', transformOrigin: 'center' }}>
+        <path d="M101.141 53H136.632C151.023 53 162.689 64.6662 162.689 79.0573V112.904H148.112V79.0573C148.112 78.7105 148.098 78.3662 148.072 78.0251L112.581 112.898C112.701 112.902 112.821 112.904 112.941 112.904H148.112V126.672H112.941C98.5504 126.672 86.5638 114.891 86.5638 100.5V66.7434H101.141V100.5C101.141 101.15 101.191 101.792 101.289 102.422L137.56 66.7816C137.255 66.7563 136.945 66.7434 136.632 66.7434H101.141V53Z" fill="white" />
+        <path d="M65.2926 124.136L14 66.7372H34.6355L64.7495 100.436V66.7372H80.1365V118.47C80.1365 126.278 70.4953 129.958 65.2926 124.136Z" fill="white" />
+      </g>
+    </svg>
+  )
+}
+
+/**
  * Payme Logo (Reads custom uploaded logo or fallback)
  */
 export function PaymeLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
@@ -111,8 +126,12 @@ export function PaymeLogo({ className = "h-6", customUrl }: { className?: string
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-[#19D3C5] px-2.5 py-1 rounded-lg font-black text-[#002B28] text-xs uppercase tracking-tight shadow-sm ${className}`}>
-      payme
+    <div className={`flex items-center gap-1.5 ${className}`}>
+      <svg viewBox="0 0 24 24" className="h-full w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="11" fill="#002B28" />
+        <path d="M7 12L10 15L17 8" stroke="#19D3C5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span className="font-black text-[#002B28] text-[13px] uppercase tracking-tighter">payme</span>
     </div>
   )
 }
@@ -143,8 +162,12 @@ export function ClickLogo({ className = "h-6", customUrl }: { className?: string
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-[#008BE3] px-2.5 py-1 rounded-lg font-black text-white text-xs tracking-tight shadow-sm ${className}`}>
-      click <span className="w-1.5 h-1.5 bg-[#00FFCC] rounded-full ml-0.5 inline-block"></span>
+    <div className={`flex items-center gap-1 ${className}`}>
+      <svg viewBox="0 0 24 24" className="h-full w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="11" fill="white" fillOpacity="0.2" />
+        <circle cx="12" cy="12" r="6" fill="#00FFCC" />
+      </svg>
+      <span className="font-black text-white text-[13px] lowercase tracking-tight">click</span>
     </div>
   )
 }
@@ -175,9 +198,10 @@ export function UzumBankLogo({ className = "h-6", customUrl }: { className?: str
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-[#7000FF] px-2.5 py-1 rounded-lg font-black text-xs shadow-sm ${className}`}>
-      <span className="text-[#FFC700]">uzum</span>
-      <span className="text-white ml-1 font-bold">bank</span>
+    <div className={`flex items-center gap-1 ${className}`}>
+      <div className="size-5 rounded-md bg-[#FFC700] flex items-center justify-center font-bold text-[#7000FF] text-[10px]">U</div>
+      <span className="text-[#FFC700] font-black text-[13px] tracking-tight">uzum</span>
+      <span className="text-white font-bold text-[13px]">bank</span>
     </div>
   )
 }

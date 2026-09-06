@@ -19,7 +19,7 @@ import {
   Download,
 } from 'lucide-react'
 import Link from 'next/link'
-import { HumoLogo, UzcardLogo, PaymentAppButtons, AcceptedBrandsBar } from '@/components/brand-logos'
+import { HumoLogo, UzcardLogo, PaymentAppButtons, AcceptedBrandsBar, PayGoLogo } from '@/components/brand-logos'
 
 type PaymentData = {
   id: string
@@ -231,31 +231,30 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
     <main className="min-h-screen bg-[#f5f7fb] px-4 py-8 text-[#152238] antialiased">
       <div className="mx-auto max-w-lg">
         {/* Brand Header */}
-        <header className="mb-6 flex items-center justify-between gap-3">
+        <header className="mb-6 flex items-center justify-between gap-3 bg-white/50 backdrop-blur-sm p-3 rounded-2xl border border-white/50 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
-            {data?.shop?.logoUrl && !logoError ? (
-              <img
-                src={data.shop.logoUrl}
-                alt={shopName}
-                onError={() => setLogoError(true)}
-                className="size-12 rounded-2xl object-cover border border-[#cbd5e1] shadow-sm bg-white shrink-0"
-              />
-            ) : (
-              <div className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-[#1769e0] to-[#124ba8] text-lg font-black text-white shadow-md shadow-blue-500/20 shrink-0">
-                {shopName ? shopName.charAt(0).toUpperCase() : 'P'}
-              </div>
-            )}
+            <PayGoLogo className="size-10 rounded-xl shadow-sm shrink-0" />
             <div className="min-w-0">
-              <p className="font-mono text-[11px] font-extrabold tracking-[.18em] text-[#1769e0] uppercase">
-                PAYGO • HUMO
+              <p className="font-mono text-[10px] font-extrabold tracking-[.15em] text-[#1769e0] uppercase leading-none mb-1">
+                PAYGO SECURE
               </p>
-              <p className="text-sm font-extrabold text-[#152238] truncate" title={shopName}>
+              <p className="text-xs font-bold text-[#152238] truncate" title={shopName}>
                 {shopName}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-[#16865b] shadow-sm border border-[#e2e8f0] shrink-0">
-            <ShieldCheck size={15} className="text-[#1ea672]" /> Himoyalangan to‘lov
+          <div className="flex items-center gap-2">
+            {data?.shop?.logoUrl && !logoError && (
+              <img
+                src={data.shop.logoUrl}
+                alt={shopName}
+                onError={() => setLogoError(true)}
+                className="size-8 rounded-lg object-cover border border-[#cbd5e1] bg-white shrink-0"
+              />
+            )}
+            <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-[#16865b] shadow-xs border border-[#e2e8f0] shrink-0">
+              <ShieldCheck size={13} className="text-[#1ea672]" /> Himoyalangan
+            </div>
           </div>
         </header>
 
