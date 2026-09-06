@@ -104,34 +104,25 @@ export function PayGoLogo({ className = "h-6" }: { className?: string }) {
  * Payme Logo (Reads custom uploaded logo or fallback)
  */
 export function PaymeLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
-
-  useEffect(() => {
-    if (customUrl) {
-      setLogoUrl(customUrl)
-      return
-    }
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_payme_logo') : null
-    if (saved) setLogoUrl(saved)
-  }, [customUrl])
-
-  if (logoUrl) {
+  if (customUrl) {
     return (
       <img
-        src={logoUrl}
+        src={customUrl}
         alt="Payme"
         className={`${className} object-contain inline-block`}
+        referrerPolicy="no-referrer"
       />
     )
   }
 
   return (
-    <div className={`flex items-center gap-1.5 ${className}`}>
-      <svg viewBox="0 0 24 24" className="h-full w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="11" fill="#002B28" />
-        <path d="M7 12L10 15L17 8" stroke="#19D3C5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <span className="font-black text-[#002B28] text-[13px] uppercase tracking-tighter">payme</span>
+    <div className={`flex items-center gap-2 ${className}`}>
+      <div className="h-full aspect-square bg-[#002B28] rounded-lg flex items-center justify-center p-[20%]">
+        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 50L40 70L80 30" stroke="#19D3C5" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <span className="font-black text-[#002B28] text-lg tracking-tighter uppercase leading-none">payme</span>
     </div>
   )
 }
@@ -140,34 +131,26 @@ export function PaymeLogo({ className = "h-6", customUrl }: { className?: string
  * Click Logo (Reads custom uploaded logo or fallback)
  */
 export function ClickLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
-
-  useEffect(() => {
-    if (customUrl) {
-      setLogoUrl(customUrl)
-      return
-    }
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_click_logo') : null
-    if (saved) setLogoUrl(saved)
-  }, [customUrl])
-
-  if (logoUrl) {
+  if (customUrl) {
     return (
       <img
-        src={logoUrl}
+        src={customUrl}
         alt="Click"
         className={`${className} object-contain inline-block`}
+        referrerPolicy="no-referrer"
       />
     )
   }
 
   return (
-    <div className={`flex items-center gap-1 ${className}`}>
-      <svg viewBox="0 0 24 24" className="h-full w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="11" fill="white" fillOpacity="0.2" />
-        <circle cx="12" cy="12" r="6" fill="#00FFCC" />
-      </svg>
-      <span className="font-black text-white text-[13px] lowercase tracking-tight">click</span>
+    <div className={`flex items-center gap-2 ${className}`}>
+      <div className="h-full aspect-square bg-white rounded-full flex items-center justify-center p-[15%] shadow-sm">
+        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="42" stroke="#008BE3" strokeWidth="12" />
+          <circle cx="50" cy="50" r="18" fill="#00FFCC" />
+        </svg>
+      </div>
+      <span className="font-black text-white text-lg tracking-tight lowercase leading-none">click</span>
     </div>
   )
 }
@@ -176,32 +159,29 @@ export function ClickLogo({ className = "h-6", customUrl }: { className?: string
  * Uzum Bank Logo (Reads custom uploaded logo or fallback)
  */
 export function UzumBankLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
-
-  useEffect(() => {
-    if (customUrl) {
-      setLogoUrl(customUrl)
-      return
-    }
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_uzum_logo') : null
-    if (saved) setLogoUrl(saved)
-  }, [customUrl])
-
-  if (logoUrl) {
+  if (customUrl) {
     return (
       <img
-        src={logoUrl}
+        src={customUrl}
         alt="Uzum Bank"
         className={`${className} object-contain inline-block`}
+        referrerPolicy="no-referrer"
       />
     )
   }
 
   return (
-    <div className={`flex items-center gap-1 ${className}`}>
-      <div className="size-5 rounded-md bg-[#FFC700] flex items-center justify-center font-bold text-[#7000FF] text-[10px]">U</div>
-      <span className="text-[#FFC700] font-black text-[13px] tracking-tight">uzum</span>
-      <span className="text-white font-bold text-[13px]">bank</span>
+    <div className={`flex items-center gap-2 ${className}`}>
+      <div className="h-full aspect-square bg-[#FFC700] rounded-xl flex items-center justify-center p-[15%]">
+        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 15C30.67 15 15 30.67 15 50C15 69.33 30.67 85 50 85C69.33 85 85 69.33 85 50" stroke="#7000FF" strokeWidth="14" strokeLinecap="round" />
+          <circle cx="50" cy="50" r="12" fill="#7000FF" />
+        </svg>
+      </div>
+      <div className="flex flex-col items-start leading-[0.8]">
+        <span className="text-[#FFC700] font-black text-base tracking-tighter">uzum</span>
+        <span className="text-white font-bold text-[10px] tracking-widest uppercase opacity-80">bank</span>
+      </div>
     </div>
   )
 }
@@ -279,41 +259,35 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
       )}
 
       {/* App Launch Buttons */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* PAYME BUTTON */}
         <button
           type="button"
           onClick={() => handleOpenApp('Payme', 'https://payme.uz')}
-          className="group relative flex items-center justify-between px-3.5 py-3 rounded-2xl bg-[#19D3C5] hover:bg-[#16c4b7] text-[#002B28] font-black text-xs transition-all shadow-md active:scale-[0.98] cursor-pointer"
+          className="group relative flex h-14 items-center justify-between px-4 rounded-2xl bg-[#19D3C5] hover:brightness-105 active:scale-[0.98] transition-all shadow-sm border border-white/10 cursor-pointer"
         >
-          <div className="flex items-center gap-2">
-            <PaymeLogo className="h-5" />
-          </div>
-          <ExternalLink size={14} className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
+          <PaymeLogo className="h-8" />
+          <ExternalLink size={16} className="text-[#002B28] opacity-40 group-hover:opacity-100 transition" />
         </button>
 
         {/* CLICK BUTTON */}
         <button
           type="button"
           onClick={() => handleOpenApp('Click', 'https://my.click.uz')}
-          className="group relative flex items-center justify-between px-3.5 py-3 rounded-2xl bg-[#008BE3] hover:bg-[#007ccb] text-white font-black text-xs transition-all shadow-md active:scale-[0.98] cursor-pointer"
+          className="group relative flex h-14 items-center justify-between px-4 rounded-2xl bg-[#008BE3] hover:brightness-105 active:scale-[0.98] transition-all shadow-sm border border-white/10 cursor-pointer"
         >
-          <div className="flex items-center gap-2">
-            <ClickLogo className="h-5" />
-          </div>
-          <ExternalLink size={14} className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
+          <ClickLogo className="h-8" />
+          <ExternalLink size={16} className="text-white opacity-40 group-hover:opacity-100 transition" />
         </button>
 
         {/* UZUM BANK BUTTON */}
         <button
           type="button"
           onClick={() => handleOpenApp('Uzum Bank', 'https://uzumbank.uz')}
-          className="group relative flex items-center justify-between px-3.5 py-3 rounded-2xl bg-[#7000FF] hover:bg-[#6200e0] text-white font-black text-xs transition-all shadow-md active:scale-[0.98] cursor-pointer"
+          className="group relative flex h-14 items-center justify-between px-4 rounded-2xl bg-[#7000FF] hover:brightness-105 active:scale-[0.98] transition-all shadow-sm border border-white/10 cursor-pointer"
         >
-          <div className="flex items-center gap-2">
-            <UzumBankLogo className="h-5" />
-          </div>
-          <ExternalLink size={14} className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
+          <UzumBankLogo className="h-10" />
+          <ExternalLink size={16} className="text-white opacity-40 group-hover:opacity-100 transition" />
         </button>
       </div>
 
