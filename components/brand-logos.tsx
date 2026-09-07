@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { ExternalLink, Check, ShieldCheck } from 'lucide-react'
+import { ExternalLink, Check, ShieldCheck, Zap } from 'lucide-react'
 
 /* ==========================================================================
    OFFICIAL & CUSTOM BRAND LOGO COMPONENTS (HUMO, UZCARD, PAYME, CLICK, UZUM BANK)

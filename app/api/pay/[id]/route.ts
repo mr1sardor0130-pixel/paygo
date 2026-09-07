@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { payments, shops, deliveryLogs, donations, fundraisers } from '@/lib/db/schema'
+import { payments, shops, deliveryLogs, donations, fundraisers, systemSettings } from '@/lib/db/schema'
 import { eq, or, and, sql } from 'drizzle-orm'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 
@@ -104,7 +104,6 @@ export async function GET(
     // Get site logo from system_settings
     let siteLogo = 'https://i.ibb.co/sd8RnH9N/Pix-WYE0d-PXzy-DGc8-OLd6-I6-NXw5y-Og3y6.webp'
     try {
-      const { systemSettings } = await import('@/lib/db/schema')
       const settingsRows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'site_logo')).limit(1)
       if (settingsRows[0]?.value) {
         siteLogo = settingsRows[0].value
