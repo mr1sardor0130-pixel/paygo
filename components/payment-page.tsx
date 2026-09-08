@@ -64,6 +64,25 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
   const [logoError, setLogoError] = useState(false)
   const [siteLogoError, setSiteLogoError] = useState(false)
+  const [extending, setExtending] = useState(false)
+
+  const handleExtendTime = async () => {
+    setExtending(true)
+    try {
+      const res = await fetch(`/api/pay/${paymentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'extend' }),
+      })
+      if (res.ok) {
+        await fetchPayment()
+      }
+    } catch (err) {
+      console.warn('Extend error:', err)
+    } finally {
+      setExtending(false)
+    }
+  }
 
   // Auto-redirect to returnUrl on successful payment
   // If there is an ad/promo banner, wait 3 seconds; if no ad banner, fast 1-second redirect
@@ -379,20 +398,28 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 To‘lov muddati tugadi
               </h1>
               <p className="mt-2 text-sm text-[#718096]">
-                Ajratilgan 5 daqiqalik to‘lov vaqti yakunlandi.
+                To‘lov havolasining ajratilgan vaqti yakunlangan. Quyidagi tugma orqali to‘lov vaqtini uzaytirib, to‘lovni xavfsiz davom ettirishingiz mumkin.
               </p>
-              <div className="mt-6 flex flex-col gap-2">
+              <div className="mt-6 flex flex-col gap-2.5">
+                <button
+                  onClick={handleExtendTime}
+                  disabled={extending}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#10b981] px-5 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-[#059669] transition disabled:opacity-50"
+                >
+                  <RefreshCw size={16} className={extending ? 'animate-spin' : ''} />
+                  {extending ? 'Vaqt uzaytirilmoqda...' : 'To‘lov vaqtini 1 soatga uzaytirish'}
+                </button>
                 <button
                   onClick={() => window.location.reload()}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1769e0] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1254b7] transition"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-5 py-2.5 text-xs font-semibold text-[#475569] hover:bg-[#f8fafc] transition"
                 >
-                  <RefreshCw size={16} /> Qayta tekshirish
+                  <RefreshCw size={14} /> Qayta tekshirish
                 </button>
                 <Link
                   href="/panel"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-5 py-2.5 text-xs font-semibold text-[#64748b] hover:bg-[#f8fafc] transition"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl text-xs font-semibold text-[#64748b] hover:text-[#0f172a] transition py-1"
                 >
-                  <ArrowLeft size={14} /> Panelga qaytish
+                  <ArrowLeft size={14} /> Bosh sahifaga qaytish
                 </Link>
               </div>
             </div>
