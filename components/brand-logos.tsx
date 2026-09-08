@@ -199,28 +199,27 @@ export function PaymentAppButtons({ cardNumber, amount, className = "" }: Paymen
         <button
           type="button"
           onClick={() => handleOpenApp('Payme', 'https://payme.uz')}
-          className="group relative flex h-16 items-center justify-between px-4 rounded-2xl bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm border border-slate-200 cursor-pointer"
+          className="group relative flex h-14 items-center justify-center px-4 rounded-xl bg-transparent hover:bg-slate-50/80 active:scale-[0.98] transition-all border border-slate-200 hover:border-slate-300 cursor-pointer"
         >
-          <PaymeLogo className="h-10" />
-          <ExternalLink size={16} className="text-slate-400 group-hover:text-slate-600 transition" />
+          <PaymeLogo className="h-8 max-h-8 max-w-[110px] object-contain" />
         </button>
 
         {/* CLICK BUTTON */}
         <button
           type="button"
           onClick={() => handleOpenApp('Click', 'https://my.click.uz')}
-          className="group relative flex h-16 items-center justify-center px-4 rounded-2xl bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm border border-slate-200 cursor-pointer"
+          className="group relative flex h-14 items-center justify-center px-4 rounded-xl bg-transparent hover:bg-slate-50/80 active:scale-[0.98] transition-all border border-slate-200 hover:border-slate-300 cursor-pointer"
         >
-          <ClickLogo className="h-10" />
+          <ClickLogo className="h-8 max-h-8 max-w-[110px] object-contain" />
         </button>
 
         {/* UZUM BANK BUTTON */}
         <button
           type="button"
           onClick={() => handleOpenApp('Uzum Bank', 'https://uzumbank.uz')}
-          className="group relative flex h-16 items-center justify-center px-4 rounded-2xl bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm border border-slate-200 cursor-pointer"
+          className="group relative flex h-14 items-center justify-center px-4 rounded-xl bg-transparent hover:bg-slate-50/80 active:scale-[0.98] transition-all border border-slate-200 hover:border-slate-300 cursor-pointer"
         >
-          <UzumBankLogo className="h-12" />
+          <UzumBankLogo className="h-8 max-h-8 max-w-[110px] object-contain" />
         </button>
       </div>
 

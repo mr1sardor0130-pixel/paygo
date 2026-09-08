@@ -8,23 +8,21 @@ import path from 'node:path'
 const connectionString = process.env.DATABASE_URL || ''
 const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
 
-let rawPool: Pool | null = null
+const effectiveConn = connectionString || 'postgresql://postgres:postgres@localhost:5432/paygo'
 
-if (connectionString) {
-  try {
-    rawPool = new Pool({
-      connectionString,
-      ssl: !isLocal ? { rejectUnauthorized: false } : undefined,
-      connectionTimeoutMillis: 5000,
-      idleTimeoutMillis: 15000,
-      max: 10,
-    })
-    rawPool.on('error', (err) => {
-      console.warn('Postgres pool background error:', err.message || err)
-    })
-  } catch (err) {
-    console.warn('Postgres initialization warning:', err)
-  }
+let rawPool: Pool
+
+try {
+  rawPool = new Pool({
+    connectionString: effectiveConn,
+    ssl: connectionString && !isLocal ? { rejectUnauthorized: false } : undefined,
+    connectionTimeoutMillis: 3000,
+    idleTimeoutMillis: 15000,
+    max: 10,
+  })
+  rawPool.on('error', () => {})
+} catch (err) {
+  rawPool = new Pool()
 }
 
 // ---------------------------------------------------------------------------
@@ -480,19 +478,7 @@ export const db: any = new Proxy(
   }
 )
 
-export const pool = {
-  async query(text: string, params?: any[]): Promise<{ rows: any[]; rowCount: number }> {
-    if (rawPool) {
-      try {
-        const res = await rawPool.query(text, params)
-        return { rows: res.rows || [], rowCount: res.rowCount || 0 }
-      } catch (err: any) {
-        console.warn('Postgres rawPool query failed:', err?.message)
-      }
-    }
-    return { rows: [], rowCount: 0 }
-  },
-}
+export const pool = rawPool
 
 // Ensure essential schema columns exist on production DB
 let columnsEnsured = false
