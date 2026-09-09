@@ -32,19 +32,15 @@ export function HumoLogo({ className = "h-6", customUrl }: { className?: string;
 
   return (
     <div className={`relative inline-flex items-center justify-center bg-white rounded-md px-1.5 py-0.5 shadow-xs overflow-hidden shrink-0 ${className}`}>
-      {/* Authentic Official HUMO SVG Vector */}
-      <svg viewBox="0 0 100 30" className="h-full w-auto max-h-full object-contain" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100" height="30" rx="4" fill="#FFFFFF" />
-        {/* Humo Bird Wings Icon */}
-        <path d="M14 6C12 9 9.5 12.5 7 16C10.5 15.3 14.5 14.7 18.5 14.5C16.8 11.8 15.3 9 14 6Z" fill="#FF9E1B" />
-        <path d="M19.5 14.5C15.5 14.7 11.5 15.3 8 16C11 20 15.5 23 20.5 23C24.5 23 28 21 30.5 18C26.8 17.2 23 16 19.5 14.5Z" fill="#00A3A6" />
-        <path d="M22 6.5C19.5 9.5 17 12.8 14.5 16.2C18.2 15.6 22.2 15 26.2 14.8C24.5 12 23.2 9.2 22 6.5Z" fill="#FFB74D" />
-        {/* Crisp Professional Letterforms */}
-        <path d="M38 9V21M38 15H44M44 9V21" stroke="#00796B" strokeWidth="2.5" strokeLinecap="round" />
-        <path d="M50 9V16.5C50 19 51.8 21 54 21C56.2 21 58 19 58 16.5V9" stroke="#00796B" strokeWidth="2.5" strokeLinecap="round" />
-        <path d="M64 21V9L69.5 16.5L75 9V21" stroke="#00796B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="86" cy="15" r="5.5" stroke="#FF9E1B" strokeWidth="2.5" />
-      </svg>
+      {/* Clean White Background placeholder until official logo loads */}
+      <div className="h-full w-16 bg-white flex items-center justify-center">
+        {/* Subtle Humo Emblem */}
+        <svg viewBox="0 0 36 24" className="h-full w-auto object-contain" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4C10 7 7.5 10.5 5 14C8.5 13.3 12.5 12.7 16.5 12.5C14.8 9.8 13.3 7 12 4Z" fill="#FF9E1B" />
+          <path d="M17.5 12.5C13.5 12.7 9.5 13.3 6 14C9 18 13.5 21 18.5 21C22.5 21 26 19 28.5 16C24.8 15.2 21 14 17.5 12.5Z" fill="#00A3A6" />
+          <path d="M20 4.5C17.5 7.5 15 10.8 12.5 14.2C16.2 13.6 20.2 13 24.2 12.8C22.5 10 21.2 7.2 20 4.5Z" fill="#FFB74D" />
+        </svg>
+      </div>
 
       {/* Official Humo Raster Image Overlay */}
       {logoUrl && !imgError && (

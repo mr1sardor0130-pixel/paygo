@@ -101,6 +101,31 @@ type Update = {
     text?: string
     business_connection_id: string
   }
+  my_chat_member?: {
+    chat: { id: number; title?: string; username?: string; type: string }
+    from: { id: number; first_name?: string; username?: string }
+    date: number
+    old_chat_member: { status: string }
+    new_chat_member: { status: string; can_restrict_members?: boolean; can_delete_messages?: boolean; can_invite_users?: boolean }
+  }
+}
+
+function cleanTelegramChatId(input: string | number): string {
+  let s = String(input || '').trim()
+  if (!s) return ''
+  s = s.replace(/^https?:\/\/(www\.)?(t\.me|telegram\.me)\//i, '')
+  s = s.split('?')[0].replace(/\/+$/, '')
+
+  if (/^-?\d+$/.test(s)) {
+    if (s.startsWith('-100')) return s
+    if (s.startsWith('-')) return `-100${s.slice(1)}`
+    return `-100${s}`
+  }
+
+  if (!s.startsWith('@') && !s.startsWith('+') && !s.startsWith('joinchat/')) {
+    s = `@${s}`
+  }
+  return s
 }
 
 type Flow = {
@@ -432,15 +457,6 @@ async function isMaintenanceMode(): Promise<boolean> {
     const rows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'maintenance_mode')).limit(1)
     return rows.length > 0 && rows[0].value === 'true'
   } catch {
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS "system_settings" (
-          "key" text PRIMARY KEY,
-          "value" text NOT NULL,
-          "updatedAt" timestamp NOT NULL DEFAULT NOW()
-        );
-      `)
-    } catch {}
     return false
   }
 }
@@ -514,13 +530,6 @@ export async function broadcastToAllUsers(token: string, messageText: string, re
 export async function triggerAutoPromoIfNeeded(token: string) {
   try {
     await ensureDbSchema()
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS "system_settings" (
-        "key" text PRIMARY KEY,
-        "value" text NOT NULL,
-        "updatedAt" timestamp NOT NULL DEFAULT NOW()
-      );
-    `)
 
     // Check status
     const statusRow = await db.select().from(systemSettings).where(eq(systemSettings.key, 'autopromo_status')).limit(1)
@@ -1520,6 +1529,70 @@ async function promptConnectVipChat(token: string, chatId: number | string, type
   await send(token, chatId, `👇 <i>Agar bot hali guruhga qo‘shilmagan bo‘lsa, pastdagi tugma orqali 1-klikda admin qilib qo‘shing:</i>`, inlineMarkup)
 }
 
+async function renderCustomPriceBuilder(
+  token: string,
+  chatId: number | string,
+  vipRoom: any,
+  selectedUnit: 'hour' | 'day' | 'week' | 'month' = 'day'
+) {
+  const currentHourly = vipRoom.hourlyPrice || 0
+  const currentDaily = vipRoom.dailyPrice || 0
+  const currentWeekly = vipRoom.weeklyPrice || 0
+  const currentMonthly = vipRoom.monthlyPrice || 0
+
+  const unitLabels: Record<string, string> = {
+    hour: '⏱ 1 Soat',
+    day: '📅 1 Kun',
+    week: '📆 1 Hafta',
+    month: '⭐️ 1 Oy',
+  }
+
+  const text =
+    `⚙️ <b>Guruh Uchun Maxsus Tarif & Muddat Sozlash</b>\n\n` +
+    `👥 <b>Guruh:</b> <b>${vipRoom.title || 'VIP Guruh'}</b>\n` +
+    `🆔 <b>Chat ID:</b> <code>${vipRoom.chatId}</code>\n\n` +
+    `📊 <b>Joriy Belgilangan Tariflar:</b>\n` +
+    `• ⏱ 1 Soat: <b>${currentHourly > 0 ? `${Number(currentHourly).toLocaleString('uz-UZ')} UZS` : 'O‘chirilgan (0)'}</b>\n` +
+    `• 📅 1 Kun: <b>${currentDaily > 0 ? `${Number(currentDaily).toLocaleString('uz-UZ')} UZS` : 'O‘chirilgan (0)'}</b>\n` +
+    `• 📆 1 Hafta: <b>${currentWeekly > 0 ? `${Number(currentWeekly).toLocaleString('uz-UZ')} UZS` : 'O‘chirilgan (0)'}</b>\n` +
+    `• ⭐️ 1 Oy: <b>${currentMonthly > 0 ? `${Number(currentMonthly).toLocaleString('uz-UZ')} UZS` : 'O‘chirilgan (0)'}</b>\n\n` +
+    `👇 <b>Hozir tahrirlanmoqda:</b> <b>${unitLabels[selectedUnit] || '📅 1 Kun'}</b>\n` +
+    `Kerakli vaqt birligi yoki summani pastdagi inline tugmalardan tanlang, yoki chatga to‘g‘ridan-to‘g‘ri yozing (masalan: <code>1000 uzs 1kun</code> yoki <code>1000</code>):`
+
+  const inline_keyboard: any[] = [
+    // Unit selection row
+    [
+      { text: selectedUnit === 'hour' ? '🔘 ⏱ 1 Soat' : '⏱ 1 Soat', callback_data: 'vip_unit_hour' },
+      { text: selectedUnit === 'day' ? '🔘 📅 1 Kun' : '📅 1 Kun', callback_data: 'vip_unit_day' },
+    ],
+    [
+      { text: selectedUnit === 'week' ? '🔘 📆 1 Hafta' : '📆 1 Hafta', callback_data: 'vip_unit_week' },
+      { text: selectedUnit === 'month' ? '🔘 ⭐️ 1 Oy' : '⭐️ 1 Oy', callback_data: 'vip_unit_month' },
+    ],
+    // Quick preset amounts for selected unit
+    [
+      { text: '💵 1 000 UZS', callback_data: 'vip_amt_1000' },
+      { text: '💵 5 000 UZS', callback_data: 'vip_amt_5000' },
+      { text: '💵 10 000 UZS', callback_data: 'vip_amt_10000' },
+    ],
+    [
+      { text: '💵 25 000 UZS', callback_data: 'vip_amt_25000' },
+      { text: '💵 50 000 UZS', callback_data: 'vip_amt_50000' },
+      { text: '💵 100 000 UZS', callback_data: 'vip_amt_100000' },
+    ],
+    // Save or Back
+    [
+      { text: '💾 Saqlash va Guruhni Faollashtirish', callback_data: 'vip_save_custom_prices' },
+    ],
+    [
+      { text: '🔙 Orqaga', callback_data: `check_bot_admin_${encodeURIComponent(vipRoom.chatId)}` },
+      { text: '❌ Bekor qilish', callback_data: 'view_vip_rooms' },
+    ],
+  ]
+
+  await send(token, chatId, text, { inline_keyboard })
+}
+
 async function handleChatSelectedForVip(
   token: string,
   chatId: number | string,
@@ -1527,10 +1600,7 @@ async function handleChatSelectedForVip(
   targetChatId: string | number,
   chatType: 'group' | 'channel' = 'group'
 ) {
-  let cleanChatId = String(targetChatId).trim()
-  if (!cleanChatId.startsWith('-100') && !cleanChatId.startsWith('@') && /^\d+$/.test(cleanChatId)) {
-    cleanChatId = `-100${cleanChatId}`
-  }
+  const cleanChatId = cleanTelegramChatId(targetChatId)
 
   const botUser = await getBotUsername(token)
   const chatInfo = await getTelegramChat(token, cleanChatId)
@@ -1577,6 +1647,7 @@ async function handleChatSelectedForVip(
       dailyPrice: 15000,
       weeklyPrice: 50000,
       monthlyPrice: 120000,
+      selectedUnit: 'day',
     },
   })
 
@@ -1602,7 +1673,7 @@ async function handleChatSelectedForVip(
 
   const buttons = [
     [{ text: '⚡️ Standart Narxlar Bilan Saqlash', callback_data: 'vip_save_std_prices' }],
-    [{ text: '⚙️ O‘z Narxlarimni Belgilash', callback_data: 'vip_custom_prices' }],
+    [{ text: '⚙️ O‘z Narxlarimni Belgilash (1000 UZS 1kun...)', callback_data: 'vip_custom_prices' }],
     [{ text: '🔙 Bekor qilish', callback_data: 'view_vip_rooms' }],
   ]
 
@@ -2132,6 +2203,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
+  // -------------------------------------------------------------
+  // MY CHAT MEMBER UPDATE (When bot is added to group or channel)
+  // -------------------------------------------------------------
+  if (update.my_chat_member) {
+    const mcm = update.my_chat_member
+    const chat = mcm.chat
+    const fromUser = mcm.from
+    const newStatus = mcm.new_chat_member?.status
+    const botUser = await getBotUsername(token)
+
+    if (newStatus === 'administrator' || newStatus === 'member') {
+      const chatIdStr = String(chat.id)
+      const fromUserIdStr = fromUser?.id ? String(fromUser.id) : ''
+      const chatTitle = chat.title || chat.username || 'Guruh'
+      const isChannel = chat.type === 'channel'
+
+      // Greet in the group
+      if (!isChannel) {
+        await send(
+          token,
+          chat.id,
+          `🎉 <b>Assalomu alaykum! @${botUser} guruhingizga muvaffaqiyatli qo‘shildi!</b>\n\n` +
+          `🔐 <b>VIP Guruh & Avtomatlashtirilgan Pullik Yozish (Mute/Unmute)</b> xizmati faol.\n` +
+          `Guruh egasi yoki administrator botning shaxsiy xabarida to‘lov tariflari va qabul qiluvchi kartani sozlashi mumkin.`,
+          {
+            inline_keyboard: [
+              [{ text: '⚙️ VIP Sozlamalar & Tariflar (Botda)', url: `https://t.me/${botUser}?start=setup_vip_${encodeURIComponent(chatIdStr)}` }],
+            ],
+          }
+        )
+      }
+
+      // Send PM to the person who added the bot
+      if (fromUserIdStr) {
+        await send(
+          token,
+          fromUserIdStr,
+          `🎉 <b>@${botUser} "${chatTitle}" guruhingizga qo‘shildi!</b>\n\n` +
+          `🆔 <b>Chat ID:</b> <code>${chatIdStr}</code>\n` +
+          `👥 <b>Turi:</b> ${isChannel ? '📢 Kanal' : '👥 Guruh'}\n\n` +
+          `Ushbu ${isChannel ? 'kanal' : 'guruh'}da pullik a’zolik yoki yozish huquqini darhol sozlashni xohlaysizmi?`,
+          {
+            inline_keyboard: [
+              [{ text: '⚡️ Guruhni Bog‘lash & Tariflarni Sozlash', callback_data: `check_bot_admin_${encodeURIComponent(chatIdStr)}` }],
+              [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+            ],
+          }
+        )
+      }
+    }
+    return NextResponse.json({ ok: true })
+  }
+
   // Non-blocking hourly auto-promo trigger check
   triggerAutoPromoIfNeeded(token).catch((err) => console.error('AutoPromo background trigger error:', err))
 
@@ -2543,18 +2667,172 @@ export async function POST(request: Request) {
         await renderVipRooms(token, chatId, userIdStr)
         return NextResponse.json({ ok: true })
       }
+      const updatedVip = {
+        ...flow.vipRoom,
+        selectedUnit: 'day',
+        hourlyPrice: flow.vipRoom.hourlyPrice ?? 5000,
+        dailyPrice: flow.vipRoom.dailyPrice ?? 15000,
+        weeklyPrice: flow.vipRoom.weeklyPrice ?? 50000,
+        monthlyPrice: flow.vipRoom.monthlyPrice ?? 120000,
+      }
       await stateSet(Number(chatId), {
         ...flow,
-        step: 'vip_custom_price_input',
-        vipRoom: { ...flow.vipRoom, customPriceField: 'hourly' },
+        step: 'vip_custom_pricing_wizard',
+        vipRoom: updatedVip,
       })
+      await renderCustomPriceBuilder(token, chatId, updatedVip, 'day')
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('vip_unit_')) {
+      const unit = data.replace('vip_unit_', '') as 'hour' | 'day' | 'week' | 'month'
+      const flow = await stateGet(Number(chatId))
+      if (flow?.vipRoom) {
+        const updatedVip = { ...flow.vipRoom, selectedUnit: unit }
+        await stateSet(Number(chatId), {
+          ...flow,
+          step: 'vip_custom_pricing_wizard',
+          vipRoom: updatedVip,
+        })
+        await renderCustomPriceBuilder(token, chatId, updatedVip, unit)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('vip_amt_')) {
+      const amt = Number(data.replace('vip_amt_', '')) || 0
+      const flow = await stateGet(Number(chatId))
+      if (flow?.vipRoom) {
+        const unit = (flow.vipRoom.selectedUnit || 'day') as 'hour' | 'day' | 'week' | 'month'
+        const updatedVip = { ...flow.vipRoom }
+        if (unit === 'hour') updatedVip.hourlyPrice = amt
+        else if (unit === 'day') updatedVip.dailyPrice = amt
+        else if (unit === 'week') updatedVip.weeklyPrice = amt
+        else if (unit === 'month') updatedVip.monthlyPrice = amt
+
+        await stateSet(Number(chatId), {
+          ...flow,
+          step: 'vip_custom_pricing_wizard',
+          vipRoom: updatedVip,
+        })
+        await renderCustomPriceBuilder(token, chatId, updatedVip, unit)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'vip_save_custom_prices') {
+      const flow = await stateGet(Number(chatId))
+      if (!flow?.vipRoom?.chatId) {
+        await renderVipRooms(token, chatId, userIdStr)
+        return NextResponse.json({ ok: true })
+      }
+
+      // If editing existing room:
+      if (flow.vipRoom.id) {
+        await db.update(paidAccessRooms).set({
+          hourlyPrice: flow.vipRoom.hourlyPrice || 0,
+          dailyPrice: flow.vipRoom.dailyPrice || 0,
+          weeklyPrice: flow.vipRoom.weeklyPrice || 0,
+          monthlyPrice: flow.vipRoom.monthlyPrice || 0,
+          updatedAt: new Date(),
+        }).where(eq(paidAccessRooms.id, flow.vipRoom.id))
+        await stateDelete(Number(chatId))
+        await send(token, chatId, '✅ <b>Guruh tarif narxlari muvaffaqiyatli saqlandi!</b>', menu)
+        await renderVipRoomManager(token, chatId, userIdStr, flow.vipRoom.id)
+        return NextResponse.json({ ok: true })
+      }
+
+      // Check user shops
+      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+      if (userShops.length === 1) {
+        const s = userShops[0]
+        const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+        await db.insert(paidAccessRooms).values({
+          id: newId,
+          shopId: s.id,
+          title: flow.vipRoom.title || 'VIP Guruh',
+          chatId: flow.vipRoom.chatId,
+          type: flow.vipRoom.type || 'group',
+          mode: flow.vipRoom.mode || 'write_permission',
+          hourlyPrice: flow.vipRoom.hourlyPrice ?? 5000,
+          dailyPrice: flow.vipRoom.dailyPrice ?? 15000,
+          weeklyPrice: flow.vipRoom.weeklyPrice ?? 50000,
+          monthlyPrice: flow.vipRoom.monthlyPrice ?? 120000,
+          ownerTelegramId: userIdStr,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        await stateDelete(Number(chatId))
+        await send(
+          token,
+          chatId,
+          `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
+          `👥 <b>Guruh:</b> <b>${flow.vipRoom.title}</b>\n` +
+          `🆔 <b>Chat ID:</b> <code>${flow.vipRoom.chatId}</code>\n` +
+          `💳 <b>Bog‘langan do‘kon:</b> ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})\n` +
+          `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)\n\n` +
+          `🚀 Guruhda to‘lovsiz xabar yozgan a’zolarning xabarlari avtomatik o‘chiriladi va to‘lov qilgach 1 soniyada yozish ruxsati ochiladi!`,
+          {
+            inline_keyboard: [
+              [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
+              [{ text: '👥 Pullik A’zolar Ro‘yxati', callback_data: `view_room_members_${newId}` }],
+              [{ text: '🧪 To‘lov Havolasini Sinash', callback_data: `view_room_tariffs_${newId}` }],
+              [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+            ],
+          }
+        )
+        return NextResponse.json({ ok: true })
+      }
+
+      if (userShops.length > 1) {
+        await stateSet(Number(chatId), { ...flow, step: 'vip_select_shop' })
+        const buttons = userShops.map((s) => [
+          { text: `💳 ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})`, callback_data: `vip_link_shop_${s.id}` },
+        ])
+        await send(
+          token,
+          chatId,
+          `💳 <b>Qabul qiluvchi Karta / Do‘konni Tanlang:</b>\n\nPullik a’zolikdan tushgan mablag‘lar qaysi kartangizga tushsin?`,
+          { inline_keyboard: buttons }
+        )
+        return NextResponse.json({ ok: true })
+      }
+
+      // No shops:
+      const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+      await db.insert(paidAccessRooms).values({
+        id: newId,
+        shopId: null,
+        title: flow.vipRoom.title || 'VIP Guruh',
+        chatId: flow.vipRoom.chatId,
+        type: flow.vipRoom.type || 'group',
+        mode: flow.vipRoom.mode || 'write_permission',
+        hourlyPrice: flow.vipRoom.hourlyPrice ?? 5000,
+        dailyPrice: flow.vipRoom.dailyPrice ?? 15000,
+        weeklyPrice: flow.vipRoom.weeklyPrice ?? 50000,
+        monthlyPrice: flow.vipRoom.monthlyPrice ?? 120000,
+        ownerTelegramId: userIdStr,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      await stateDelete(Number(chatId))
       await send(
         token,
         chatId,
-        `💰 <b>Guruh Tariflarini Belgilash</b>\n\n` +
-        `1️⃣ <b>1 Soatlik yozish narxini kiriting:</b> (masalan: <code>5000</code>)\n` +
-        `<i>(Ushbu tarif kerak bo‘lmasa 0 deb yozing)</i>`,
-        back
+        `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
+        `👥 <b>Guruh:</b> <b>${flow.vipRoom.title}</b>\n` +
+        `🆔 <b>Chat ID:</b> <code>${flow.vipRoom.chatId}</code>\n` +
+        `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)\n\n` +
+        `To‘lovlarni qabul qilish kartangizni sozlash uchun "Do‘kon ochish" yoki "Mening kartam" bo‘limidan foydalaning.`,
+        {
+          inline_keyboard: [
+            [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
+            [{ text: '💳 Karta Bog‘lash', callback_data: `edit_room_shop_${newId}` }],
+            [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+          ],
+        }
       )
       return NextResponse.json({ ok: true })
     }
@@ -4541,6 +4819,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    // Check if this is a VIP setup deep link: /start setup_vip_xyz
+    if (startPayload.startsWith('setup_vip_')) {
+      const targetCId = decodeURIComponent(startPayload.replace('setup_vip_', '').trim())
+      if (targetCId) {
+        await handleChatSelectedForVip(token, chatId, userIdStr, targetCId, 'group')
+        return NextResponse.json({ ok: true })
+      }
+    }
+
     // Check if this is a referral link: /start ref_123456789
     if (startPayload.startsWith('ref_')) {
       const referrerId = startPayload.replace('ref_', '').trim()
@@ -5420,148 +5707,32 @@ export async function POST(request: Request) {
     }
   }
 
-  if (flow?.step === 'vip_custom_price_input') {
+  if (flow?.step === 'vip_custom_pricing_wizard') {
+    const rawInput = raw.toLowerCase().trim()
+    let parsedUnit: 'hour' | 'day' | 'week' | 'month' = (flow.vipRoom?.selectedUnit || 'day') as any
+
+    if (rawInput.includes('soat') || rawInput.includes('hour')) parsedUnit = 'hour'
+    else if (rawInput.includes('kun') || rawInput.includes('day')) parsedUnit = 'day'
+    else if (rawInput.includes('hafta') || rawInput.includes('week')) parsedUnit = 'week'
+    else if (rawInput.includes('oy') || rawInput.includes('month')) parsedUnit = 'month'
+
     const num = Number(raw.replace(/\D/g, '')) || 0
-    const field = flow.vipRoom?.customPriceField || 'hourly'
+    const updatedVip = { ...(flow.vipRoom || {}), selectedUnit: parsedUnit }
 
-    if (field === 'hourly') {
-      await stateSet(chatId, {
-        ...flow,
-        vipRoom: { ...flow.vipRoom, hourlyPrice: num, customPriceField: 'daily' },
-      })
-      await send(
-        token,
-        chatId,
-        `✅ 1 Soatlik narx: <b>${num.toLocaleString()} UZS</b>\n\n` +
-        `2️⃣ <b>1 Kunlik yozish narxini kiriting:</b> (masalan: <code>15000</code>):`,
-        back
-      )
-      return NextResponse.json({ ok: true })
-    }
+    if (parsedUnit === 'hour') updatedVip.hourlyPrice = num
+    else if (parsedUnit === 'day') updatedVip.dailyPrice = num
+    else if (parsedUnit === 'week') updatedVip.weeklyPrice = num
+    else if (parsedUnit === 'month') updatedVip.monthlyPrice = num
 
-    if (field === 'daily') {
-      await stateSet(chatId, {
-        ...flow,
-        vipRoom: { ...flow.vipRoom, dailyPrice: num, customPriceField: 'weekly' },
-      })
-      await send(
-        token,
-        chatId,
-        `✅ 1 Kunlik narx: <b>${num.toLocaleString()} UZS</b>\n\n` +
-        `3️⃣ <b>1 Haftalik yozish narxini kiriting:</b> (masalan: <code>50000</code>):`,
-        back
-      )
-      return NextResponse.json({ ok: true })
-    }
+    await stateSet(chatId, {
+      ...flow,
+      vipRoom: updatedVip,
+    })
 
-    if (field === 'weekly') {
-      await stateSet(chatId, {
-        ...flow,
-        vipRoom: { ...flow.vipRoom, weeklyPrice: num, customPriceField: 'monthly' },
-      })
-      await send(
-        token,
-        chatId,
-        `✅ 1 Haftalik narx: <b>${num.toLocaleString()} UZS</b>\n\n` +
-        `4️⃣ <b>1 Oylik yozish narxini kiriting:</b> (masalan: <code>120000</code>):`,
-        back
-      )
-      return NextResponse.json({ ok: true })
-    }
-
-    if (field === 'monthly') {
-      const updatedVipRoom = { ...flow.vipRoom, monthlyPrice: num }
-      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
-
-      if (userShops.length === 1) {
-        const s = userShops[0]
-        const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
-        await db.insert(paidAccessRooms).values({
-          id: newId,
-          shopId: s.id,
-          title: updatedVipRoom.title || 'VIP Guruh',
-          chatId: updatedVipRoom.chatId!,
-          type: updatedVipRoom.type || 'group',
-          mode: updatedVipRoom.mode || 'write_permission',
-          hourlyPrice: updatedVipRoom.hourlyPrice || 5000,
-          dailyPrice: updatedVipRoom.dailyPrice || 15000,
-          weeklyPrice: updatedVipRoom.weeklyPrice || 50000,
-          monthlyPrice: num || 120000,
-          ownerTelegramId: userIdStr,
-          active: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        await stateDelete(chatId)
-        await send(
-          token,
-          chatId,
-          `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
-          `👥 <b>Guruh:</b> <b>${updatedVipRoom.title}</b>\n` +
-          `🆔 <b>Chat ID:</b> <code>${updatedVipRoom.chatId}</code>\n` +
-          `💳 <b>Bog‘langan do‘kon:</b> ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})\n` +
-          `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)`,
-          {
-            inline_keyboard: [
-              [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
-              [{ text: '👥 Pullik A’zolar Ro‘yxati', callback_data: `view_room_members_${newId}` }],
-              [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
-            ],
-          }
-        )
-        return NextResponse.json({ ok: true })
-      }
-
-      if (userShops.length > 1) {
-        await stateSet(chatId, { step: 'vip_select_shop', vipRoom: updatedVipRoom })
-        const buttons = userShops.map((s) => [
-          { text: `💳 ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})`, callback_data: `vip_link_shop_${s.id}` },
-        ])
-        await send(
-          token,
-          chatId,
-          `💳 <b>Qabul qiluvchi Karta / Do‘konni Tanlang:</b>\n\nPullik a’zolikdan tushgan mablag‘lar qaysi kartangizga tushsin?`,
-          { inline_keyboard: buttons }
-        )
-        return NextResponse.json({ ok: true })
-      }
-
-      // No shops
-      const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
-      await db.insert(paidAccessRooms).values({
-        id: newId,
-        shopId: null,
-        title: updatedVipRoom.title || 'VIP Guruh',
-        chatId: updatedVipRoom.chatId!,
-        type: updatedVipRoom.type || 'group',
-        mode: updatedVipRoom.mode || 'write_permission',
-        hourlyPrice: updatedVipRoom.hourlyPrice || 5000,
-        dailyPrice: updatedVipRoom.dailyPrice || 15000,
-        weeklyPrice: updatedVipRoom.weeklyPrice || 50000,
-        monthlyPrice: num || 120000,
-        ownerTelegramId: userIdStr,
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      await stateDelete(chatId)
-      await send(
-        token,
-        chatId,
-        `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
-        `👥 <b>Guruh:</b> <b>${updatedVipRoom.title}</b>\n` +
-        `🆔 <b>Chat ID:</b> <code>${updatedVipRoom.chatId}</code>\n` +
-        `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)`,
-        {
-          inline_keyboard: [
-            [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
-            [{ text: '💳 Karta Bog‘lash', callback_data: `edit_room_shop_${newId}` }],
-            [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
-          ],
-        }
-      )
-      return NextResponse.json({ ok: true })
-    }
+    const unitLabel = parsedUnit === 'hour' ? '1 Soatlik' : parsedUnit === 'day' ? '1 Kunlik' : parsedUnit === 'week' ? '1 Haftalik' : '1 Oylik'
+    await send(token, chatId, `✅ <b>${unitLabel} tarif narxi belgilandi:</b> <code>${num.toLocaleString('uz-UZ')} UZS</code>`)
+    await renderCustomPriceBuilder(token, chatId, updatedVip, parsedUnit)
+    return NextResponse.json({ ok: true })
   }
 
   // -------------------------------------------------------------

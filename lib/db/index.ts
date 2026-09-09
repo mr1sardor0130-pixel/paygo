@@ -177,6 +177,17 @@ function getMemoryStore(): Record<string, any[]> {
 // Drizzle Query Evaluators
 // ---------------------------------------------------------------------------
 
+function getRowValue(row: any, key: string): any {
+  if (!row || !key) return undefined
+  if (key in row) return row[key]
+  // Try camelCase <-> snake_case conversions
+  const snake = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+  if (snake in row) return row[snake]
+  const camel = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+  if (camel in row) return row[camel]
+  return undefined
+}
+
 function evaluateCond(cond: any, row: any): boolean {
   if (!cond) return true
   if (typeof cond === 'function') return cond(row)
@@ -213,9 +224,12 @@ function evaluateCond(cond: any, row: any): boolean {
     }
 
     if (colName !== null) {
-      const rowVal = row[colName]
+      const rowVal = getRowValue(row, colName)
       if (targetVal === null || targetVal === undefined) {
         return rowVal === null || rowVal === undefined
+      }
+      if (Array.isArray(targetVal)) {
+        return targetVal.map(String).includes(String(rowVal ?? ''))
       }
       return String(rowVal ?? '') === String(targetVal ?? '')
     }
@@ -431,54 +445,154 @@ const inMemoryDb = {
 }
 
 // ---------------------------------------------------------------------------
-// Postgres Drizzle instance with fallback to inMemoryDb
+// Postgres Drizzle instance with resilient fallback to inMemoryDb
 // ---------------------------------------------------------------------------
 
+let isDbDegraded = false
+let degradedTimer: NodeJS.Timeout | null = null
+
+function markDbDegraded() {
+  isDbDegraded = true
+  if (degradedTimer) clearTimeout(degradedTimer)
+  // Try reconnecting after 60 seconds
+  degradedTimer = setTimeout(() => {
+    isDbDegraded = false
+    degradedTimer = null
+  }, 60000)
+}
+
 const drizzlePgInstance = connectionString && rawPool ? drizzlePg(rawPool, { schema }) : null
+
+function wrapQueryBuilder(pgBuilder: any, fallbackRunner: () => any) {
+  if (!pgBuilder || typeof pgBuilder !== 'object') {
+    return pgBuilder
+  }
+
+  // If already degraded, use fallback immediately
+  if (isDbDegraded) {
+    return fallbackRunner()
+  }
+
+  return new Proxy(pgBuilder, {
+    get(target, prop: string | symbol) {
+      const origVal = target[prop]
+
+      if (prop === 'then') {
+        return (resolve: (val: any) => void, reject: (err: any) => void) => {
+          if (isDbDegraded) {
+            try {
+              const fb = fallbackRunner()
+              if (fb && typeof fb.then === 'function') {
+                return fb.then(resolve, reject)
+              }
+              return resolve(fb)
+            } catch (fbErr) {
+              return resolve([])
+            }
+          }
+
+          try {
+            return target
+              .then((result: any) => resolve(result))
+              .catch((err: any) => {
+                console.warn('Postgres error caught, switching to in-memory store:', err?.message || err)
+                markDbDegraded()
+                try {
+                  const fb = fallbackRunner()
+                  if (fb && typeof fb.then === 'function') {
+                    return fb.then(resolve, reject)
+                  }
+                  return resolve(fb)
+                } catch (fbErr) {
+                  return resolve([])
+                }
+              })
+          } catch (err: any) {
+            console.warn('Postgres execution error caught:', err?.message || err)
+            markDbDegraded()
+            const fb = fallbackRunner()
+            if (fb && typeof fb.then === 'function') {
+              return fb.then(resolve, reject)
+            }
+            return resolve(fb)
+          }
+        }
+      }
+
+      if (typeof origVal === 'function') {
+        return (...args: any[]) => {
+          try {
+            const nextPg = origVal.apply(target, args)
+            return wrapQueryBuilder(nextPg, () => {
+              const fb = fallbackRunner()
+              if (fb && typeof fb[prop] === 'function') {
+                return fb[prop](...args)
+              }
+              return fb
+            })
+          } catch (err: any) {
+            console.warn('Postgres method error:', err?.message || err)
+            markDbDegraded()
+            const fb = fallbackRunner()
+            if (fb && typeof fb[prop] === 'function') {
+              return fb[prop](...args)
+            }
+            return fb
+          }
+        }
+      }
+
+      return origVal
+    },
+  })
+}
 
 export const db: any = new Proxy(
   {},
   {
     get(_target, prop: string) {
-      if (!drizzlePgInstance) {
+      if (!drizzlePgInstance || isDbDegraded) {
         return (inMemoryDb as any)[prop]
       }
 
-      // If Postgres instance exists, try it first, fallback to in-memory on failure
       const origPgMethod = (drizzlePgInstance as any)[prop]
       if (typeof origPgMethod === 'function') {
         return (...args: any[]) => {
+          if (isDbDegraded) {
+            return ((inMemoryDb as any)[prop])(...args)
+          }
           try {
-            const result = origPgMethod.apply(drizzlePgInstance, args)
-            // Wrap then to catch execution errors and route to in-memory
-            if (result && typeof result.then === 'function') {
-              return new Promise((resolve, reject) => {
-                result
-                  .then(resolve)
-                  .catch((err: any) => {
-                    console.warn(`Postgres DB query failed (${prop}), using resilient memory store:`, err?.message || err)
-                    const fallbackResult = ((inMemoryDb as any)[prop])(...args)
-                    if (fallbackResult && typeof fallbackResult.then === 'function') {
-                      fallbackResult.then(resolve).catch(reject)
-                    } else {
-                      resolve(fallbackResult)
-                    }
-                  })
-              })
-            }
-            return result
-          } catch (err) {
-            console.warn(`Postgres DB method synchronous failed (${prop}), using memory store:`, err)
+            const pgResult = origPgMethod.apply(drizzlePgInstance, args)
+            return wrapQueryBuilder(pgResult, () => ((inMemoryDb as any)[prop])(...args))
+          } catch (err: any) {
+            console.warn(`Postgres synchronous error (${prop}):`, err?.message || err)
+            markDbDegraded()
             return ((inMemoryDb as any)[prop])(...args)
           }
         }
       }
+
       return (inMemoryDb as any)[prop]
     },
   }
 )
 
-export const pool = rawPool
+export const pool = {
+  query: async (queryText: any, params?: any[]) => {
+    if (isDbDegraded || !rawPool) {
+      return { rows: [], rowCount: 0 }
+    }
+    try {
+      return await rawPool.query(queryText, params)
+    } catch (err: any) {
+      console.warn('Postgres pool query warning (resilient mode active):', err?.message || err)
+      markDbDegraded()
+      return { rows: [], rowCount: 0 }
+    }
+  },
+  on: (_event: string, _cb: any) => {},
+  end: () => rawPool?.end(),
+}
 
 // Ensure essential schema columns exist on production DB
 let columnsEnsured = false

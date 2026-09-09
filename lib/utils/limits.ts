@@ -31,16 +31,16 @@ export async function checkTransactionLimits(userId: string, isTest: boolean = f
   if (isPremium) return { allowed: true }
 
   if (isTest) {
-    // Free mode: test payments limit is 50
+    // Free mode: test payments limit is 5
     const testCountRes = await db.select({ count: count() })
       .from(payments)
       .where(and(eq(payments.userId, userId), eq(payments.isTest, true)))
 
     const testCount = testCountRes[0]?.count || 0
-    if (testCount >= 50) {
+    if (testCount >= 5) {
       return { 
         allowed: false, 
-        reason: 'Bepul rejimda test to‘lovlar limiti (50 ta) to‘lgan (50/50 ishlatildi). Cheksiz test va to‘liq imkoniyatlar uchun Premium tarifga o‘ting.' 
+        reason: 'Bepul rejimda test to‘lov sahifalari limiti (5 ta) to‘lgan (5/5 ishlatildi). Server yuklamasini optimallashtirish maqsadida bepul rejimda ko‘pi bilan 5 ta test to‘lov yaratish mumkin. Cheksiz to‘lovlar uchun Premium tarifga o‘ting.' 
       }
     }
   } else {
@@ -83,7 +83,7 @@ export async function getUserLimitsStatus(userId: string) {
     isAdmin,
     isPremium,
     testUsed: testCountRes[0]?.count || 0,
-    testMax: 50,
+    testMax: 5,
     realUsed: realCountRes[0]?.count || 0,
     realMax: 30,
     shopsCount: shopCountRes[0]?.count || 0,
