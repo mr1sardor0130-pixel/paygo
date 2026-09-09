@@ -8,11 +8,14 @@ import { ExternalLink, Check, ShieldCheck, Zap } from 'lucide-react'
    ========================================================================== */
 
 /**
- * HUMO Logo (Reads custom uploaded logo or default vector SVG)
+ * HUMO Logo (Official Clean Emblem & Transparent Vector Badge)
  */
 export function HumoLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
   const [imgError, setImgError] = useState(false)
-  const [logoUrl, setLogoUrl] = useState<string | null>(customUrl || null)
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const [logoUrl, setLogoUrl] = useState<string | null>(
+    customUrl || 'https://i.ibb.co/6R2K3xXy/humo-logo-svg.png'
+  )
 
   useEffect(() => {
     if (customUrl) {
@@ -20,43 +23,58 @@ export function HumoLogo({ className = "h-6", customUrl }: { className?: string;
       return
     }
     const saved = typeof window !== 'undefined' ? localStorage.getItem('paygo_humo_logo') : null
-    if (saved) setLogoUrl(saved)
+    if (saved) {
+      setLogoUrl(saved)
+    } else {
+      setLogoUrl('https://i.ibb.co/6R2K3xXy/humo-logo-svg.png')
+    }
   }, [customUrl])
 
-  if (logoUrl && !imgError) {
-    return (
-      <img
-        src={logoUrl}
-        alt="HUMO"
-        className={`${className} object-contain inline-block`}
-        onError={() => setImgError(true)}
-      />
-    )
-  }
-
   return (
-    <svg viewBox="0 0 100 32" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="32" rx="6" fill="#023b20" />
-      <path d="M14 8V24M14 16H22M22 8V24" stroke="#00E676" strokeWidth="3.2" strokeLinecap="round" />
-      <path d="M28 8V17C28 20.5 30.5 23 33.5 23C36.5 23 39 20.5 39 17V8" stroke="#00E676" strokeWidth="3.2" strokeLinecap="round" />
-      <path d="M45 24V8L52 17L59 8V24" stroke="#00E676" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="72" cy="16" r="7.5" stroke="#FF6D00" strokeWidth="3.2" />
-    </svg>
+    <div className={`relative inline-flex items-center justify-center bg-white rounded-md px-1.5 py-0.5 shadow-xs overflow-hidden shrink-0 ${className}`}>
+      {/* Authentic Official HUMO SVG Vector */}
+      <svg viewBox="0 0 100 30" className="h-full w-auto max-h-full object-contain" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="30" rx="4" fill="#FFFFFF" />
+        {/* Humo Bird Wings Icon */}
+        <path d="M14 6C12 9 9.5 12.5 7 16C10.5 15.3 14.5 14.7 18.5 14.5C16.8 11.8 15.3 9 14 6Z" fill="#FF9E1B" />
+        <path d="M19.5 14.5C15.5 14.7 11.5 15.3 8 16C11 20 15.5 23 20.5 23C24.5 23 28 21 30.5 18C26.8 17.2 23 16 19.5 14.5Z" fill="#00A3A6" />
+        <path d="M22 6.5C19.5 9.5 17 12.8 14.5 16.2C18.2 15.6 22.2 15 26.2 14.8C24.5 12 23.2 9.2 22 6.5Z" fill="#FFB74D" />
+        {/* Crisp Professional Letterforms */}
+        <path d="M38 9V21M38 15H44M44 9V21" stroke="#00796B" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M50 9V16.5C50 19 51.8 21 54 21C56.2 21 58 19 58 16.5V9" stroke="#00796B" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M64 21V9L69.5 16.5L75 9V21" stroke="#00796B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="86" cy="15" r="5.5" stroke="#FF9E1B" strokeWidth="2.5" />
+      </svg>
+
+      {/* Official Humo Raster Image Overlay */}
+      {logoUrl && !imgError && (
+        <img
+          src={logoUrl}
+          alt=""
+          className={`absolute inset-0 h-full w-full object-contain p-0.5 bg-white transition-opacity duration-150 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgError(true)}
+          referrerPolicy="no-referrer"
+        />
+      )}
+    </div>
   )
 }
 
 /**
- * UZCARD Logo (Reads custom uploaded logo or default vector SVG)
+ * UZCARD Logo (Official Clean Emblem & Transparent Vector Badge)
  */
 export function UzcardLogo({ className = "h-6", customUrl }: { className?: string; customUrl?: string }) {
   const url = customUrl || 'https://i.ibb.co/0VJX9CBH/Uzcard-Logo-white-text-643x700.png'
   return (
-    <img
-      src={url}
-      alt="UZCARD"
-      className={`${className} object-contain inline-block`}
-      referrerPolicy="no-referrer"
-    />
+    <div className={`relative inline-flex items-center justify-center bg-white rounded-md px-1.5 py-0.5 shadow-xs overflow-hidden shrink-0 ${className}`}>
+      <img
+        src={url}
+        alt=""
+        className="h-full w-auto max-h-full object-contain"
+        referrerPolicy="no-referrer"
+      />
+    </div>
   )
 }
 

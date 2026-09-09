@@ -1616,6 +1616,42 @@ async function handleRoomPaymentSuccess(
       `Endi guruhda cheklovlarsiz muloqot qilishingiz mumkin.`,
       { inline_keyboard: buttons }
     )
+
+    // Check room paid members count & trigger Premium VIP upsell to room owner
+    try {
+      const activeMembers = await db
+        .select()
+        .from(paidAccessMembers)
+        .where(and(eq(paidAccessMembers.roomId, room.id), eq(paidAccessMembers.status, 'active')))
+
+      const totalPaidCount = activeMembers.length
+
+      if (room.ownerTelegramId && totalPaidCount >= 3) {
+        const ownerUpgradeText =
+          `👑 <b>GURUHINGIZDA 3-CHI TO‘LOV QABUL QILINDI!</b>\n\n` +
+          `👥 <b>Guruh:</b> ${room.title}\n` +
+          `📊 <b>Jami pullik a’zolar:</b> ${totalPaidCount} ta\n` +
+          `💰 <b>So‘nggi to‘lov summasi:</b> ${Number(payment.amount || 0).toLocaleString('uz-UZ')} UZS\n\n` +
+          `⚠️ <b>Sinov Limiti Yetdi (3/3):</b> Bepul sinov rejimida guruhda majburiy to‘lov 3 tagacha a’zo uchun ishlaydi.\n\n` +
+          `🚀 <b>Cheksiz a'zolar, 24/7 avtomatlashtirilgan to‘lov monitoringi va guruhda avto-ruxsat tizimini to‘liq uzluksiz ishlatish uchun Premium VIP tarifiga o‘ting!</b>\n\n` +
+          `⭐️ <b>VIP Tarif Afzalliklari:</b>\n` +
+          `• 👑 Cheksiz Guruh va Kanallar uchun Majburiy To‘lov\n` +
+          `• ⚡️ 1 soniyada avto-tasdiqlash va avto-kick (mute/unmute)\n` +
+          `• 🏪 Cheksiz do‘konlar va har biriga alohida HUMO/UZCARD karta ulash\n` +
+          `• 0% komissiya — 100% tushum to‘g‘ridan-to‘g‘ri shaxsiy kartangizga!`
+
+        const ownerButtons = {
+          inline_keyboard: [
+            [{ text: '💎 Premium VIP Tarifga O‘tish', callback_data: 'tariffs_view' }],
+            [{ text: '🌐 Web Panelda Guruhni Boshqarish', url: `${APP_URL}/panel?tab=vip_rooms` }],
+          ],
+        }
+
+        await send(token, room.ownerTelegramId, ownerUpgradeText, ownerButtons)
+      }
+    } catch (upsellErr) {
+      console.warn('Room owner upsell notification error:', upsellErr)
+    }
   } catch (err) {
     console.error('handleRoomPaymentSuccess error:', err)
   }

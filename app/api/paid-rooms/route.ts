@@ -52,9 +52,6 @@ export async function POST(request: Request) {
   }
 
   const isAdmin = await isAdminTelegramId(user.telegramId || user.userId)
-  if (!isAdmin) {
-    return NextResponse.json({ error: 'Faqat administratorlar uchun' }, { status: 403 })
-  }
 
   let body: any = {}
   try {
@@ -66,7 +63,7 @@ export async function POST(request: Request) {
   try {
     // 1. Create Room
     if (action === 'create_room') {
-      const { title, chatId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, welcomeMessage } = body
+      const { title, chatId, shopId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, welcomeMessage } = body
       if (!title || !chatId) {
         return NextResponse.json({ error: 'Guruh nomi va Chat ID kiritilishi shart' }, { status: 400 })
       }
@@ -79,6 +76,7 @@ export async function POST(request: Request) {
       const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
       await db.insert(paidAccessRooms).values({
         id: newId,
+        shopId: shopId ? String(shopId).trim() : null,
         title: title.trim(),
         chatId: cleanChatId,
         type: type || 'group',
@@ -100,12 +98,13 @@ export async function POST(request: Request) {
 
     // 2. Update Room
     if (action === 'update_room') {
-      const { id, title, chatId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, active, welcomeMessage } = body
+      const { id, title, chatId, shopId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, active, welcomeMessage } = body
       if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 })
 
       const updates: any = { updatedAt: new Date() }
       if (title !== undefined) updates.title = title.trim()
       if (chatId !== undefined) updates.chatId = String(chatId).trim()
+      if (shopId !== undefined) updates.shopId = shopId ? String(shopId).trim() : null
       if (type !== undefined) updates.type = type
       if (mode !== undefined) updates.mode = mode
       if (hourlyPrice !== undefined) updates.hourlyPrice = Number(hourlyPrice)

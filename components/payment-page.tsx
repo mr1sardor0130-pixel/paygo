@@ -463,15 +463,21 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               {/* SPECIAL FULL CARD CONTAINER */}
               <div className="mt-6 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#10223d] via-[#162a4a] to-[#0d1b32] p-6 text-white shadow-xl shadow-blue-950/15">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CreditCard size={18} className="text-[#60a5fa]" />
-                    <span className="font-mono text-xs uppercase tracking-widest text-[#93c5fd]">
-                      HUMO / UZCARD
+                  <div className="flex items-center gap-2.5">
+                    {/* Realistic Gold EMV Chip */}
+                    <div className="w-8 h-6 rounded-md bg-gradient-to-tr from-amber-300 via-amber-200 to-amber-400 border border-amber-300/80 shadow-xs flex items-center justify-center relative overflow-hidden shrink-0">
+                      <div className="w-full h-[1px] bg-amber-600/40 absolute top-2"></div>
+                      <div className="w-full h-[1px] bg-amber-600/40 absolute bottom-2"></div>
+                      <div className="h-full w-[1px] bg-amber-600/40 absolute left-2.5"></div>
+                      <div className="h-full w-[1px] bg-amber-600/40 absolute right-2.5"></div>
+                    </div>
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-[#93c5fd] font-semibold">
+                      To‘lov Kartasi
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <HumoLogo className="h-5 w-auto" />
-                    <UzcardLogo className="h-5 w-auto" />
+                    <HumoLogo className="h-6 w-auto" />
+                    <UzcardLogo className="h-6 w-auto" />
                   </div>
                 </div>
 
