@@ -43,7 +43,18 @@ export async function createAuthSession(userId: string, role: string = 'user', e
 export async function resolveAuthUser(request: Request): Promise<AuthenticatedUser | null> {
   await ensureDbSchema()
   const authHeader = request.headers.get('authorization') || ''
-  const token = authHeader.replace('Bearer ', '').trim()
+  let token = authHeader.replace('Bearer ', '').trim()
+
+  if (!token) {
+    token = (request.headers.get('x-auth-token') || '').trim()
+  }
+
+  if (!token) {
+    try {
+      const url = new URL(request.url)
+      token = (url.searchParams.get('auth_token') || '').trim()
+    } catch {}
+  }
 
   if (!token) {
     return null

@@ -70,6 +70,7 @@ type Message = {
   text?: string
   photo?: Array<{ file_id: string; file_size?: number }>
   forward_from_chat?: { id: number; title?: string; username?: string; type?: string }
+  chat_shared?: { request_id: number; chat_id: number }
   from?: { id: number; first_name?: string; username?: string }
 }
 
@@ -129,6 +130,19 @@ type Flow = {
   mchanName?: string
   mchanId?: string
   mchanUrl?: string
+  vipRoom?: {
+    id?: string
+    title?: string
+    chatId?: string
+    type?: 'group' | 'channel'
+    mode?: 'write_permission' | 'invite_only'
+    hourlyPrice?: number
+    dailyPrice?: number
+    weeklyPrice?: number
+    monthlyPrice?: number
+    shopId?: string
+    customPriceField?: 'hourly' | 'daily' | 'weekly' | 'monthly'
+  }
 }
 
 const menu = {
@@ -1409,55 +1423,385 @@ async function getBotUsername(token: string): Promise<string> {
   return 'Pay_Gouzbot'
 }
 
-async function renderVipRooms(token: string, chatId: number | string) {
-  let rooms: any[] = []
+async function getTelegramChat(token: string, chatId: string | number) {
   try {
-    await ensureDbSchema()
-    rooms = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.active, true))
-  } catch {}
+    const res = await fetch(
+      `https://api.telegram.org/bot${token}/getChat?chat_id=${encodeURIComponent(String(chatId))}`
+    )
+    const data = await res.json()
+    if (data.ok && data.result) {
+      return data.result
+    }
+  } catch (e) {
+    console.warn('getTelegramChat error:', e)
+  }
+  return null
+}
 
-  if (!rooms.length) {
-    const userVipPanelUrl = await generateAuthUrl(chatId, '/panel?tab=vip_rooms')
+async function getTelegramBotMember(token: string, chatId: string | number) {
+  try {
+    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`)
+    const meData = await meRes.json()
+    if (!meData.ok || !meData.result?.id) return null
+    const botId = meData.result.id
+
+    const res = await fetch(
+      `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(String(chatId))}&user_id=${botId}`
+    )
+    const data = await res.json()
+    if (data.ok && data.result) {
+      return data.result
+    }
+  } catch (e) {
+    console.warn('getTelegramBotMember error:', e)
+  }
+  return null
+}
+
+async function promptConnectVipChat(token: string, chatId: number | string, type: 'group' | 'channel' = 'group') {
+  const isChannel = type === 'channel'
+  const botUser = await getBotUsername(token)
+
+  await stateSet(Number(chatId), {
+    step: 'vip_select_chat',
+    vipRoom: {
+      type,
+      mode: isChannel ? 'invite_only' : 'write_permission',
+      hourlyPrice: 5000,
+      dailyPrice: 15000,
+      weeklyPrice: 50000,
+      monthlyPrice: 120000,
+    },
+  })
+
+  // Keyboard with request_chat
+  const requestKeyboard = {
+    keyboard: [
+      [
+        {
+          text: isChannel ? '📢 Mening Kanallarimdan Tanlash' : '👥 Mening Guruhlarimdan Tanlash',
+          request_chat: {
+            request_id: isChannel ? 2002 : 2001,
+            chat_is_channel: isChannel,
+            bot_is_member: true,
+          },
+        },
+      ],
+      [{ text: '🔙 Bekor qilish' }],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: true,
+  }
+
+  const text =
+    `👑 <b>${isChannel ? 'Telegram Kanal' : 'Telegram Guruh'}ni Ulash</b>\n\n` +
+    `Guruhda majburiy to‘lovni yoqish va xabar yozishni (mute/unmute) avtomatlashtirish uchun quyidagi 3 usuldan biridan foydalaning:\n\n` +
+    `1️⃣ <b>Pastdagi tugma orqali:</b> <i>"${isChannel ? '📢 Mening Kanallarimdan Tanlash' : '👥 Mening Guruhlarimdan Tanlash'}"</i> tugmasini bosing va guruhingizni tanlang.\n` +
+    `2️⃣ <b>Username yoki Chat ID yuboring:</b> Masalan: <code>@mening_guruhim</code> yoki <code>-1001987654321</code>\n` +
+    `3️⃣ <b>Xabar forward qiling:</b> Guruhingizdan ixtiyoriy xabarni to‘g‘ridan-to‘g‘ri shu yerga forward qiling.\n\n` +
+    `⚠️ <b>Muhim talab:</b> Bot ushbu guruhda <b>Administrator</b> bo‘lishi va quyidagi huquqlarga ega bo‘lishi shart:\n` +
+    `• <i>Foydalanuvchilarni cheklash (Restrict members)</i>\n` +
+    `• <i>Xabarlarni o‘chirish (Delete messages)</i>\n` +
+    `• <i>Taklif havolalarini yaratish (Invite users)</i>`
+
+  const inlineMarkup = {
+    inline_keyboard: [
+      [
+        {
+          text: '➕ Botni Guruhga Admin Qilish',
+          url: `https://t.me/${botUser}?startgroup=admin&admin=restrict_members+delete_messages+invite_users`,
+        },
+      ],
+      [{ text: '🔙 Bekor qilish', callback_data: 'view_vip_rooms' }],
+    ],
+  }
+
+  await send(token, chatId, text, requestKeyboard)
+  await send(token, chatId, `👇 <i>Agar bot hali guruhga qo‘shilmagan bo‘lsa, pastdagi tugma orqali 1-klikda admin qilib qo‘shing:</i>`, inlineMarkup)
+}
+
+async function handleChatSelectedForVip(
+  token: string,
+  chatId: number | string,
+  userIdStr: string,
+  targetChatId: string | number,
+  chatType: 'group' | 'channel' = 'group'
+) {
+  let cleanChatId = String(targetChatId).trim()
+  if (!cleanChatId.startsWith('-100') && !cleanChatId.startsWith('@') && /^\d+$/.test(cleanChatId)) {
+    cleanChatId = `-100${cleanChatId}`
+  }
+
+  const botUser = await getBotUsername(token)
+  const chatInfo = await getTelegramChat(token, cleanChatId)
+
+  if (!chatInfo) {
     await send(
       token,
       chatId,
-      `💎 <b>VIP Guruhlar va Pullik Yozish Xizmatlari</b>\n\n` +
-      `Hozircha tizimda ochiq VIP guruhlar qo‘shilmagan.\n\n` +
-      `ℹ️ <i>Agar siz o‘z guruhingizda pullik yozish yoki VIP a’zolik tizimini yoqmoqchi bo‘lsangiz, Sayt Veb CRM paneli orqali yangi guruh qo‘shishingiz mumkin.</i>`,
+      `⚠️ <b>Guruh topilmadi yoki bot u yerda mavjud emas!</b>\n\n` +
+      `Kiritilgan: <code>${cleanChatId}</code>\n\n` +
+      `Iltimos, avval @${botUser} botini ushbu guruhga qo‘shing va <b>Administrator</b> huquqini bering:`,
       {
         inline_keyboard: [
-          [{ text: '📱 VIP Guruhlar Boshqaruvi', web_app: { url: userVipPanelUrl } }],
-          [{ text: '🌐 Sayt Veb CRM ga o‘tish', url: userVipPanelUrl }],
+          [
+            {
+              text: '➕ Botni Guruhga Admin Qilish',
+              url: `https://t.me/${botUser}?startgroup=admin&admin=restrict_members+delete_messages+invite_users`,
+            },
+          ],
+          [{ text: '🔄 Qaytadan tekshirish', callback_data: `check_bot_admin_${encodeURIComponent(cleanChatId)}` }],
+          [{ text: '🔙 Bekor qilish', callback_data: 'view_vip_rooms' }],
         ],
       }
     )
     return
   }
 
-  const roomListText = rooms
-    .map(
-      (r, idx) =>
-        `<b>${idx + 1}️⃣ ${r.title}</b>\n` +
-        `• Turi: ${r.type === 'channel' ? '📢 Kanal' : '👥 Guruh'}\n` +
-        `• Xizmat: ${r.mode === 'write_permission' ? '✍️ Xabar yozish ruxsati' : '🚪 Maxfiy guruhga kirish'}\n` +
-        `• ⏱ 1 Soat: <code>${Number(r.hourlyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
-        `• 📅 1 Kun: <code>${Number(r.dailyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
-        `• ⭐️ 1 Oy: <code>${Number(r.monthlyPrice).toLocaleString('uz-UZ')} UZS</code>`
-    )
-    .join('\n\n─────────────\n\n')
+  // Check bot permissions
+  const botMember = await getTelegramBotMember(token, cleanChatId)
+  const isAdmin = botMember?.status === 'administrator' || botMember?.status === 'creator'
 
-  const buttons = rooms.map((r) => [
-    { text: `💎 ${r.title} (Tariflar)`, callback_data: `view_room_tariffs_${r.id}` },
+  const title = chatInfo.title || (chatInfo.username ? `@${chatInfo.username}` : `VIP Guruh (${cleanChatId})`)
+  const description = chatInfo.description || ''
+  const isChannel = chatInfo.type === 'channel' || chatType === 'channel'
+
+  await stateSet(Number(chatId), {
+    step: 'vip_confirm_pricing',
+    vipRoom: {
+      title,
+      chatId: String(chatInfo.id),
+      type: isChannel ? 'channel' : 'group',
+      mode: isChannel ? 'invite_only' : 'write_permission',
+      hourlyPrice: 5000,
+      dailyPrice: 15000,
+      weeklyPrice: 50000,
+      monthlyPrice: 120000,
+    },
+  })
+
+  let adminNotice = ''
+  if (!isAdmin) {
+    adminNotice =
+      `\n\n⚠️ <b>Diqqat:</b> Bot guruhda hali <b>Administrator</b> emas! ` +
+      `Avtomatik mute va taklif havolalari ishlashi uchun botga admin huquqini berishingiz shart.`
+  }
+
+  const text =
+    `✅ <b>${isChannel ? 'Kanal' : 'Guruh'} Muvaffaqiyatli Aniqlandi!</b>\n\n` +
+    `👥 <b>Nomi:</b> <b>${title}</b>\n` +
+    (description ? `📝 <b>Tavsif:</b> ${description}\n` : '') +
+    `🆔 <b>Chat ID:</b> <code>${chatInfo.id}</code>\n` +
+    `🛠 <b>Rejim:</b> ${isChannel ? '🚪 Yopiq Taklif Havolasi (Invite Link)' : '✍️ Xabar Yozish Huquqi (Avto-Mute)'}${adminNotice}\n\n` +
+    `💰 <b>Standart To‘lov Tariflari:</b>\n` +
+    `• ⏱ 1 Soat: <code>5 000 UZS</code>\n` +
+    `• 📅 1 Kun: <code>15 000 UZS</code>\n` +
+    `• 📆 1 Hafta: <code>50 000 UZS</code>\n` +
+    `• ⭐️ 1 Oy: <code>120 000 UZS</code>\n\n` +
+    `Guruhni standart narxlar bilan saqlaymizmi yoki o‘z narxlaringizni belgilaysizmi?`
+
+  const buttons = [
+    [{ text: '⚡️ Standart Narxlar Bilan Saqlash', callback_data: 'vip_save_std_prices' }],
+    [{ text: '⚙️ O‘z Narxlarimni Belgilash', callback_data: 'vip_custom_prices' }],
+    [{ text: '🔙 Bekor qilish', callback_data: 'view_vip_rooms' }],
+  ]
+
+  if (!isAdmin) {
+    buttons.unshift([
+      {
+        text: '➕ Botga Admin Huquqini Berish',
+        url: `https://t.me/${botUser}?startgroup=admin&admin=restrict_members+delete_messages+invite_users`,
+      },
+    ])
+  }
+
+  await send(token, chatId, text, { inline_keyboard: buttons })
+}
+
+async function renderVipRooms(token: string, chatId: number | string, userIdStr?: string) {
+  const uid = String(userIdStr || chatId)
+  let myRooms: any[] = []
+  let allRooms: any[] = []
+
+  try {
+    await ensureDbSchema()
+    myRooms = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.ownerTelegramId, uid)).orderBy(desc(paidAccessRooms.createdAt))
+    allRooms = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.active, true)).orderBy(desc(paidAccessRooms.createdAt))
+  } catch (err) {
+    console.error('renderVipRooms db error:', err)
+  }
+
+  const userVipPanelUrl = await generateAuthUrl(uid, '/panel?tab=vip_rooms')
+  const botUser = await getBotUsername(token)
+
+  let text =
+    `💎 <b>PayGo — VIP Guruhlar & Majburiy To‘lov Tizimi</b>\n\n` +
+    `Telegram guruh va kanallaringizda yozish huquqi yoki yopiq a’zolik uchun avtomatik to‘lov qabul qiling! Barcha tushum 100% sizning kartangizga tushadi (0% komissiya).\n\n`
+
+  if (myRooms.length > 0) {
+    text +=
+      `👑 <b>Sizning Ulangan Guruhlaringiz (${myRooms.length} ta):</b>\n` +
+      myRooms
+        .map(
+          (r, idx) =>
+            `<b>${idx + 1}. ${r.title}</b> (${r.type === 'channel' ? '📢 Kanal' : '👥 Guruh'})\n` +
+            `• Holat: ${r.active ? '🟢 Faol' : '⏸ Nofaol'}\n` +
+            `• Tariflar: 1 kun: <code>${Number(r.dailyPrice).toLocaleString('uz-UZ')} UZS</code> | 1 oy: <code>${Number(r.monthlyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+            `• Rejim: ${r.mode === 'write_permission' ? '✍️ Xabar yozish ruxsati' : '🚪 VIP taklif havolasi'}`
+        )
+        .join('\n\n') +
+      `\n\n`
+  } else {
+    text += `ℹ️ <i>Sizda hali ulangan guruh mavjud emas. Pastdagi tugma orqali yangi guruhni osongina ulang!</i>\n\n`
+  }
+
+  const inline_keyboard: any[] = [
+    [
+      { text: '➕ Yangi Guruh Ulash (Majburiy To‘lov)', callback_data: 'bot_add_vip_group' },
+    ],
+    [
+      { text: '➕ Yangi Kanal Ulash (VIP Kirish)', callback_data: 'bot_add_vip_channel' },
+    ],
+  ]
+
+  // Add individual management buttons for each of user's rooms
+  if (myRooms.length > 0) {
+    for (const r of myRooms) {
+      inline_keyboard.push([
+        { text: `⚙️ ${r.title} (Boshqarish & Tariflar)`, callback_data: `manage_room_${r.id}` },
+      ])
+    }
+  }
+
+  // Add web CRM and refresh buttons
+  inline_keyboard.push([
+    { text: '📱 Veb CRM Paneli', web_app: { url: userVipPanelUrl } },
+    { text: '🌐 Saytda Ko‘rish', url: userVipPanelUrl },
+  ])
+  inline_keyboard.push([
+    { text: '🔄 Yangilash', callback_data: 'view_vip_rooms' },
+    { text: '🔙 Asosiy Menyu', callback_data: 'open_main_menu' },
   ])
 
-  await send(
-    token,
-    chatId,
-    `💎 <b>PayGo VIP Guruhlar va Pullik Yozish Xizmatlari</b>\n\n` +
-    `${roomListText}\n\n` +
-    `👇 <i>Tariflar va kirish huquqini sotib olish uchun kerakli guruhni tanlang:</i>`,
-    { inline_keyboard: buttons }
-  )
+  await send(token, chatId, text, { inline_keyboard })
+}
+
+async function renderVipRoomManager(token: string, chatId: number | string, userIdStr: string, roomId: string) {
+  let room: any = null
+  let membersCount = 0
+  let totalVolume = 0
+  let shop: any = null
+
+  try {
+    await ensureDbSchema()
+    const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, roomId)).limit(1)
+    if (rRows.length) room = rRows[0]
+
+    if (room) {
+      const mems = await db.select().from(paidAccessMembers).where(eq(paidAccessMembers.roomId, room.id))
+      const activeMems = mems.filter((m) => m.status === 'active' && new Date(m.expiresAt) > new Date())
+      membersCount = activeMems.length
+      totalVolume = mems.reduce((sum, m) => sum + (m.amountPaid || 0), 0)
+
+      if (room.shopId) {
+        const sRows = await db.select().from(shops).where(eq(shops.id, room.shopId)).limit(1)
+        if (sRows.length) shop = sRows[0]
+      }
+    }
+  } catch (err) {
+    console.error('renderVipRoomManager error:', err)
+  }
+
+  if (!room) {
+    await send(token, chatId, '⚠️ Guruh topilmadi.')
+    return
+  }
+
+  const botUser = await getBotUsername(token)
+  const isOwner = room.ownerTelegramId === String(userIdStr) || (await isAdminTelegramId(userIdStr))
+
+  const shopName = shop ? `${shop.name} (${shop.cardNumber?.slice(-4) || 'Karta'})` : 'Standart Karta'
+
+  const text =
+    `💎 <b>${room.title}</b> — Guruh Boshqaruvi\n\n` +
+    `• <b>Turi:</b> ${room.type === 'channel' ? '📢 Telegram Kanal' : '👥 Telegram Guruh'}\n` +
+    `• <b>Chat ID:</b> <code>${room.chatId}</code>\n` +
+    `• <b>Rejim:</b> ${room.mode === 'write_permission' ? '✍️ Xabar yozish huquqi (Avto-Mute)' : '🚪 VIP yopiq a’zolik'}\n` +
+    `• <b>Holati:</b> ${room.active ? '🟢 Faol (Ishlamoqda)' : '⏸ Nofaol (To‘xtatilgan)'}\n` +
+    `• <b>Bog‘langan Do‘kon/Karta:</b> 💳 <b>${shopName}</b>\n\n` +
+    `💰 <b>O‘rnatilgan Tariflar:</b>\n` +
+    `• ⏱ 1 Soat: <code>${Number(room.hourlyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+    `• 📅 1 Kun: <code>${Number(room.dailyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+    `• 📆 1 Hafta: <code>${Number(room.weeklyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+    `• ⭐️ 1 Oy: <code>${Number(room.monthlyPrice).toLocaleString('uz-UZ')} UZS</code>\n\n` +
+    `📊 <b>Statistika:</b>\n` +
+    `• 👥 Faol pullik a’zolar: <b>${membersCount} ta</b>\n` +
+    `• 💵 Jami yig‘ilgan mablag‘: <b>${totalVolume.toLocaleString('uz-UZ')} UZS</b> (0% komissiya)\n\n` +
+    `👇 <i>Guruh sozlamalarini o‘zgartirish uchun kerakli tugmani bosing:</i>`
+
+  const buttons: any[] = [
+    [
+      { text: '✏️ Nom & Tavsifni Tahrirlash', callback_data: `edit_room_title_${room.id}` },
+      { text: '💰 Narxlarni O‘zgartirish', callback_data: `edit_room_prices_${room.id}` },
+    ],
+    [
+      { text: '💳 Kartani / Do‘konni Almashtirish', callback_data: `edit_room_shop_${room.id}` },
+      { text: `🔄 Rejim: ${room.mode === 'write_permission' ? '✍️ Mute' : '🚪 Taklif'}`, callback_data: `toggle_room_mode_${room.id}` },
+    ],
+    [
+      { text: room.active ? '⏸ Faoliyatni To‘xtatish' : '▶️ Qayta Yoqish', callback_data: `toggle_room_active_${room.id}` },
+      { text: '👥 Pullik A’zolar Ro‘yxati', callback_data: `view_room_members_${room.id}` },
+    ],
+    [
+      { text: '🧪 To‘lov Havolasini Sinash', callback_data: `view_room_tariffs_${room.id}` },
+      { text: '🗑 Guruhni O‘chirish', callback_data: `del_room_confirm_${room.id}` },
+    ],
+    [{ text: '🔙 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+  ]
+
+  await send(token, chatId, text, { inline_keyboard: buttons })
+}
+
+async function renderVipRoomMembers(token: string, chatId: number | string, roomId: string) {
+  let room: any = null
+  let members: any[] = []
+
+  try {
+    await ensureDbSchema()
+    const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, roomId)).limit(1)
+    if (rRows.length) room = rRows[0]
+    if (room) {
+      members = await db.select().from(paidAccessMembers).where(eq(paidAccessMembers.roomId, room.id)).orderBy(desc(paidAccessMembers.createdAt)).limit(50)
+    }
+  } catch (err) {
+    console.error('renderVipRoomMembers error:', err)
+  }
+
+  if (!room) {
+    await send(token, chatId, '⚠️ Guruh topilmadi.')
+    return
+  }
+
+  let text = `👥 <b>${room.title} — Pullik A’zolar Ro‘yxati</b>\n\n`
+  if (members.length === 0) {
+    text += `Hozircha ushbu guruhda to‘lov qilgan a’zolar mavjud emas.\n\nYangi foydalanuvchilar to‘lov qilganda avtomatik ro‘yxatga qo‘shiladi va yozish huquqi beriladi.`
+  } else {
+    text += members
+      .map((m, idx) => {
+        const isExp = new Date(m.expiresAt) < new Date()
+        const expStr = new Date(m.expiresAt).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        const userLabel = m.username ? `@${m.username}` : m.fullName || `ID: ${m.userId}`
+        return `<b>${idx + 1}. ${userLabel}</b>\n• To‘lov: ${Number(m.amountPaid || 0).toLocaleString()} UZS (${m.plan || 'oylik'})\n• Muddat: ${isExp ? '❌ Tugagan' : `✅ Faol (${expStr})`}`
+      })
+      .join('\n\n')
+  }
+
+  const buttons = [
+    [{ text: '➕ Qo‘lda A’zo Qo‘shish (Veb)', url: await generateAuthUrl(chatId, '/panel?tab=vip_rooms') }],
+    [{ text: '🔙 Guruh boshqaruviga qaytish', callback_data: `manage_room_${room.id}` }],
+  ]
+
+  await send(token, chatId, text, { inline_keyboard: buttons })
 }
 
 async function renderRoomTariffs(token: string, chatId: number | string, roomId: string) {
@@ -1867,7 +2211,398 @@ export async function POST(request: Request) {
 
     // VIP Rooms Callbacks
     if (data === 'view_vip_rooms') {
-      await renderVipRooms(token, chatId)
+      await renderVipRooms(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'bot_add_vip_group') {
+      await promptConnectVipChat(token, chatId, 'group')
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'bot_add_vip_channel') {
+      await promptConnectVipChat(token, chatId, 'channel')
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('check_bot_admin_')) {
+      const targetChat = decodeURIComponent(data.replace('check_bot_admin_', ''))
+      await handleChatSelectedForVip(token, chatId, userIdStr, targetChat)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('manage_room_')) {
+      const rId = data.replace('manage_room_', '')
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('view_room_members_')) {
+      const rId = data.replace('view_room_members_', '')
+      await renderVipRoomMembers(token, chatId, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('edit_room_title_')) {
+      const rId = data.replace('edit_room_title_', '')
+      const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (!rRows.length) {
+        await send(token, chatId, '⚠️ Guruh topilmadi.')
+        return NextResponse.json({ ok: true })
+      }
+      await stateSet(Number(chatId), { step: 'vip_edit_title', vipRoom: { id: rId } })
+      await send(
+        token,
+        chatId,
+        `✏️ <b>${rRows[0].title} — Nom va Tavsifni Tahrirlash</b>\n\n` +
+        `Guruh yoki kanal uchun yangi nom kiriting (yoki Telegramdagi nom bilan sinxronlash uchun pastdagi tugmani bosing):`,
+        {
+          inline_keyboard: [
+            [{ text: '🔄 Telegramdan Avtomatik Olish', callback_data: `sync_room_tg_${rId}` }],
+            [{ text: '🔙 Bekor qilish', callback_data: `manage_room_${rId}` }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('sync_room_tg_')) {
+      const rId = data.replace('sync_room_tg_', '')
+      const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (!rRows.length) {
+        await send(token, chatId, '⚠️ Guruh topilmadi.')
+        return NextResponse.json({ ok: true })
+      }
+      const chatInfo = await getTelegramChat(token, rRows[0].chatId)
+      if (chatInfo && chatInfo.title) {
+        await db.update(paidAccessRooms).set({ title: chatInfo.title, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
+        await send(token, chatId, `✅ Guruh nomi yangilandi: <b>${chatInfo.title}</b>`)
+      } else {
+        await send(token, chatId, '⚠️ Telegramdan ma’lumot olib bo‘lmadi. Bot guruhda admin ekanligini tekshiring.')
+      }
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('edit_room_prices_')) {
+      const rId = data.replace('edit_room_prices_', '')
+      const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (!rRows.length) {
+        await send(token, chatId, '⚠️ Guruh topilmadi.')
+        return NextResponse.json({ ok: true })
+      }
+      const r = rRows[0]
+      const text =
+        `💰 <b>${r.title} — Tarif Narxlarini O‘zgartirish</b>\n\n` +
+        `Joriy narxlar:\n` +
+        `• ⏱ 1 Soat: <code>${Number(r.hourlyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+        `• 📅 1 Kun: <code>${Number(r.dailyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+        `• 📆 1 Hafta: <code>${Number(r.weeklyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
+        `• ⭐️ 1 Oy: <code>${Number(r.monthlyPrice).toLocaleString('uz-UZ')} UZS</code>\n\n` +
+        `O‘zgartirmoqchi bo‘lgan tarifingizni tanlang:`
+
+      const buttons = [
+        [{ text: `⏱ 1 Soat Narxi (${Number(r.hourlyPrice).toLocaleString()} UZS)`, callback_data: `set_room_price_${r.id}_hourly` }],
+        [{ text: `📅 1 Kun Narxi (${Number(r.dailyPrice).toLocaleString()} UZS)`, callback_data: `set_room_price_${r.id}_daily` }],
+        [{ text: `📆 1 Hafta Narxi (${Number(r.weeklyPrice).toLocaleString()} UZS)`, callback_data: `set_room_price_${r.id}_weekly` }],
+        [{ text: `⭐️ 1 Oy Narxi (${Number(r.monthlyPrice).toLocaleString()} UZS)`, callback_data: `set_room_price_${r.id}_monthly` }],
+        [{ text: '🔙 Guruh Boshqaruviga Qaytish', callback_data: `manage_room_${r.id}` }],
+      ]
+
+      await send(token, chatId, text, { inline_keyboard: buttons })
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('set_room_price_')) {
+      const raw = data.replace('set_room_price_', '')
+      const lastIdx = raw.lastIndexOf('_')
+      const rId = raw.slice(0, lastIdx)
+      const field = raw.slice(lastIdx + 1) as 'hourly' | 'daily' | 'weekly' | 'monthly'
+
+      const fieldNames: Record<string, string> = {
+        hourly: '1 Soatlik',
+        daily: '1 Kunlik',
+        weekly: '1 Haftalik',
+        monthly: '1 Oylik',
+      }
+
+      await stateSet(Number(chatId), {
+        step: 'vip_custom_price_single',
+        vipRoom: { id: rId, customPriceField: field },
+      })
+
+      await send(
+        token,
+        chatId,
+        `💰 <b>${fieldNames[field] || field} tarif narxini kiriting:</b>\n\n` +
+        `Faqat raqamda yozing (masalan: <code>25000</code>). Bekor qilish uchun /cancel yozing:`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('edit_room_shop_')) {
+      const rId = data.replace('edit_room_shop_', '')
+      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+
+      let text = `💳 <b>Do‘kon / Karta Tanlash</b>\n\nPullik a’zolardan tushgan mablag‘lar qaysi kartangizga 0% komissiya bilan tushishini tanlang:\n`
+      const buttons: any[] = []
+
+      for (const s of userShops) {
+        buttons.push([
+          { text: `💳 ${s.name} (${s.cardNumber ? formatCard(s.cardNumber).slice(-9) : 'Karta'})`, callback_data: `set_room_shop_${rId}_${s.id}` },
+        ])
+      }
+
+      buttons.push([{ text: '➕ Yangi Do‘kon / Karta Ochish', callback_data: 'create_shop' }])
+      buttons.push([{ text: '🔙 Guruh Boshqaruviga Qaytish', callback_data: `manage_room_${rId}` }])
+
+      await send(token, chatId, text, { inline_keyboard: buttons })
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('set_room_shop_')) {
+      const rest = data.replace('set_room_shop_', '')
+      const parts = rest.split('_')
+      const shopId = parts.pop()
+      const rId = parts.join('_')
+
+      await db.update(paidAccessRooms).set({ shopId, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
+      await send(token, chatId, '✅ Qabul qiluvchi do‘kon/karta muvaffaqiyatli almashtirildi!')
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('toggle_room_mode_')) {
+      const rId = data.replace('toggle_room_mode_', '')
+      const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (rRows.length) {
+        const nextMode = rRows[0].mode === 'write_permission' ? 'invite_only' : 'write_permission'
+        await db.update(paidAccessRooms).set({ mode: nextMode, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
+        await send(token, chatId, `✅ Rejim o‘zgartirildi: <b>${nextMode === 'write_permission' ? '✍️ Xabar Yozish Huquqi (Avto-Mute)' : '🚪 VIP Yopiq Taklif Havolasi'}</b>`)
+      }
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('toggle_room_active_')) {
+      const rId = data.replace('toggle_room_active_', '')
+      const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (rRows.length) {
+        const nextActive = !rRows[0].active
+        await db.update(paidAccessRooms).set({ active: nextActive, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
+        await send(token, chatId, nextActive ? '🟢 Guruh faoliyati yoqildi!' : '⏸ Guruh faoliyati to‘xtatildi.')
+      }
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('del_room_confirm_')) {
+      const rId = data.replace('del_room_confirm_', '')
+      const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (!rRows.length) {
+        await send(token, chatId, '⚠️ Guruh topilmadi.')
+        return NextResponse.json({ ok: true })
+      }
+      await send(
+        token,
+        chatId,
+        `⚠️ <b>Rostdan ham "${rRows[0].title}" guruhini tizimdan o‘chirmoqchimisiz?</b>\n\n` +
+        `Bu guruhdagi barcha avtomatik to‘lov va yozish cheklovlari to‘xtatiladi.`,
+        {
+          inline_keyboard: [
+            [{ text: '🗑 Ha, O‘chirilsin', callback_data: `del_room_exec_${rId}` }],
+            [{ text: '🔙 Bekor qilish', callback_data: `manage_room_${rId}` }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('del_room_exec_')) {
+      const rId = data.replace('del_room_exec_', '')
+      await db.delete(paidAccessRooms).where(eq(paidAccessRooms.id, rId))
+      await db.delete(paidAccessMembers).where(eq(paidAccessMembers.roomId, rId))
+      await send(token, chatId, '✅ VIP Guruh muvaffaqiyatli o‘chirildi.')
+      await renderVipRooms(token, chatId, userIdStr)
+      return NextResponse.json({ ok: true })
+    }
+
+    // Step 2 & 3: Save Standard Prices or Setup Custom Prices
+    if (data === 'vip_save_std_prices') {
+      const flow = await stateGet(Number(chatId))
+      if (!flow?.vipRoom?.chatId) {
+        await renderVipRooms(token, chatId, userIdStr)
+        return NextResponse.json({ ok: true })
+      }
+
+      // Check user shops
+      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+      if (userShops.length === 1) {
+        // Automatically link to their single shop
+        const s = userShops[0]
+        const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+        await db.insert(paidAccessRooms).values({
+          id: newId,
+          shopId: s.id,
+          title: flow.vipRoom.title || 'VIP Guruh',
+          chatId: flow.vipRoom.chatId,
+          type: flow.vipRoom.type || 'group',
+          mode: flow.vipRoom.mode || 'write_permission',
+          hourlyPrice: 5000,
+          dailyPrice: 15000,
+          weeklyPrice: 50000,
+          monthlyPrice: 120000,
+          ownerTelegramId: userIdStr,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        await stateDelete(Number(chatId))
+        await send(
+          token,
+          chatId,
+          `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
+          `👥 <b>Guruh:</b> <b>${flow.vipRoom.title}</b>\n` +
+          `🆔 <b>Chat ID:</b> <code>${flow.vipRoom.chatId}</code>\n` +
+          `💳 <b>Bog‘langan do‘kon:</b> ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})\n` +
+          `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)\n\n` +
+          `🚀 <b>Tizim qanday ishlaydi?</b>\n` +
+          `1. Guruhda yangi a’zo to‘lovsiz xabar yozmoqchi bo‘lsa, bot xabarni o‘chiradi va a’zoga to‘lov tugmasini ko‘rsatadi.\n` +
+          `2. A’zo to‘lov qilishi bilan 1 soniyada yozish ruxsati ochiladi!\n` +
+          `3. Dastlabki 3 ta to‘lov sinov rejimida 100% bepul ishlaydi.`,
+          {
+            inline_keyboard: [
+              [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
+              [{ text: '👥 Pullik A’zolar Ro‘yxati', callback_data: `view_room_members_${newId}` }],
+              [{ text: '🧪 To‘lov Havolasini Sinash', callback_data: `view_room_tariffs_${newId}` }],
+              [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+            ],
+          }
+        )
+        return NextResponse.json({ ok: true })
+      }
+
+      if (userShops.length > 1) {
+        // Let user choose which shop receives funds
+        await stateSet(Number(chatId), { ...flow, step: 'vip_select_shop' })
+        const buttons = userShops.map((s) => [
+          { text: `💳 ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})`, callback_data: `vip_link_shop_${s.id}` },
+        ])
+        await send(
+          token,
+          chatId,
+          `💳 <b>Qabul qiluvchi Karta / Do‘konni Tanlang:</b>\n\n` +
+          `Pullik a’zolikdan tushgan mablag‘lar qaysi kartangizga tushsin?`,
+          { inline_keyboard: buttons }
+        )
+        return NextResponse.json({ ok: true })
+      }
+
+      // No shop yet -> create default shop or link
+      const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+      await db.insert(paidAccessRooms).values({
+        id: newId,
+        shopId: null,
+        title: flow.vipRoom.title || 'VIP Guruh',
+        chatId: flow.vipRoom.chatId,
+        type: flow.vipRoom.type || 'group',
+        mode: flow.vipRoom.mode || 'write_permission',
+        hourlyPrice: 5000,
+        dailyPrice: 15000,
+        weeklyPrice: 50000,
+        monthlyPrice: 120000,
+        ownerTelegramId: userIdStr,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      await stateDelete(Number(chatId))
+      await send(
+        token,
+        chatId,
+        `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
+        `👥 <b>Guruh:</b> <b>${flow.vipRoom.title}</b>\n` +
+        `🆔 <b>Chat ID:</b> <code>${flow.vipRoom.chatId}</code>\n` +
+        `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)\n\n` +
+        `To‘lovlarni qabul qilish kartangizni sozlash uchun "Do‘kon ochish" yoki "Mening kartam" bo‘limidan foydalaning.`,
+        {
+          inline_keyboard: [
+            [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
+            [{ text: '💳 Karta Bog‘lash', callback_data: `edit_room_shop_${newId}` }],
+            [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'vip_custom_prices') {
+      const flow = await stateGet(Number(chatId))
+      if (!flow?.vipRoom?.chatId) {
+        await renderVipRooms(token, chatId, userIdStr)
+        return NextResponse.json({ ok: true })
+      }
+      await stateSet(Number(chatId), {
+        ...flow,
+        step: 'vip_custom_price_input',
+        vipRoom: { ...flow.vipRoom, customPriceField: 'hourly' },
+      })
+      await send(
+        token,
+        chatId,
+        `💰 <b>Guruh Tariflarini Belgilash</b>\n\n` +
+        `1️⃣ <b>1 Soatlik yozish narxini kiriting:</b> (masalan: <code>5000</code>)\n` +
+        `<i>(Ushbu tarif kerak bo‘lmasa 0 deb yozing)</i>`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('vip_link_shop_')) {
+      const shopId = data.replace('vip_link_shop_', '')
+      const flow = await stateGet(Number(chatId))
+      if (!flow?.vipRoom?.chatId) {
+        await renderVipRooms(token, chatId, userIdStr)
+        return NextResponse.json({ ok: true })
+      }
+
+      const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+      await db.insert(paidAccessRooms).values({
+        id: newId,
+        shopId,
+        title: flow.vipRoom.title || 'VIP Guruh',
+        chatId: flow.vipRoom.chatId,
+        type: flow.vipRoom.type || 'group',
+        mode: flow.vipRoom.mode || 'write_permission',
+        hourlyPrice: flow.vipRoom.hourlyPrice || 5000,
+        dailyPrice: flow.vipRoom.dailyPrice || 15000,
+        weeklyPrice: flow.vipRoom.weeklyPrice || 50000,
+        monthlyPrice: flow.vipRoom.monthlyPrice || 120000,
+        ownerTelegramId: userIdStr,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      await stateDelete(Number(chatId))
+
+      await send(
+        token,
+        chatId,
+        `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
+        `👥 <b>Guruh:</b> <b>${flow.vipRoom.title}</b>\n` +
+        `🆔 <b>Chat ID:</b> <code>${flow.vipRoom.chatId}</code>\n` +
+        `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)\n\n` +
+        `🚀 Guruhda to‘lovsiz xabar yozgan a’zolarning xabarlari avtomatik o‘chiriladi va to‘lov qilgach 1 soniyada yozish ruxsati ochiladi!`,
+        {
+          inline_keyboard: [
+            [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
+            [{ text: '👥 Pullik A’zolar Ro‘yxati', callback_data: `view_room_members_${newId}` }],
+            [{ text: '🧪 To‘lov Havolasini Sinash', callback_data: `view_room_tariffs_${newId}` }],
+            [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+          ],
+        }
+      )
       return NextResponse.json({ ok: true })
     }
 
@@ -3148,6 +3883,19 @@ export async function POST(request: Request) {
     raw === '/viprooms' ||
     raw === '/vip'
 
+  const isAddGroupCmd =
+    norm.includes('guruh ulash') ||
+    raw === '/addgroup' ||
+    raw === '/linkgroup' ||
+    raw === '/vipgroup'
+
+  const isAddChannelCmd =
+    text === '📣 Kanal ulash' ||
+    norm.includes('kanal ulash') ||
+    raw === '/addchannel' ||
+    raw === '/linkchannel' ||
+    raw === '/vipchannel'
+
   // -------------------------------------------------------------
   // PHOTO UPLOAD (e.g. for Logo)
   // -------------------------------------------------------------
@@ -4132,7 +4880,17 @@ export async function POST(request: Request) {
   // -------------------------------------------------------------
   if (isVipRoomsCmd) {
     await stateDelete(chatId)
-    await renderVipRooms(token, chatId)
+    await renderVipRooms(token, chatId, userIdStr)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (isAddGroupCmd) {
+    await promptConnectVipChat(token, chatId, 'group')
+    return NextResponse.json({ ok: true })
+  }
+
+  if (isAddChannelCmd) {
+    await promptConnectVipChat(token, chatId, 'channel')
     return NextResponse.json({ ok: true })
   }
 
@@ -4605,6 +5363,205 @@ export async function POST(request: Request) {
     if (updated[0]) notifyAdminNewShop(token, updated[0])
     await showShopDetails(token, chatId, userIdStr, targetShopId)
     return NextResponse.json({ ok: true })
+  }
+
+  // -------------------------------------------------------------
+  // VIP ROOMS FLOW STEPS
+  // -------------------------------------------------------------
+  if (message.chat_shared || (flow?.step === 'vip_select_chat' && (message.forward_from_chat || raw))) {
+    let targetChatId = ''
+    if (message.chat_shared?.chat_id) {
+      targetChatId = String(message.chat_shared.chat_id)
+    } else if (message.forward_from_chat?.id) {
+      targetChatId = String(message.forward_from_chat.id)
+    } else if (raw) {
+      const match = raw.match(/(-100\d+|@[\w_]+|https:\/\/t\.me\/([\w_]+))/i)
+      if (match) {
+        targetChatId = match[1]
+      } else if (/^-?\d+$/.test(raw.trim())) {
+        targetChatId = raw.trim()
+      }
+    }
+
+    if (targetChatId) {
+      await handleChatSelectedForVip(token, chatId, userIdStr, targetChatId, flow?.vipRoom?.type || 'group')
+      return NextResponse.json({ ok: true })
+    }
+  }
+
+  if (flow?.step === 'vip_edit_title') {
+    const newTitle = raw.trim()
+    const rId = flow.vipRoom?.id
+    if (rId && newTitle) {
+      await db.update(paidAccessRooms).set({ title: newTitle, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
+      await stateDelete(chatId)
+      await send(token, chatId, `✅ <b>Guruh/kanal nomi muvaffaqiyatli saqlandi:</b> <i>${newTitle}</i>`, menu)
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+  }
+
+  if (flow?.step === 'vip_custom_price_single') {
+    const num = Number(raw.replace(/\D/g, ''))
+    const rId = flow.vipRoom?.id
+    const field = flow.vipRoom?.customPriceField
+    if (rId && field && !isNaN(num)) {
+      const updates: any = { updatedAt: new Date() }
+      if (field === 'hourly') updates.hourlyPrice = num
+      else if (field === 'daily') updates.dailyPrice = num
+      else if (field === 'weekly') updates.weeklyPrice = num
+      else if (field === 'monthly') updates.monthlyPrice = num
+
+      await db.update(paidAccessRooms).set(updates).where(eq(paidAccessRooms.id, rId))
+      await stateDelete(chatId)
+      await send(token, chatId, `✅ <b>Tarif narxi muvaffaqiyatli yangilandi:</b> <code>${num.toLocaleString('uz-UZ')} UZS</code>`, menu)
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+  }
+
+  if (flow?.step === 'vip_custom_price_input') {
+    const num = Number(raw.replace(/\D/g, '')) || 0
+    const field = flow.vipRoom?.customPriceField || 'hourly'
+
+    if (field === 'hourly') {
+      await stateSet(chatId, {
+        ...flow,
+        vipRoom: { ...flow.vipRoom, hourlyPrice: num, customPriceField: 'daily' },
+      })
+      await send(
+        token,
+        chatId,
+        `✅ 1 Soatlik narx: <b>${num.toLocaleString()} UZS</b>\n\n` +
+        `2️⃣ <b>1 Kunlik yozish narxini kiriting:</b> (masalan: <code>15000</code>):`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (field === 'daily') {
+      await stateSet(chatId, {
+        ...flow,
+        vipRoom: { ...flow.vipRoom, dailyPrice: num, customPriceField: 'weekly' },
+      })
+      await send(
+        token,
+        chatId,
+        `✅ 1 Kunlik narx: <b>${num.toLocaleString()} UZS</b>\n\n` +
+        `3️⃣ <b>1 Haftalik yozish narxini kiriting:</b> (masalan: <code>50000</code>):`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (field === 'weekly') {
+      await stateSet(chatId, {
+        ...flow,
+        vipRoom: { ...flow.vipRoom, weeklyPrice: num, customPriceField: 'monthly' },
+      })
+      await send(
+        token,
+        chatId,
+        `✅ 1 Haftalik narx: <b>${num.toLocaleString()} UZS</b>\n\n` +
+        `4️⃣ <b>1 Oylik yozish narxini kiriting:</b> (masalan: <code>120000</code>):`,
+        back
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (field === 'monthly') {
+      const updatedVipRoom = { ...flow.vipRoom, monthlyPrice: num }
+      const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+
+      if (userShops.length === 1) {
+        const s = userShops[0]
+        const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+        await db.insert(paidAccessRooms).values({
+          id: newId,
+          shopId: s.id,
+          title: updatedVipRoom.title || 'VIP Guruh',
+          chatId: updatedVipRoom.chatId!,
+          type: updatedVipRoom.type || 'group',
+          mode: updatedVipRoom.mode || 'write_permission',
+          hourlyPrice: updatedVipRoom.hourlyPrice || 5000,
+          dailyPrice: updatedVipRoom.dailyPrice || 15000,
+          weeklyPrice: updatedVipRoom.weeklyPrice || 50000,
+          monthlyPrice: num || 120000,
+          ownerTelegramId: userIdStr,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        await stateDelete(chatId)
+        await send(
+          token,
+          chatId,
+          `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
+          `👥 <b>Guruh:</b> <b>${updatedVipRoom.title}</b>\n` +
+          `🆔 <b>Chat ID:</b> <code>${updatedVipRoom.chatId}</code>\n` +
+          `💳 <b>Bog‘langan do‘kon:</b> ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})\n` +
+          `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)`,
+          {
+            inline_keyboard: [
+              [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
+              [{ text: '👥 Pullik A’zolar Ro‘yxati', callback_data: `view_room_members_${newId}` }],
+              [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+            ],
+          }
+        )
+        return NextResponse.json({ ok: true })
+      }
+
+      if (userShops.length > 1) {
+        await stateSet(chatId, { step: 'vip_select_shop', vipRoom: updatedVipRoom })
+        const buttons = userShops.map((s) => [
+          { text: `💳 ${s.name} (${formatCard(s.cardNumber || '').slice(-9)})`, callback_data: `vip_link_shop_${s.id}` },
+        ])
+        await send(
+          token,
+          chatId,
+          `💳 <b>Qabul qiluvchi Karta / Do‘konni Tanlang:</b>\n\nPullik a’zolikdan tushgan mablag‘lar qaysi kartangizga tushsin?`,
+          { inline_keyboard: buttons }
+        )
+        return NextResponse.json({ ok: true })
+      }
+
+      // No shops
+      const newId = `room_${randomUUID().replace(/-/g, '').slice(0, 10)}`
+      await db.insert(paidAccessRooms).values({
+        id: newId,
+        shopId: null,
+        title: updatedVipRoom.title || 'VIP Guruh',
+        chatId: updatedVipRoom.chatId!,
+        type: updatedVipRoom.type || 'group',
+        mode: updatedVipRoom.mode || 'write_permission',
+        hourlyPrice: updatedVipRoom.hourlyPrice || 5000,
+        dailyPrice: updatedVipRoom.dailyPrice || 15000,
+        weeklyPrice: updatedVipRoom.weeklyPrice || 50000,
+        monthlyPrice: num || 120000,
+        ownerTelegramId: userIdStr,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      await stateDelete(chatId)
+      await send(
+        token,
+        chatId,
+        `🎉 <b>GURUH MUVAFFAQIYATLI ULANDI!</b>\n\n` +
+        `👥 <b>Guruh:</b> <b>${updatedVipRoom.title}</b>\n` +
+        `🆔 <b>Chat ID:</b> <code>${updatedVipRoom.chatId}</code>\n` +
+        `⚡️ <b>Holati:</b> 🟢 Faol (Ishlamoqda)`,
+        {
+          inline_keyboard: [
+            [{ text: '⚙️ Guruh Sozlamalari & Tahrirlash', callback_data: `manage_room_${newId}` }],
+            [{ text: '💳 Karta Bog‘lash', callback_data: `edit_room_shop_${newId}` }],
+            [{ text: '💎 Barcha Guruhlarim', callback_data: 'view_vip_rooms' }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
   }
 
   // -------------------------------------------------------------
