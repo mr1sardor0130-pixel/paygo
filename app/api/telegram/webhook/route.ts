@@ -2991,15 +2991,47 @@ export async function POST(request: Request) {
         `⏱ <b>Amal qilish vaqti:</b> 5 daqiqa\n\n` +
         `To‘lovni amalga oshirgach, HUMO to‘lov xabarnomasi avtomatik ravishda tasdiqlanadi yoki quyidagi tugma orqali tekshirishingiz mumkin:`
 
+      const isOwnerOrAdmin = isAdmin || (room.ownerTelegramId && room.ownerTelegramId === userIdStr) || (shop && shop.userId === userIdStr)
+
       const payMarkup = {
         inline_keyboard: [
           [{ text: '💳 To‘lov sahifasini ochish (Web)', url: `${APP_URL}/pay/${paymentId}` }],
-          [{ text: '⚡️ To‘lovni tasdiqlash (Test/Simulyatsiya)', callback_data: `confirm_room_pay_${paymentId}_${room.id}_${period}` }],
+          ...(isOwnerOrAdmin
+            ? [[{ text: '⚡️ To‘lovni tasdiqlash (Faqat Guruh Egasi/Admin uchun)', callback_data: `confirm_room_pay_${paymentId}_${room.id}_${period}` }]]
+            : [[{ text: '🔄 To‘lov holatini tekshirish', callback_data: `check_room_pay_${paymentId}_${room.id}_${period}` }]]),
           [{ text: '🔙 Tariflarga qaytish', callback_data: `view_room_tariffs_${room.id}` }],
         ],
       }
 
       await send(token, chatId, payText, payMarkup)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('check_room_pay_')) {
+      const rawRest = data.replace('check_room_pay_', '')
+      const parts = rawRest.split('_')
+      const period = parts.pop() as 'hour' | 'day' | 'week' | 'month'
+      const rId = parts.pop() || ''
+      const paymentId = parts.join('_')
+
+      const payRows = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1)
+      if (!payRows.length) {
+        await send(token, chatId, '⚠️ To‘lov ma’lumotlari topilmadi.')
+        return NextResponse.json({ ok: true })
+      }
+
+      const pay = payRows[0]
+      if (pay.status === 'success') {
+        await handleRoomPaymentSuccess(token, chatId, userIdStr, pay, rId, period)
+      } else {
+        await send(
+          token,
+          chatId,
+          `⏳ <b>To‘lov hali tasdiqlanmadi.</b>\n\n` +
+          `HUMO to‘lov xabarnomasi kelgach, tizim avtomatik ravishda tasdiqlaydi va sizga guruhga kirish yoki yozish huquqini ochadi.\n\n` +
+          `Agar to‘lovni hozirgina amalga oshirgan bo‘lsangiz, bir necha soniya kuting va qayta tekshiring.`
+        )
+      }
       return NextResponse.json({ ok: true })
     }
 
@@ -3009,6 +3041,19 @@ export async function POST(request: Request) {
       const period = parts.pop() as 'hour' | 'day' | 'week' | 'month'
       const rId = parts.pop() || ''
       const paymentId = parts.join('_')
+
+      const roomRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      const targetRoom = roomRows.length ? roomRows[0] : null
+      const isOwnerOrAdmin = isAdmin || (targetRoom && targetRoom.ownerTelegramId === userIdStr)
+
+      if (!isOwnerOrAdmin) {
+        await send(
+          token,
+          chatId,
+          '⚠️ <b>Ruxsat berilmadi:</b> To‘lovni sun’iy (test) tasdiqlash huquqi faqat ushbu guruh egasi yoki tizim administratori uchun mavjud.'
+        )
+        return NextResponse.json({ ok: true })
+      }
 
       const payRows = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1)
       if (!payRows.length) {

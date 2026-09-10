@@ -19,24 +19,33 @@ async function checkUserMandatorySub(telegramId: string): Promise<{ ok: boolean;
     const activeChannels = await db.select().from(mandatoryChannels).where(eq(mandatoryChannels.active, true))
     if (activeChannels.length === 0) return { ok: true, missingChannels: [] }
 
-    const missingChannels: any[] = []
-    for (const ch of activeChannels) {
-      try {
-        const res = await fetch(`https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(ch.channelId)}&user_id=${telegramId}`)
-        const data = await res.json()
-        if (!data.ok || !['creator', 'administrator', 'member', 'restricted'].includes(data.result?.status)) {
-          missingChannels.push({
-            id: ch.id,
-            name: ch.name,
-            channelId: ch.channelId,
-            inviteUrl: ch.inviteUrl,
-          })
+    const results = await Promise.all(
+      activeChannels.map(async (ch) => {
+        try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 1200)
+          const res = await fetch(
+            `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(ch.channelId)}&user_id=${telegramId}`,
+            { signal: controller.signal }
+          )
+          clearTimeout(timeoutId)
+          const data = await res.json()
+          if (!data.ok || !['creator', 'administrator', 'member', 'restricted'].includes(data.result?.status)) {
+            return {
+              id: ch.id,
+              name: ch.name,
+              channelId: ch.channelId,
+              inviteUrl: ch.inviteUrl,
+            }
+          }
+          return null
+        } catch {
+          return null
         }
-      } catch {
-        // Safe bypass on transient error
-      }
-    }
+      })
+    )
 
+    const missingChannels = results.filter(Boolean)
     return {
       ok: missingChannels.length === 0,
       missingChannels,

@@ -50,6 +50,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
+import { GearLoader, ButtonGearSpinner, DoubleGearIcon } from '@/components/gear-loader'
 
 export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels' | 'db_backup'
 
@@ -66,10 +67,12 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   const [loginPendingToken, setLoginPendingToken] = useState<string | null>(null)
   const [loginBotLink, setLoginBotLink] = useState<string | null>(null)
   const [directTelegramIdInput, setDirectTelegramIdInput] = useState('')
+  const [directLoginLoading, setDirectLoginLoading] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
   // App tabs & UI state
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'shop_settings')
+  const [tabLoading, setTabLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -334,7 +337,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   // 1. Initialize Auth on Mount
   useEffect(() => {
     const initAuth = async () => {
-      setAuthLoading(true)
       let storedToken = ''
       let queryToken = ''
       let queryUserId = ''
@@ -366,6 +368,25 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           localStorage.setItem('paygo_token', queryToken)
           window.history.replaceState({}, document.title, window.location.pathname)
         }
+
+        // Fast instant cached login
+        const cachedUserStr = localStorage.getItem('paygo_cached_user')
+        if (cachedUserStr && (storedToken || queryUserId)) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr)
+            if (cachedUser?.userId || cachedUser?.telegramId) {
+              setCurrentUser(cachedUser)
+              if (cachedUser.shop) {
+                setShopData(cachedUser.shop)
+                setActiveShopId(cachedUser.shop.id)
+              }
+              if (cachedUser.shops) {
+                setMyShops(cachedUser.shops)
+              }
+              setAuthLoading(false)
+            }
+          } catch {}
+        }
       }
 
       if (storedToken || queryUserId) {
@@ -373,8 +394,8 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         await verifyUser(storedToken, queryUserId)
       } else {
         await requestPendingLoginToken()
+        setAuthLoading(false)
       }
-      setAuthLoading(false)
     }
 
     initAuth()
@@ -394,7 +415,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     }
   }
 
-  // 3. Poll Telegram Login Token
+  // 3. Poll Telegram Login Token (Super-fast 1s poll)
   useEffect(() => {
     if (!loginPendingToken || currentUser) return
     const interval = setInterval(async () => {
@@ -407,7 +428,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           await verifyUser(data.token, data.userId)
         }
       } catch {}
-    }, 2000)
+    }, 1000)
 
     return () => clearInterval(interval)
   }, [loginPendingToken, currentUser])
@@ -425,6 +446,9 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       const data = await res.json()
       if (data.ok) {
         setCurrentUser(data)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('paygo_cached_user', JSON.stringify(data))
+        }
         if (data.shops && data.shops.length > 0) {
           setMyShops(data.shops)
         }
@@ -450,13 +474,29 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         }
       } else {
         localStorage.removeItem('paygo_token')
+        localStorage.removeItem('paygo_cached_user')
         setToken('')
         setCurrentUser(null)
         requestPendingLoginToken()
       }
     } catch {
-      setCurrentUser(null)
+      // keep cached if offline
+    } finally {
+      setAuthLoading(false)
     }
+  }
+
+  // Smooth Tab Switcher with Gear Loader
+  const handleSwitchTab = (tab: TabType, extraAction?: () => void) => {
+    if (tab === activeTab) return
+    setTabLoading(true)
+    setActiveTab(tab)
+    if (extraAction) {
+      extraAction()
+    }
+    setTimeout(() => {
+      setTabLoading(false)
+    }, 180)
   }
 
   // Switch Active Shop
@@ -780,15 +820,16 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   // Direct login by Telegram ID
   const handleDirectTelegramLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!directTelegramIdInput.trim()) return
-    setAuthLoading(true)
+    const cleanId = directTelegramIdInput.trim()
+    if (!cleanId) return
+    setDirectLoginLoading(true)
     setAuthError(null)
     try {
-      await verifyUser(token, directTelegramIdInput.trim())
+      await verifyUser(token, cleanId)
     } catch {
       setAuthError('Foydalanuvchi ma’lumotlarini yuklab bo‘lmadi')
     } finally {
-      setAuthLoading(false)
+      setDirectLoginLoading(false)
     }
   }
 
@@ -1145,9 +1186,47 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   }
 
   // -------------------------------------------------------------
+  // AUTH LOADING SCREEN (Smooth animated interlocking gears)
+  // -------------------------------------------------------------
+  if (authLoading && !currentUser) {
+    return (
+      <main className="min-h-screen bg-[#f8fafc] text-[#152238] flex flex-col justify-center items-center px-4 py-12">
+        <div className="w-full max-w-md bg-white border border-[#e2e8f0] rounded-3xl p-8 shadow-sm text-center">
+          <div className="flex items-center justify-center gap-3 mb-6">
+            {paygoOfficialLogo ? (
+              <img src={paygoOfficialLogo} alt="PayGo Logo" className="size-12 rounded-2xl object-contain bg-slate-900 p-1 border border-slate-700 shadow-md" />
+            ) : (
+              <div className="grid size-12 place-items-center rounded-2xl bg-[#1769e0] text-lg font-bold text-white shadow-md shadow-blue-500/20">
+                P
+              </div>
+            )}
+            <div className="text-left">
+              <h1 className="text-xl font-bold text-[#152238]">PayGo CRM Panel</h1>
+              <p className="text-xs text-[#718096]">HUMO To‘lov tizimi boshqaruvi</p>
+            </div>
+          </div>
+
+          <div className="my-4 rounded-2xl bg-gradient-to-b from-blue-50/70 to-slate-50 border border-blue-100 p-6">
+            <GearLoader
+              size="lg"
+              variant="blue"
+              text="Xavfsiz Tizim Yuklanmoqda..."
+              subtext="Neon PostgreSQL ma’lumotlar bazasi va sessiya tekshirilmoqda"
+            />
+          </div>
+
+          <p className="text-[11px] text-slate-400 font-mono mt-4">
+            Tezkor avtomatik ulanish amalga oshirilmoqda...
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  // -------------------------------------------------------------
   // AUTH GATEWAY SCREEN (Shown if not logged in)
   // -------------------------------------------------------------
-  if (!authLoading && !currentUser) {
+  if (!currentUser) {
     return (
       <main className="min-h-screen bg-[#f8fafc] text-[#152238] flex flex-col justify-center items-center px-4 py-12">
         <div className="w-full max-w-md bg-white border border-[#e2e8f0] rounded-3xl p-8 shadow-sm">
@@ -1185,6 +1264,14 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             <Send size={16} /> ✈️ @Pay_Gouzbot orqali kirish (1-klikda)
           </a>
 
+          {/* Realtime Waiting Indicator with Cogs */}
+          {loginPendingToken && (
+            <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
+              <ButtonGearSpinner className="size-3.5 text-blue-600" />
+              <span>Telegram orqali tasdiqlash kutilmoqda... (1 soniya)</span>
+            </div>
+          )}
+
           <div className="relative my-6 text-center">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-[#e2e8f0]"></div>
@@ -1208,9 +1295,17 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             </div>
             <button
               type="submit"
-              className="w-full rounded-xl border border-[#cbd5e1] bg-white py-2.5 text-xs font-bold text-[#152238] hover:bg-[#f8fafc] transition"
+              disabled={directLoginLoading}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-[#cbd5e1] bg-white py-2.5 text-xs font-bold text-[#152238] hover:bg-[#f8fafc] transition disabled:opacity-60"
             >
-              ID orqali kirish
+              {directLoginLoading ? (
+                <>
+                  <ButtonGearSpinner className="size-4 text-blue-600" />
+                  <span>Tekshirilmoqda...</span>
+                </>
+              ) : (
+                <span>ID orqali kirish</span>
+              )}
             </button>
           </form>
 
@@ -1501,7 +1596,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         {/* Navigation Tabs */}
         <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#e2e8f0] pb-3">
           <button
-            onClick={() => setActiveTab('shop_settings')}
+            onClick={() => handleSwitchTab('shop_settings')}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
               activeTab === 'shop_settings'
                 ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1512,7 +1607,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           </button>
 
           <button
-            onClick={() => setActiveTab('my_shops')}
+            onClick={() => handleSwitchTab('my_shops')}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
               activeTab === 'my_shops'
                 ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1523,10 +1618,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           </button>
 
           <button
-            onClick={() => {
-              setActiveTab('vip_rooms')
-              loadVipRooms()
-            }}
+            onClick={() => handleSwitchTab('vip_rooms', () => loadVipRooms())}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
               activeTab === 'vip_rooms'
                 ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1537,7 +1629,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           </button>
 
           <button
-            onClick={() => setActiveTab('test_payment')}
+            onClick={() => handleSwitchTab('test_payment')}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
               activeTab === 'test_payment'
                 ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1548,7 +1640,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           </button>
 
           <button
-            onClick={() => setActiveTab('webhook_docs')}
+            onClick={() => handleSwitchTab('webhook_docs')}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
               activeTab === 'webhook_docs'
                 ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1559,10 +1651,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           </button>
 
           <button
-            onClick={() => {
-              setActiveTab('logs')
-              fetchMyLogs()
-            }}
+            onClick={() => handleSwitchTab('logs', () => fetchMyLogs())}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
               activeTab === 'logs'
                 ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1582,7 +1671,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           {currentUser?.isAdmin && (
             <>
               <button
-                onClick={() => setActiveTab('overview')}
+                onClick={() => handleSwitchTab('overview')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'overview'
                     ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1593,10 +1682,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </button>
 
               <button
-                onClick={() => {
-                  setActiveTab('shops')
-                  if (!crmData) loadCrm()
-                }}
+                onClick={() => handleSwitchTab('shops', () => { if (!crmData) loadCrm() })}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'shops'
                     ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1614,7 +1700,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </Link>
 
               <button
-                onClick={() => setActiveTab('users')}
+                onClick={() => handleSwitchTab('users')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'users'
                     ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1625,7 +1711,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </button>
 
               <button
-                onClick={() => setActiveTab('broadcast')}
+                onClick={() => handleSwitchTab('broadcast')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'broadcast'
                     ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1636,7 +1722,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </button>
 
               <button
-                onClick={() => setActiveTab('official_channels')}
+                onClick={() => handleSwitchTab('official_channels')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'official_channels'
                     ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1647,7 +1733,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </button>
 
               <button
-                onClick={() => setActiveTab('admins')}
+                onClick={() => handleSwitchTab('admins')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'admins'
                     ? 'bg-[#1769e0] text-white shadow-sm'
@@ -1658,7 +1744,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </button>
 
               <button
-                onClick={() => setActiveTab('db_backup')}
+                onClick={() => handleSwitchTab('db_backup')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
                   activeTab === 'db_backup'
                     ? 'bg-[#16865b] text-white shadow-sm'
@@ -1670,6 +1756,18 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             </>
           )}
         </div>
+
+        {/* Dynamic Gear Loader Transition for Tab changes */}
+        {tabLoading && (
+          <div className="my-12 flex justify-center py-8">
+            <GearLoader
+              size="md"
+              variant="blue"
+              text="Bo‘lim ma’lumotlari yuklanmoqda..."
+              subtext="Neon PostgreSQL bazasidan so‘nggi holat olinmoqda"
+            />
+          </div>
+        )}
 
         {/* ------------------------------------------------------------- */}
         {/* TAB: SHOP SETTINGS (Full Card Number, Channel, Webhook, Logo) */}
@@ -2550,7 +2648,16 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                 <span className="text-xs text-slate-400">Bot guruhda Admin (Restrict ruxsati bilan) bo‘lishi shart</span>
               </div>
 
-              {vipRooms.length === 0 ? (
+              {vipLoading ? (
+                <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center">
+                  <GearLoader
+                    size="lg"
+                    variant="emerald"
+                    text="VIP Guruhlar yuklanmoqda..."
+                    subtext="Neon PostgreSQL bazasidan guruhlar va pullik a’zoliklar olinmoqda"
+                  />
+                </div>
+              ) : vipRooms.length === 0 ? (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
                   <Lock size={36} className="mx-auto text-indigo-400 mb-2" />
                   <h4 className="text-sm font-bold text-slate-800">Hozircha VIP Guruh ulanmagan</h4>
@@ -2992,11 +3099,13 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             </div>
 
             {logsLoading && logs.length === 0 ? (
-              <div className="grid h-64 place-items-center rounded-3xl border border-[#e3e8f0] bg-white shadow-sm">
-                <div className="text-center">
-                  <RefreshCw className="mx-auto mb-3 animate-spin text-[#1769e0]" size={36} />
-                  <p className="text-xs font-semibold text-[#64748b]">Loglar yuklanmoqda...</p>
-                </div>
+              <div className="rounded-3xl border border-[#e3e8f0] bg-white p-12 text-center shadow-sm">
+                <GearLoader
+                  size="lg"
+                  variant="blue"
+                  text="Tizim loglari yuklanmoqda..."
+                  subtext="Neon bazasidan so‘nggi to‘lov va webhook qaydlari olinmoqda"
+                />
               </div>
             ) : logs.length === 0 ? (
               <div className="overflow-hidden rounded-3xl border border-[#e3e8f0] bg-white p-12 text-center shadow-sm">
@@ -3083,6 +3192,17 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         {/* ------------------------------------------------------------- */}
         {/* TAB: ADMIN OVERVIEW & STATS */}
         {/* ------------------------------------------------------------- */}
+        {activeTab === 'overview' && currentUser?.isAdmin && !crmData && (
+          <div className="rounded-3xl border border-[#e2e8f0] bg-white p-12 text-center shadow-sm">
+            <GearLoader
+              size="lg"
+              variant="blue"
+              text="Admin statistikasi yuklanmoqda..."
+              subtext="Do‘konlar, foydalanuvchilar va to‘lovlar hisoblanmoqda"
+            />
+          </div>
+        )}
+
         {activeTab === 'overview' && currentUser?.isAdmin && crmData && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
