@@ -38,6 +38,7 @@ import { startHumoUserbot, stopHumoUserbot, isUserbotActive } from '@/lib/telegr
 import { parseBankNotification } from '@/lib/telegram-humo-parser'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 import { generateReceiptPdfBuffer } from '@/lib/pdf-receipt'
+import { sendBackupToTelegram, generateDatabaseSqlDump, exportNeonDatabaseFull } from '@/lib/db/backup'
 
 export const dynamic = 'force-dynamic'
 
@@ -193,7 +194,8 @@ const adminMenu = {
     [{ text: '📣 Rasmiy Kanal & Majburiy Obuna' }, { text: '👥 Adminlar boshqaruvi' }],
     [{ text: '📢 Reklama & Broadcast' }, { text: '🛑 Faoliyat boshqaruvi' }],
     [{ text: '📊 Barcha statistika' }, { text: '🤖 Userbotlar holati' }],
-    [{ text: '🏠 Asosiy menyuga qaytish' }, { text: '🌐 Web CRM Dashboard' }],
+    [{ text: '💾 Baza Backup (.zip / .sql)' }, { text: '🌐 Web CRM Dashboard' }],
+    [{ text: '🏠 Asosiy menyuga qaytish' }],
   ],
   resize_keyboard: true,
   one_time_keyboard: true,
@@ -2658,6 +2660,48 @@ export async function POST(request: Request) {
           ],
         }
       )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'admin_backup_menu') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      await send(
+        token,
+        chatId,
+        `💾 <b>Neon PostgreSQL Baza Backup Tizimi</b>\n\n` +
+        `Qaysi formatda ma’lumotlarni qabul qilmoqchisiz?\n\n` +
+        `📦 <b>ZIP Arxiv (.zip):</b> 100% asl sifatda siqilgan fayl (barcha jadvallar va DDL)\n` +
+        `📄 <b>SQL Dump (.sql):</b> To‘g‘ridan-to‘g‘ri PostgreSQL psql orqali import qilinuvchi fayl\n` +
+        `⚡️ <b>Ikkalasini ham (.zip + .sql):</b> To‘liq arxiv to‘plami`,
+        {
+          inline_keyboard: [
+            [{ text: '📦 ZIP Faylni Yuborish (.zip)', callback_data: 'admin_backup_zip' }],
+            [{ text: '📄 SQL Faylni Yuborish (.sql)', callback_data: 'admin_backup_sql' }],
+            [{ text: '⚡️ Ikkalasini ham Yuborish (.zip + .sql)', callback_data: 'admin_backup_both' }],
+            [{ text: '🌐 Web CRM orqali Yuklash', url: `${APP_URL}/admin` }],
+          ],
+        }
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data === 'admin_backup_zip' || data === 'admin_backup_sql' || data === 'admin_backup_both') {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+
+      await send(token, chatId, `⏳ <i>Neon bazasi bilan bog‘lanilmoqda va backup tayyorlanmoqda, iltimos kuting...</i>`)
+      
+      const format = data === 'admin_backup_zip' ? 'zip' : data === 'admin_backup_sql' ? 'sql' : 'both'
+      const res = await sendBackupToTelegram({
+        botToken: token,
+        chatId: Number(chatId),
+        format,
+      })
+
+      if (!res.ok) {
+        await send(token, chatId, `❌ <b>Backup yaratishda xatolik:</b> ${res.description || 'Noma’lum xatolik'}`)
+      }
       return NextResponse.json({ ok: true })
     }
 
@@ -6394,6 +6438,52 @@ export async function POST(request: Request) {
       `⏳ <b>Kutilayotgan to‘lovlar:</b> ${allPayments.filter((p) => p.status === 'pending').length} ta\n` +
       `🌐 <b>Web CRM Dashboard:</b> <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
       adminMenu
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  // Database Backup command
+  if (
+    text === '💾 Baza Backup (.zip / .sql)' ||
+    text === '💾 Baza Backup' ||
+    text === 'Baza Backup' ||
+    raw === '/backup' ||
+    raw === '/backup_zip' ||
+    raw === '/backup_sql' ||
+    raw === '/db_backup'
+  ) {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) return NextResponse.json({ ok: true })
+
+    if (raw === '/backup_zip') {
+      await send(token, chatId, `⏳ <i>Neon bazasidan .zip backup tayyorlanmoqda...</i>`)
+      await sendBackupToTelegram({ botToken: token, chatId: Number(chatId), format: 'zip' })
+      return NextResponse.json({ ok: true })
+    }
+
+    if (raw === '/backup_sql') {
+      await send(token, chatId, `⏳ <i>Neon bazasidan .sql dump tayyorlanmoqda...</i>`)
+      await sendBackupToTelegram({ botToken: token, chatId: Number(chatId), format: 'sql' })
+      return NextResponse.json({ ok: true })
+    }
+
+    await send(
+      token,
+      chatId,
+      `💾 <b>Neon PostgreSQL Baza Backup Tizimi</b>\n\n` +
+      `Neon PostgreSQL bazasidagi barcha jadvallar, DDL sxemalar va yozuvlarni to‘liq sifatli yuklab olishingiz mumkin.\n\n` +
+      `📦 <b>ZIP Arxiv (.zip):</b> 100% asl sifatda siqilgan fayl\n` +
+      `📄 <b>SQL Dump (.sql):</b> To‘liq SQL DDL va ma’lumotlar\n` +
+      `⚡️ <b>Ikkalasini ham:</b> ZIP + SQL to‘plami\n\n` +
+      `<i>Tanlang:</i>`,
+      {
+        inline_keyboard: [
+          [{ text: '📦 ZIP Faylni Yuborish (.zip)', callback_data: 'admin_backup_zip' }],
+          [{ text: '📄 SQL Faylni Yuborish (.sql)', callback_data: 'admin_backup_sql' }],
+          [{ text: '⚡️ Ikkalasini ham Yuborish (.zip + .sql)', callback_data: 'admin_backup_both' }],
+          [{ text: '🌐 Web CRM orqali Yuklash', url: `${APP_URL}/admin` }],
+        ],
+      }
     )
     return NextResponse.json({ ok: true })
   }

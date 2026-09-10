@@ -45,10 +45,13 @@ import {
   HelpCircle,
   Filter,
   ShieldAlert,
+  Database,
+  Archive,
 } from 'lucide-react'
 import Link from 'next/link'
+import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
 
-export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels'
+export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels' | 'db_backup'
 
 export interface PaybotDashboardProps {
   initialTab?: TabType
@@ -1652,6 +1655,17 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                 }`}
               >
                 <UserCheck size={15} /> 🛠 Adminlar
+              </button>
+
+              <button
+                onClick={() => setActiveTab('db_backup')}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                  activeTab === 'db_backup'
+                    ? 'bg-[#16865b] text-white shadow-sm'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                }`}
+              >
+                <Database size={15} className={activeTab === 'db_backup' ? 'text-white' : 'text-emerald-700'} /> 💾 Neon Baza Backup (.zip / .sql)
               </button>
             </>
           )}
@@ -5160,6 +5174,13 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               )}
             </div>
           </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: DATABASE BACKUP (Neon SQL & ZIP Export) */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'db_backup' && (
+          <DatabaseBackupPanel adminTelegramId={currentUser?.telegramId || currentUser?.userId} />
         )}
 
         {/* ------------------------------------------------------------- */}
