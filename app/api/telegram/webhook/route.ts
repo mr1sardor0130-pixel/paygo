@@ -1802,6 +1802,7 @@ async function renderVipRoomManager(token: string, chatId: number | string, user
     `• <b>Chat ID:</b> <code>${room.chatId}</code>\n` +
     `• <b>Rejim:</b> ${room.mode === 'write_permission' ? '✍️ Xabar yozish huquqi (Avto-Mute)' : '🚪 VIP yopiq a’zolik'}\n` +
     `• <b>Holati:</b> ${room.active ? '🟢 Faol (Ishlamoqda)' : '⏸ Nofaol (To‘xtatilgan)'}\n` +
+    `• <b>To‘lov Usuli:</b> ${room.paymentType === 'manual' ? `📝 <b>Manual Karta</b> (<code>${room.manualCardNumber || 'Kiritilmagan'}</code>)` : '⚡️ <b>Avtomat (HUMO Bot)</b>'}\n` +
     `• <b>Bog‘langan Do‘kon/Karta:</b> 💳 <b>${shopName}</b>\n\n` +
     `💰 <b>O‘rnatilgan Tariflar:</b>\n` +
     `• ⏱ 1 Soat: <code>${Number(room.hourlyPrice).toLocaleString('uz-UZ')} UZS</code>\n` +
@@ -1817,6 +1818,10 @@ async function renderVipRoomManager(token: string, chatId: number | string, user
     [
       { text: '✏️ Nom & Tavsifni Tahrirlash', callback_data: `edit_room_title_${room.id}` },
       { text: '💰 Narxlarni O‘zgartirish', callback_data: `edit_room_prices_${room.id}` },
+    ],
+    [
+      { text: room.paymentType === 'manual' ? '⚡️ Avto To‘lovga O‘tkazish' : '📝 Manual To‘lovga O‘tkazish', callback_data: `toggle_room_paymode_${room.id}` },
+      { text: '📝 Karta & Ism Kiritish', callback_data: `edit_room_mcard_${room.id}` },
     ],
     [
       { text: '💳 Kartani / Do‘konni Almashtirish', callback_data: `edit_room_shop_${room.id}` },
@@ -2591,6 +2596,39 @@ export async function POST(request: Request) {
       await db.update(paidAccessRooms).set({ shopId, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
       await send(token, chatId, '✅ Qabul qiluvchi do‘kon/karta muvaffaqiyatli almashtirildi!')
       await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('toggle_room_paymode_')) {
+      const rId = data.replace('toggle_room_paymode_', '')
+      const rRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, rId)).limit(1)
+      if (rRows.length) {
+        const nextPay = rRows[0].paymentType === 'manual' ? 'auto' : 'manual'
+        await db.update(paidAccessRooms).set({ paymentType: nextPay, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
+        await send(
+          token,
+          chatId,
+          `✅ To‘lov usuli o‘zgartirildi:\n\n` +
+            (nextPay === 'manual'
+              ? `📝 <b>Qo‘lda (Manual) To‘lov</b> — Foydalanuvchilar to‘lov chekini (screenshot) yuboradi va siz tasdiqlaganingizdan so‘ng guruhga qo‘shiladi/yozish ruxsati ochiladi.`
+              : `⚡️ <b>Avtomat To‘lov (HUMO)</b> — Bot orqali avtomatik to‘lov o‘tadi va zumda ochiladi.`)
+        )
+      }
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (data.startsWith('edit_room_mcard_')) {
+      const rId = data.replace('edit_room_mcard_', '')
+      await stateSet(Number(chatId), { step: 'vip_edit_manual_card', vipRoom: { id: rId } })
+      await send(
+        token,
+        chatId,
+        `📝 <b>Qo‘lda to‘lov uchun Karta va Ism-Familya kiritish</b>\n\n` +
+          `Iltimos, mijozlar pul o‘tkazishi uchun karta raqamingiz va karta egasining ism-familyasini quyidagi formatda yuboring:\n\n` +
+          `<code>8600123456789012 Sardor Aliyev</code>\n\n` +
+          `<i>(Bekor qilish uchun /cancel deb yozing)</i>`
+      )
       return NextResponse.json({ ok: true })
     }
 
@@ -6121,6 +6159,39 @@ export async function POST(request: Request) {
       await db.update(paidAccessRooms).set({ title: newTitle, updatedAt: new Date() }).where(eq(paidAccessRooms.id, rId))
       await stateDelete(chatId)
       await send(token, chatId, `✅ <b>Guruh/kanal nomi muvaffaqiyatli saqlandi:</b> <i>${newTitle}</i>`, menu)
+      await renderVipRoomManager(token, chatId, userIdStr, rId)
+      return NextResponse.json({ ok: true })
+    }
+  }
+
+  if (flow?.step === 'vip_edit_manual_card') {
+    const input = raw.trim()
+    const rId = flow.vipRoom?.id
+    if (rId && input) {
+      // Extract digits for card number
+      const cardDigits = input.replace(/\D/g, '').slice(0, 16)
+      const ownerName = input.replace(/\d+/g, '').replace(/[-_.,]/g, ' ').trim() || 'Karta Egasi'
+      
+      await db
+        .update(paidAccessRooms)
+        .set({
+          manualCardNumber: cardDigits || input,
+          manualCardOwner: ownerName,
+          paymentType: 'manual',
+          updatedAt: new Date(),
+        })
+        .where(eq(paidAccessRooms.id, rId))
+
+      await stateDelete(chatId)
+      await send(
+        token,
+        chatId,
+        `✅ <b>Qo‘lda to‘lov rekvizitlari saqlandi va guruh uchun yoqildi!</b>\n\n` +
+          `• Karta: <code>${cardDigits || input}</code>\n` +
+          `• Karta egasi: <b>${ownerName}</b>\n\n` +
+          `<i>Endi mijozlar to‘lov qilganda ushbu karta ko‘rsatiladi va chek so‘raladi.</i>`,
+        menu
+      )
       await renderVipRoomManager(token, chatId, userIdStr, rId)
       return NextResponse.json({ ok: true })
     }

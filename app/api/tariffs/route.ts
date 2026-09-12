@@ -66,9 +66,11 @@ export async function GET(request: Request) {
     } : null,
   })
 
-  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
-  response.headers.set('Pragma', 'no-cache')
-  response.headers.set('Expires', '0')
+  if (!targetTgId) {
+    response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600')
+  } else {
+    response.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
+  }
 
   return response
 }

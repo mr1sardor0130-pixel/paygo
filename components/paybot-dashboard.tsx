@@ -116,8 +116,10 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   // VIP Group / Channel Access State
   const [vipRooms, setVipRooms] = useState<any[]>([])
   const [vipMembers, setVipMembers] = useState<any[]>([])
+  const [manualRequests, setManualRequests] = useState<any[]>([])
   const [vipStats, setVipStats] = useState<any>(null)
   const [vipLoading, setVipLoading] = useState(false)
+  const [manualReqLoading, setManualReqLoading] = useState(false)
   const [isNewVipRoomModalOpen, setIsNewVipRoomModalOpen] = useState(false)
   const [isAddVipMemberModalOpen, setIsAddVipMemberModalOpen] = useState(false)
   const [newVipRoomForm, setNewVipRoomForm] = useState({
@@ -222,6 +224,50 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     }
   }, [tariffPayModal])
 
+  const compressImageClient = async (file: File, maxWidth = 400, quality = 0.8): Promise<Blob | File> => {
+    if (!file.type.startsWith('image/')) return file
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let width = img.width
+          let height = img.height
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width)
+            width = maxWidth
+          }
+
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            resolve(file)
+            return
+          }
+          ctx.drawImage(img, 0, 0, width, height)
+          canvas.toBlob(
+            (blob) => {
+              if (blob && blob.size < file.size) {
+                resolve(blob)
+              } else {
+                resolve(file)
+              }
+            },
+            'image/webp',
+            quality
+          )
+        }
+        img.onerror = () => resolve(file)
+        img.src = e.target?.result as string
+      }
+      reader.onerror = () => resolve(file)
+      reader.readAsDataURL(file)
+    })
+  }
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -232,8 +278,9 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     }
 
     try {
+      const optimizedBlob = await compressImageClient(file, 400, 0.8)
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', optimizedBlob, 'logo.webp')
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -419,10 +466,17 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     }
   }
 
-  // 3. Poll Telegram Login Token (Super-fast 1s poll)
+  // 3. Poll Telegram Login Token (Optimized 2s poll with auto-timeout)
   useEffect(() => {
     if (!loginPendingToken || currentUser) return
+    let attempts = 0
+    const maxAttempts = 60 // 2 minutes max
     const interval = setInterval(async () => {
+      attempts++
+      if (attempts > maxAttempts) {
+        clearInterval(interval)
+        return
+      }
       try {
         const res = await fetch(`/api/auth/telegram-poll?token=${loginPendingToken}`)
         const data = await res.json()
@@ -432,7 +486,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           await verifyUser(data.token, data.userId)
         }
       } catch {}
-    }, 1000)
+    }, 2000)
 
     return () => clearInterval(interval)
   }, [loginPendingToken, currentUser])
@@ -617,12 +671,81 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       if (data.ok) {
         setVipRooms(data.rooms || [])
         setVipMembers(data.members || [])
+        setManualRequests(data.manualRequests || [])
         setVipStats(data.stats || null)
       }
     } catch {
       // safe bypass
     } finally {
       setVipLoading(false)
+    }
+  }
+
+  // Approve Manual Payment Request from Web Dashboard
+  const handleApproveManualRequest = async (requestId: string) => {
+    const effToken = token
+    const effUid = currentUser?.telegramId || currentUser?.userId || ''
+    setManualReqLoading(true)
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${effToken}`,
+          'x-telegram-user-id': effUid,
+        },
+        body: JSON.stringify({
+          action: 'approve_manual_request',
+          requestId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast('To‘lov tasdiqlandi va a’zolik ochildi!')
+        if (data.manualRequests) setManualRequests(data.manualRequests)
+        if (data.members) setVipMembers(data.members)
+        loadVipRooms()
+      } else {
+        showToast(data.error || 'Xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    } finally {
+      setManualReqLoading(false)
+    }
+  }
+
+  // Reject Manual Payment Request from Web Dashboard
+  const handleRejectManualRequest = async (requestId: string) => {
+    if (!confirm('Haqiqatan ham ushbu to‘lov chekini rad etmoqchimisiz?')) return
+    const effToken = token
+    const effUid = currentUser?.telegramId || currentUser?.userId || ''
+    setManualReqLoading(true)
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${effToken}`,
+          'x-telegram-user-id': effUid,
+        },
+        body: JSON.stringify({
+          action: 'reject_manual_request',
+          requestId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast('To‘lov cheki rad etildi')
+        if (data.manualRequests) setManualRequests(data.manualRequests)
+        loadVipRooms()
+      } else {
+        showToast(data.error || 'Xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    } finally {
+      setManualReqLoading(false)
     }
   }
 
@@ -2693,6 +2816,9 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                               <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700">
                                 {room.mode === 'write_permission' ? '✍️ Yozish huquqi' : '🔒 Yopiq a’zolik'}
                               </span>
+                              <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${room.paymentType === 'manual' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>
+                                {room.paymentType === 'manual' ? `📝 Manual (${room.manualCardNumber?.slice(-4) ? `*${room.manualCardNumber.slice(-4)}` : 'Karta'})` : '⚡️ Avto-to‘lov'}
+                              </span>
                             </div>
                             <h4 className="text-base font-bold text-slate-900 mt-1">{room.title}</h4>
                             <p className="font-mono text-xs text-slate-400">{room.chatId}</p>
@@ -2766,6 +2892,126 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Manual Payment Requests Table (Cheklar & Tasdiqlash) */}
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">
+                      📥 Kelib Tushgan Cheklar & Qo‘lda Tasdiqlash
+                    </h3>
+                    {manualRequests.filter((r) => r.status === 'pending').length > 0 && (
+                      <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-black animate-pulse">
+                        {manualRequests.filter((r) => r.status === 'pending').length} ta kutilmoqda
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Foydalanuvchilar botga yuborgan to‘lov cheklari. Tasdiqlash tugmasini bossangiz, mijozga avtomatik guruhda a’zolik ochiladi.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadVipRooms()}
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  🔄 Yangilash
+                </button>
+              </div>
+
+              {manualRequests.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Hozircha qo‘lda to‘lov so‘rovlari mavjud emas.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                        <th className="pb-3">Mijoz (Telegram)</th>
+                        <th className="pb-3">Guruh</th>
+                        <th className="pb-3">Tarif</th>
+                        <th className="pb-3">Summa</th>
+                        <th className="pb-3">Sana</th>
+                        <th className="pb-3">Holat</th>
+                        <th className="pb-3 text-right">Amal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {manualRequests.map((req) => {
+                        const targetRoom = vipRooms.find((r) => r.id === req.roomId)
+                        const periodName = req.period === 'hour' ? '1 Soat' : req.period === 'day' ? '1 Kun' : req.period === 'week' ? '1 Hafta' : '1 Oy'
+                        return (
+                          <tr key={req.id} className="hover:bg-slate-50/60">
+                            <td className="py-3">
+                              <span className="font-mono font-bold text-slate-900 block">{req.userId}</span>
+                              <span className="text-[11px] text-slate-400">
+                                {req.fullName || (req.username ? `@${req.username}` : 'Mijoz')}
+                              </span>
+                            </td>
+                            <td className="py-3 font-medium text-slate-700">{targetRoom?.title || req.roomId}</td>
+                            <td className="py-3 font-semibold text-indigo-600">{periodName}</td>
+                            <td className="py-3 font-bold text-slate-800">
+                              {Number(req.amount).toLocaleString('uz-UZ')} UZS
+                            </td>
+                            <td className="py-3 text-slate-500 text-[11px]">
+                              {new Date(req.createdAt).toLocaleString('uz-UZ', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </td>
+                            <td className="py-3">
+                              <span
+                                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                  req.status === 'approved'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : req.status === 'rejected'
+                                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    : 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
+                                }`}
+                              >
+                                {req.status === 'approved'
+                                  ? '✅ Tasdiqlangan'
+                                  : req.status === 'rejected'
+                                  ? '❌ Rad etilgan'
+                                  : '⏳ Kutilmoqda'}
+                              </span>
+                            </td>
+                            <td className="py-3 text-right">
+                              {req.status === 'pending' ? (
+                                <div className="inline-flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={manualReqLoading}
+                                    onClick={() => handleApproveManualRequest(req.id)}
+                                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 transition shadow-sm"
+                                  >
+                                    ✅ Tasdiqlash
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={manualReqLoading}
+                                    onClick={() => handleRejectManualRequest(req.id)}
+                                    className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 transition"
+                                  >
+                                    ❌ Rad etish
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">Ko‘rib chiqilgan</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

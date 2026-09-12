@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { paidAccessRooms, paidAccessMembers } from '@/lib/db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { paidAccessRooms, paidAccessMembers, manualPaymentRequests } from '@/lib/db/schema'
+import { eq, desc, and } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
 import { resolveAuthUser } from '@/lib/auth-server'
 
@@ -22,6 +22,7 @@ export async function GET(request: Request) {
   try {
     const rooms = await db.select().from(paidAccessRooms).orderBy(desc(paidAccessRooms.createdAt))
     const members = await db.select().from(paidAccessMembers).orderBy(desc(paidAccessMembers.createdAt)).limit(150)
+    const manualRequests = await db.select().from(manualPaymentRequests).orderBy(desc(manualPaymentRequests.createdAt)).limit(100)
 
     const activeRooms = rooms.filter((r) => r.active)
     const activeMembers = members.filter((m) => m.status === 'active' && new Date(m.expiresAt) > new Date())
@@ -31,12 +32,14 @@ export async function GET(request: Request) {
       ok: true,
       rooms,
       members,
+      manualRequests,
       stats: {
         totalRooms: rooms.length,
         activeRooms: activeRooms.length,
         totalMembers: members.length,
         activeMembers: activeMembers.length,
         totalVolume,
+        pendingManualRequests: manualRequests.filter((r) => r.status === 'pending').length,
       },
     })
   } catch (err: any) {
@@ -228,6 +231,172 @@ export async function POST(request: Request) {
 
       const members = await db.select().from(paidAccessMembers).orderBy(desc(paidAccessMembers.createdAt)).limit(150)
       return NextResponse.json({ ok: true, message: 'Foydalanuvchi ruxsati bekor qilindi', members })
+    }
+
+    // 6. Approve Manual Payment Request from Web Dashboard
+    if (action === 'approve_manual_request') {
+      const { requestId } = body
+      if (!requestId) return NextResponse.json({ error: 'So‘rov ID topilmadi' }, { status: 400 })
+
+      const reqRows = await db.select().from(manualPaymentRequests).where(eq(manualPaymentRequests.id, requestId)).limit(1)
+      if (!reqRows.length) {
+        return NextResponse.json({ error: 'So‘rov topilmadi' }, { status: 404 })
+      }
+      const mreq = reqRows[0]
+      const roomRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, mreq.roomId)).limit(1)
+      const room = roomRows.length ? roomRows[0] : null
+
+      const isOwnerOrAdmin = isAdmin || (room && room.ownerTelegramId === (user.telegramId || user.userId))
+      if (!isOwnerOrAdmin) {
+        return NextResponse.json({ error: 'Ruxsat berilmadi' }, { status: 403 })
+      }
+
+      await db.update(manualPaymentRequests).set({ status: 'approved', updatedAt: new Date() }).where(eq(manualPaymentRequests.id, requestId))
+
+      const token = process.env.TELEGRAM_BOT_TOKEN || process.env.HUMO_BOT_TOKEN
+
+      let expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      if (mreq.period === 'hour') expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+      else if (mreq.period === 'day') expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      else if (mreq.period === 'week') expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+      const existingMem = await db
+        .select()
+        .from(paidAccessMembers)
+        .where(and(eq(paidAccessMembers.roomId, mreq.roomId), eq(paidAccessMembers.userId, mreq.userId)))
+        .limit(1)
+
+      if (existingMem.length > 0) {
+        await db
+          .update(paidAccessMembers)
+          .set({
+            status: 'active',
+            period: mreq.period,
+            expiresAt,
+            amountPaid: String((Number(existingMem[0].amountPaid) || 0) + (mreq.amount || 0)),
+            username: mreq.username || existingMem[0].username,
+            fullName: mreq.fullName || existingMem[0].fullName,
+            updatedAt: new Date(),
+          })
+          .where(eq(paidAccessMembers.id, existingMem[0].id))
+      } else {
+        await db.insert(paidAccessMembers).values({
+          id: `pmem_${randomUUID().replace(/-/g, '').slice(0, 10)}`,
+          roomId: mreq.roomId,
+          userId: mreq.userId,
+          username: mreq.username || null,
+          fullName: mreq.fullName || null,
+          status: 'active',
+          period: mreq.period,
+          amountPaid: String(mreq.amount || 0),
+          expiresAt,
+        })
+      }
+
+      let inviteLink = ''
+      if (token && room) {
+        if (room.mode === 'write_permission') {
+          try {
+            await fetch(`https://api.telegram.org/bot${token}/restrictChatMember`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: room.chatId,
+                user_id: Number(mreq.userId),
+                permissions: {
+                  can_send_messages: true,
+                  can_send_media_messages: true,
+                  can_send_other_messages: true,
+                  can_add_web_page_previews: true,
+                },
+              }),
+            })
+          } catch {}
+        } else if (room.mode === 'invite_only') {
+          try {
+            const linkRes = await fetch(`https://api.telegram.org/bot${token}/createChatInviteLink`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: room.chatId,
+                member_limit: 1,
+                name: `VIP-${mreq.userId}`,
+              }),
+            })
+            const linkData = await linkRes.json()
+            if (linkData.ok && linkData.result?.invite_link) {
+              inviteLink = linkData.result.invite_link
+            }
+          } catch {}
+        }
+
+        // Notify user via Telegram
+        const periodName = mreq.period === 'hour' ? '1 Soat' : mreq.period === 'day' ? '1 Kun' : mreq.period === 'week' ? '1 Hafta' : '1 Oy'
+        const userMsg =
+          `🎉 <b>Sizning VIP to‘lovingiz tasdiqlandi!</b>\n\n` +
+          `• Guruh: <b>${room.title}</b>\n` +
+          `• Tarif: <b>${periodName}</b>\n` +
+          `• Amal qilish muddati: <b>${expiresAt.toLocaleString('uz-UZ')}</b>\n\n` +
+          (room.mode === 'write_permission'
+            ? `✅ Guruhda yozish va media yuborish huquqingiz ochildi!`
+            : `🔗 <b>VIP Guruhga Kirish Havolasi:</b>\n${inviteLink || 'Taklif havolasi yaratilmadi'}`)
+
+        try {
+          await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: mreq.userId,
+              text: userMsg,
+              parse_mode: 'HTML',
+            }),
+          })
+        } catch {}
+      }
+
+      const manualRequests = await db.select().from(manualPaymentRequests).orderBy(desc(manualPaymentRequests.createdAt)).limit(100)
+      const members = await db.select().from(paidAccessMembers).orderBy(desc(paidAccessMembers.createdAt)).limit(150)
+      return NextResponse.json({ ok: true, message: 'To‘lov tasdiqlandi va mijozga ruxsat ochildi!', manualRequests, members })
+    }
+
+    // 7. Reject Manual Payment Request from Web Dashboard
+    if (action === 'reject_manual_request') {
+      const { requestId } = body
+      if (!requestId) return NextResponse.json({ error: 'So‘rov ID topilmadi' }, { status: 400 })
+
+      const reqRows = await db.select().from(manualPaymentRequests).where(eq(manualPaymentRequests.id, requestId)).limit(1)
+      if (!reqRows.length) {
+        return NextResponse.json({ error: 'So‘rov topilmadi' }, { status: 404 })
+      }
+      const mreq = reqRows[0]
+      const roomRows = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.id, mreq.roomId)).limit(1)
+      const room = roomRows.length ? roomRows[0] : null
+
+      const isOwnerOrAdmin = isAdmin || (room && room.ownerTelegramId === (user.telegramId || user.userId))
+      if (!isOwnerOrAdmin) {
+        return NextResponse.json({ error: 'Ruxsat berilmadi' }, { status: 403 })
+      }
+
+      await db.update(manualPaymentRequests).set({ status: 'rejected', updatedAt: new Date() }).where(eq(manualPaymentRequests.id, requestId))
+
+      const token = process.env.TELEGRAM_BOT_TOKEN || process.env.HUMO_BOT_TOKEN
+      if (token && room) {
+        const periodName = mreq.period === 'hour' ? '1 Soat' : mreq.period === 'day' ? '1 Kun' : mreq.period === 'week' ? '1 Hafta' : '1 Oy'
+        try {
+          await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: mreq.userId,
+              text: `❌ <b>Siz yuborgan to‘lov cheki rad etildi.</b>\n\n• Guruh: <b>${room.title}</b>\n• Tarif: <b>${periodName}</b>\n\n<i>Qayta to‘lov qilish uchun botga kiring yoki admin bilan bog‘laning.</i>`,
+              parse_mode: 'HTML',
+            }),
+          })
+        } catch {}
+      }
+
+      const manualRequests = await db.select().from(manualPaymentRequests).orderBy(desc(manualPaymentRequests.createdAt)).limit(100)
+      return NextResponse.json({ ok: true, message: 'To‘lov cheki rad etildi', manualRequests })
     }
 
     return NextResponse.json({ error: 'Noma’lum amal' }, { status: 400 })
