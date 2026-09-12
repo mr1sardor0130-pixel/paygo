@@ -343,6 +343,10 @@ export const paidAccessRooms = pgTable('paid_access_rooms', {
   weeklyPrice: integer('weeklyPrice').notNull().default(50000), // UZS
   monthlyPrice: integer('monthlyPrice').notNull().default(120000), // UZS
   currency: text('currency').notNull().default('UZS'),
+  paymentType: text('paymentType').notNull().default('auto'), // 'auto' (shop linked) | 'manual' (custom card + screenshot receipt)
+  manualCardNumber: text('manualCardNumber'),
+  manualCardOwner: text('manualCardOwner'),
+  manualInstructions: text('manualInstructions'),
   active: boolean('active').notNull().default(true),
   welcomeMessage: text('welcomeMessage'),
   ownerTelegramId: text('ownerTelegramId'),
@@ -363,6 +367,22 @@ export const paidAccessMembers = pgTable('paid_access_members', {
   expiresAt: timestamp('expiresAt').notNull(),
   paymentId: text('paymentId'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
+export const manualPaymentRequests = pgTable('manual_payment_requests', {
+  id: text('id').primaryKey(),
+  roomId: text('roomId').notNull(),
+  userId: text('userId').notNull(),
+  username: text('username'),
+  fullName: text('fullName'),
+  period: text('period').notNull(), // 'hour' | 'day' | 'week' | 'month'
+  amount: integer('amount').notNull(),
+  photoFileId: text('photoFileId'),
+  status: text('status').notNull().default('pending'), // 'pending' | 'approved' | 'rejected'
+  adminMessageId: integer('adminMessageId'),
+  adminChatId: text('adminChatId'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 })
 
 // Telegram Business Chatbot Connections (Telegram Business API)

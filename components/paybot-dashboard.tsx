@@ -130,6 +130,10 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     weeklyPrice: 50000,
     monthlyPrice: 120000,
     welcomeMessage: '',
+    paymentType: 'auto',
+    manualCardNumber: '',
+    manualCardOwner: '',
+    manualInstructions: '',
   })
   const [addVipMemberForm, setAddVipMemberForm] = useState({
     roomId: '',
@@ -6078,6 +6082,46 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     </select>
                   </div>
                 </div>
+
+                <div className="border-t border-slate-100 pt-4">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    💳 To‘lov Tizimi Rejimi
+                  </label>
+                  <select
+                    value={newVipRoomForm.paymentType}
+                    onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, paymentType: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600 font-semibold"
+                  >
+                    <option value="auto">⚡️ Avto (HUMO / Do‘kon ulangan)</option>
+                    <option value="manual">📝 Manual (Karta raqam & Chek tasdiqlash)</option>
+                  </select>
+                </div>
+
+                {newVipRoomForm.paymentType === 'manual' && (
+                  <div className="space-y-3 rounded-2xl bg-amber-50/60 p-4 border border-amber-200/80 text-xs">
+                    <span className="font-bold text-amber-900 block">📝 Manual To‘lov Rekvizitlari:</span>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Karta Raqami</label>
+                      <input
+                        type="text"
+                        value={newVipRoomForm.manualCardNumber}
+                        onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, manualCardNumber: e.target.value })}
+                        placeholder="8600123456789012"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Karta Egasi Ismi-Familiyasi</label>
+                      <input
+                        type="text"
+                        value={newVipRoomForm.manualCardOwner}
+                        onChange={(e) => setNewVipRoomForm({ ...newVipRoomForm, manualCardOwner: e.target.value })}
+                        placeholder="ALIMOV VALI"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="border-t border-slate-100 pt-4">
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-3">

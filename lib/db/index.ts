@@ -674,6 +674,25 @@ export async function ensureDbSchema() {
         "addedBy" text,
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );`,
+      `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "paymentType" text NOT NULL DEFAULT 'auto';`,
+      `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "manualCardNumber" text;`,
+      `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "manualCardOwner" text;`,
+      `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "manualInstructions" text;`,
+      `CREATE TABLE IF NOT EXISTS "manual_payment_requests" (
+        "id" text PRIMARY KEY,
+        "roomId" text NOT NULL,
+        "userId" text NOT NULL,
+        "username" text,
+        "fullName" text,
+        "period" text NOT NULL,
+        "amount" integer NOT NULL,
+        "photoFileId" text,
+        "status" text NOT NULL DEFAULT 'pending',
+        "adminMessageId" integer,
+        "adminChatId" text,
+        "createdAt" timestamp NOT NULL DEFAULT NOW(),
+        "updatedAt" timestamp NOT NULL DEFAULT NOW()
+      );`,
     ]
 
     for (const q of queries) {

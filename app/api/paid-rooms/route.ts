@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   try {
     // 1. Create Room
     if (action === 'create_room') {
-      const { title, chatId, shopId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, welcomeMessage } = body
+      const { title, chatId, shopId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, welcomeMessage, paymentType, manualCardNumber, manualCardOwner, manualInstructions } = body
       if (!title || !chatId) {
         return NextResponse.json({ error: 'Guruh nomi va Chat ID kiritilishi shart' }, { status: 400 })
       }
@@ -86,6 +86,10 @@ export async function POST(request: Request) {
         weeklyPrice: Number(weeklyPrice) || 50000,
         monthlyPrice: Number(monthlyPrice) || 120000,
         welcomeMessage: welcomeMessage || null,
+        paymentType: paymentType || 'auto',
+        manualCardNumber: manualCardNumber ? String(manualCardNumber).trim() : null,
+        manualCardOwner: manualCardOwner ? String(manualCardOwner).trim() : null,
+        manualInstructions: manualInstructions ? String(manualInstructions).trim() : null,
         ownerTelegramId: user.telegramId || user.userId,
         active: true,
         createdAt: new Date(),
@@ -98,7 +102,7 @@ export async function POST(request: Request) {
 
     // 2. Update Room
     if (action === 'update_room') {
-      const { id, title, chatId, shopId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, active, welcomeMessage } = body
+      const { id, title, chatId, shopId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, active, welcomeMessage, paymentType, manualCardNumber, manualCardOwner, manualInstructions } = body
       if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 })
 
       const updates: any = { updatedAt: new Date() }
@@ -113,6 +117,10 @@ export async function POST(request: Request) {
       if (monthlyPrice !== undefined) updates.monthlyPrice = Number(monthlyPrice)
       if (active !== undefined) updates.active = Boolean(active)
       if (welcomeMessage !== undefined) updates.welcomeMessage = welcomeMessage
+      if (paymentType !== undefined) updates.paymentType = paymentType
+      if (manualCardNumber !== undefined) updates.manualCardNumber = manualCardNumber ? String(manualCardNumber).trim() : null
+      if (manualCardOwner !== undefined) updates.manualCardOwner = manualCardOwner ? String(manualCardOwner).trim() : null
+      if (manualInstructions !== undefined) updates.manualInstructions = manualInstructions ? String(manualInstructions).trim() : null
 
       await db.update(paidAccessRooms).set(updates).where(eq(paidAccessRooms.id, id))
       const rooms = await db.select().from(paidAccessRooms).orderBy(desc(paidAccessRooms.createdAt))
