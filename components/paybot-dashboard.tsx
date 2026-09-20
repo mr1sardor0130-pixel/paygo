@@ -1430,17 +1430,20 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     setCreatedPayment(null)
     try {
       const amt = Number(testAmount.replace(/\D/g, '')) || 15000
+      const effectiveUserId = currentUser?.telegramId || currentUser?.userId || 'guest-merchant'
       const res = await fetch('/api/pay/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'x-telegram-user-id': currentUser?.telegramId || '',
+          'x-telegram-user-id': effectiveUserId,
         },
         body: JSON.stringify({
           amount: amt,
-          userId: currentUser?.telegramId,
+          userId: effectiveUserId,
+          shopId: shopData?.id || '',
           isTest: true,
+          expiresInMinutes: 5,
         }),
       })
 
@@ -3126,6 +3129,87 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* Quick Test Payment Link Box */}
+              <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="grid size-9 place-items-center rounded-xl bg-blue-50 text-[#1769e0]">
+                    <Clock size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-[#152238]">Tezkor To‘lov Sinovi</h4>
+                    <p className="text-[11px] text-[#64748b]">5 daqiqalik jonli to‘lov havolasi</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={testAmount}
+                      onChange={(e) => setTestAmount(e.target.value)}
+                      placeholder="15000"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none focus:border-[#1769e0]"
+                    />
+                    <span className="text-xs font-bold text-slate-500 shrink-0">UZS</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCreateTestPayment}
+                    disabled={creatingPayment}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white py-2.5 text-xs font-bold shadow-sm transition disabled:opacity-50"
+                  >
+                    {creatingPayment ? (
+                      <span>Yaratilmoqda...</span>
+                    ) : (
+                      <>
+                        <Zap size={14} />
+                        <span>To‘lov Havolasini Yaratish</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {createdPayment && (
+                  <div className="rounded-2xl bg-blue-50/70 border border-blue-100 p-3.5 space-y-2.5 animate-in fade-in">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-blue-900">
+                      <span>⚡️ Havola Tayyor:</span>
+                      <span>{Number(createdPayment.amount).toLocaleString()} UZS</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-white rounded-xl p-2 border border-blue-200">
+                      <input
+                        type="text"
+                        readOnly
+                        value={createdPayment.payUrl}
+                        className="w-full bg-transparent font-mono text-[11px] outline-none text-[#152238]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(createdPayment.payUrl)
+                          showToast('Havola nusxalandi!')
+                        }}
+                        className="p-1 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100"
+                        title="Nusxa olish"
+                      >
+                        <Copy size={13} />
+                      </button>
+                    </div>
+
+                    <a
+                      href={createdPayment.payUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-2 text-xs font-bold transition shadow-sm"
+                    >
+                      <ExternalLink size={13} />
+                      <span>To‘lov Sahifasini Ochish</span>
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           </div>
