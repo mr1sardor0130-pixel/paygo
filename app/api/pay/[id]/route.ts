@@ -127,12 +127,27 @@ export async function GET(
       shop?.cardNumber ||
       (shop?.cardLast4 ? `986035012345${shop.cardLast4}` : '9860350123453587')
 
-    // Get site logo from system_settings
+    // Get site logo and brand logos from system_settings
     let siteLogo: string | null = null
+    let brandLogos: Record<string, string> = {}
     try {
-      const settingsRows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'site_logo')).limit(1)
-      if (settingsRows[0]?.value && !settingsRows[0].value.includes('sd8RnH9N')) {
-        siteLogo = settingsRows[0].value
+      const settingsRows = await db.select().from(systemSettings)
+      const settingsMap: Record<string, string> = {}
+      settingsRows.forEach((r) => {
+        if (r.value) settingsMap[r.key] = r.value
+      })
+      if (settingsMap['paygo_official_logo'] || settingsMap['site_logo']) {
+        const candidate = settingsMap['paygo_official_logo'] || settingsMap['site_logo']
+        if (candidate && !candidate.includes('sd8RnH9N')) {
+          siteLogo = candidate
+        }
+      }
+      brandLogos = {
+        humo: settingsMap['logo_humo'] || '',
+        uzcard: settingsMap['logo_uzcard'] || '',
+        payme: settingsMap['logo_payme'] || '',
+        click: settingsMap['logo_click'] || '',
+        uzum: settingsMap['logo_uzum'] || '',
       }
     } catch (err) {
       console.warn('Failed to fetch site_logo:', err)
@@ -147,6 +162,7 @@ export async function GET(
       expiresAt: payment.expiresAt,
       matchedAt: payment.matchedAt,
       siteLogo,
+      brandLogos,
       returnUrl: resolveReturnUrl(payment.returnUrl, shop?.returnUrl, shop?.webhookUrl),
       shop: {
         id: shop?.id ?? 'default-shop',

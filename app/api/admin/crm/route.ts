@@ -130,6 +130,14 @@ export async function GET(request: Request) {
       businessBots: allBusinessConns,
       users: allUsers,
       mandatoryChannels: allMandatoryChannels,
+      brandLogos: {
+        paygo: settingsMap['paygo_official_logo'] || settingsMap['site_logo'] || '',
+        humo: settingsMap['logo_humo'] || '',
+        uzcard: settingsMap['logo_uzcard'] || '',
+        payme: settingsMap['logo_payme'] || '',
+        click: settingsMap['logo_click'] || '',
+        uzum: settingsMap['logo_uzum'] || '',
+      },
       officialSettings: {
         officialChannel: settingsMap['official_channel'] || '@Pay_Gouzbot',
         officialGroup: settingsMap['official_group'] || '',
@@ -677,6 +685,60 @@ export async function POST(request: Request) {
 
       await db.update(mandatoryChannels).set({ active: Boolean(active) }).where(eq(mandatoryChannels.id, channelId))
       return NextResponse.json({ ok: true, message: `Kanal holati ${active ? 'faollashtirildi' : 'nofaol qilindi'}` })
+    }
+
+    // 13. SAVE BRAND LOGO (PayGo, HUMO, UZCARD, Payme, Click, Uzum)
+    if (action === 'save_brand_logo') {
+      const { key, url } = body
+      if (!key || !url) {
+        return NextResponse.json({ error: 'Logotip kaliti va URL manzili majburiy' }, { status: 400 })
+      }
+
+      const keyMapping: Record<string, string[]> = {
+        paygo: ['paygo_official_logo', 'site_logo'],
+        humo: ['logo_humo'],
+        uzcard: ['logo_uzcard'],
+        payme: ['logo_payme'],
+        click: ['logo_click'],
+        uzum: ['logo_uzum'],
+      }
+
+      const targetKeys = keyMapping[key] || [`logo_${key}`]
+      for (const targetKey of targetKeys) {
+        await db
+          .insert(systemSettings)
+          .values({ key: targetKey, value: String(url).trim(), updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: systemSettings.key,
+            set: { value: String(url).trim(), updatedAt: new Date() },
+          })
+      }
+
+      return NextResponse.json({ ok: true, message: 'Logotip bazaga muvaffaqiyatli saqlandi!' })
+    }
+
+    // 14. REMOVE BRAND LOGO
+    if (action === 'remove_brand_logo') {
+      const { key } = body
+      if (!key) {
+        return NextResponse.json({ error: 'Logotip kaliti majburiy' }, { status: 400 })
+      }
+
+      const keyMapping: Record<string, string[]> = {
+        paygo: ['paygo_official_logo', 'site_logo'],
+        humo: ['logo_humo'],
+        uzcard: ['logo_uzcard'],
+        payme: ['logo_payme'],
+        click: ['logo_click'],
+        uzum: ['logo_uzum'],
+      }
+
+      const targetKeys = keyMapping[key] || [`logo_${key}`]
+      for (const targetKey of targetKeys) {
+        await db.delete(systemSettings).where(eq(systemSettings.key, targetKey))
+      }
+
+      return NextResponse.json({ ok: true, message: 'Logotip o‘chirildi va standart holatga qaytarildi' })
     }
 
     return NextResponse.json({ error: 'Noma’lum amal' }, { status: 400 })

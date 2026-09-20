@@ -199,6 +199,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // 1. Initial cached fallback
       setPaygoOfficialLogo(localStorage.getItem('paygo_official_logo') || '')
       setBrandLogos({
         humo: localStorage.getItem('paygo_humo_logo') || '',
@@ -208,6 +209,31 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         uzum: localStorage.getItem('paygo_uzum_logo') || '',
       })
       loadTariffs()
+
+      // 2. Fetch authoritative brand logos from PostgreSQL systemSettings
+      fetch('/api/brand-logos')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.ok && data.logos) {
+            if (data.logos.paygo) {
+              setPaygoOfficialLogo(data.logos.paygo)
+              localStorage.setItem('paygo_official_logo', data.logos.paygo)
+            }
+            setBrandLogos({
+              humo: data.logos.humo || '',
+              uzcard: data.logos.uzcard || '',
+              payme: data.logos.payme || '',
+              click: data.logos.click || '',
+              uzum: data.logos.uzum || '',
+            })
+            if (data.logos.humo) localStorage.setItem('paygo_humo_logo', data.logos.humo)
+            if (data.logos.uzcard) localStorage.setItem('paygo_uzcard_logo', data.logos.uzcard)
+            if (data.logos.payme) localStorage.setItem('paygo_payme_logo', data.logos.payme)
+            if (data.logos.click) localStorage.setItem('paygo_click_logo', data.logos.click)
+            if (data.logos.uzum) localStorage.setItem('paygo_uzum_logo', data.logos.uzum)
+          }
+        })
+        .catch(() => {})
     }
   }, [])
 
@@ -273,11 +299,12 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     if (!file) return
 
     if (file.size > 10 * 1024 * 1024) {
-      alert('Fayl hajmi 10MB dan oshmasligi kerak!')
+      showToast('Fayl hajmi 10MB dan oshmasligi kerak!', 'error')
       return
     }
 
     try {
+      showToast('⏳ Rasm yuklanmoqda va qayta ishlanmoqda...')
       const optimizedBlob = await compressImageClient(file, 400, 0.8)
       const formData = new FormData()
       formData.append('file', optimizedBlob, 'logo.webp')
@@ -292,42 +319,91 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       if (finalUrl) {
         if (targetKey === 'logoUrl') {
           setShopForm(prev => ({ ...prev, logoUrl: finalUrl }))
-        } else if (targetKey === 'paygo') {
-          setPaygoOfficialLogo(finalUrl)
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('paygo_official_logo', finalUrl)
-          }
+          showToast('✅ Do‘kon logotipi yuklandi! Saqlash tugmasini bosing.')
         } else {
-          setBrandLogos(prev => {
-            const next = { ...prev, [targetKey]: finalUrl }
+          // Brand Logo (paygo, humo, uzcard, payme, click, uzum)
+          if (targetKey === 'paygo') {
+            setPaygoOfficialLogo(finalUrl)
             if (typeof window !== 'undefined') {
-              localStorage.setItem(`paygo_${targetKey}_logo`, finalUrl)
+              localStorage.setItem('paygo_official_logo', finalUrl)
             }
-            return next
+          } else {
+            setBrandLogos(prev => {
+              const next = { ...prev, [targetKey]: finalUrl }
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`paygo_${targetKey}_logo`, finalUrl)
+              }
+              return next
+            })
+          }
+
+          // Persist directly to PostgreSQL database systemSettings
+          const adminId = currentUser?.telegramId || currentUser?.userId || '8021115446'
+          const saveRes = await fetch('/api/admin/crm', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-telegram-user-id': adminId,
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              action: 'save_brand_logo',
+              key: targetKey,
+              url: finalUrl,
+            }),
           })
+          const saveJson = await saveRes.json()
+          if (saveJson?.ok) {
+            showToast('✅ Logotip bazaga muvaffaqiyatli saqlandi!')
+          } else {
+            showToast(saveJson?.error || 'Logotip yuklandi, lekin bazaga saqlashda xatolik', 'error')
+          }
         }
+      } else {
+        showToast('Rasm yuklashda xatolik yuz berdi', 'error')
       }
     } catch (err) {
       console.error('File upload error:', err)
+      showToast('Yuklashda xatolik yuz berdi', 'error')
     }
   }
 
-  const handleRemoveLogo = (targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
+  const handleRemoveLogo = async (targetKey: 'logoUrl' | 'paygo' | 'humo' | 'uzcard' | 'payme' | 'click' | 'uzum') => {
     if (targetKey === 'logoUrl') {
       setShopForm(prev => ({ ...prev, logoUrl: '' }))
-    } else if (targetKey === 'paygo') {
-      setPaygoOfficialLogo('')
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('paygo_official_logo')
-      }
+      showToast('Do‘kon logotipi olib tashlandi. Saqlash tugmasini bosing.')
     } else {
-      setBrandLogos(prev => {
-        const next = { ...prev, [targetKey]: '' }
+      if (targetKey === 'paygo') {
+        setPaygoOfficialLogo('')
         if (typeof window !== 'undefined') {
-          localStorage.removeItem(`paygo_${targetKey}_logo`)
+          localStorage.removeItem('paygo_official_logo')
         }
-        return next
-      })
+      } else {
+        setBrandLogos(prev => {
+          const next = { ...prev, [targetKey]: '' }
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(`paygo_${targetKey}_logo`)
+          }
+          return next
+        })
+      }
+
+      const adminId = currentUser?.telegramId || currentUser?.userId || '8021115446'
+      try {
+        await fetch('/api/admin/crm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-telegram-user-id': adminId,
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            action: 'remove_brand_logo',
+            key: targetKey,
+          }),
+        })
+        showToast('Logotip bazadan o‘chirildi va standart holatga qaytarildi')
+      } catch {}
     }
   }
 
@@ -975,6 +1051,26 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       const data = await res.json()
       if (data.ok) {
         setCrmData(data)
+        if (data.brandLogos) {
+          if (data.brandLogos.paygo) {
+            setPaygoOfficialLogo(data.brandLogos.paygo)
+            if (typeof window !== 'undefined') localStorage.setItem('paygo_official_logo', data.brandLogos.paygo)
+          }
+          setBrandLogos({
+            humo: data.brandLogos.humo || '',
+            uzcard: data.brandLogos.uzcard || '',
+            payme: data.brandLogos.payme || '',
+            click: data.brandLogos.click || '',
+            uzum: data.brandLogos.uzum || '',
+          })
+          if (typeof window !== 'undefined') {
+            if (data.brandLogos.humo) localStorage.setItem('paygo_humo_logo', data.brandLogos.humo)
+            if (data.brandLogos.uzcard) localStorage.setItem('paygo_uzcard_logo', data.brandLogos.uzcard)
+            if (data.brandLogos.payme) localStorage.setItem('paygo_payme_logo', data.brandLogos.payme)
+            if (data.brandLogos.click) localStorage.setItem('paygo_click_logo', data.brandLogos.click)
+            if (data.brandLogos.uzum) localStorage.setItem('paygo_uzum_logo', data.brandLogos.uzum)
+          }
+        }
         if (data.officialSettings) {
           setOfficialForm({
             officialChannel: data.officialSettings.officialChannel || '@Pay_Gouzbot',
