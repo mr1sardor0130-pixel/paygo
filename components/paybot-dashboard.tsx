@@ -52,12 +52,14 @@ import {
   SlidersHorizontal,
   UserPlus,
   DownloadCloud,
+  Palette,
 } from 'lucide-react'
 import Link from 'next/link'
 import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
 import { GearLoader, ButtonGearSpinner, DoubleGearIcon } from '@/components/gear-loader'
+import { PAYMENT_THEMES, PaymentTheme, getPaymentTheme } from '@/lib/payment-themes'
 
-export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels' | 'db_backup'
+export type TabType = 'overview' | 'shop_settings' | 'checkout_themes' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels' | 'db_backup'
 
 export interface PaybotDashboardProps {
   initialTab?: TabType
@@ -97,6 +99,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     webhookUrl: '',
     returnUrl: '',
     telegramChannelId: '',
+    theme: 'cyber_blue',
   })
   const [logoModalShop, setLogoModalShop] = useState<any>(null)
   const [logoInputUrl, setLogoInputUrl] = useState<string>('')
@@ -112,11 +115,14 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     webhookUrl: '',
     returnUrl: '',
     telegramChannelId: '',
+    theme: 'cyber_blue',
   })
   const [shopData, setShopData] = useState<any>(null)
   const [savingShop, setSavingShop] = useState(false)
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [testingChannel, setTestingChannel] = useState(false)
+  const [dashboardThemeFilter, setDashboardThemeFilter] = useState<'all' | 'free' | 'premium'>('all')
+  const [settingTheme, setSettingTheme] = useState<string | null>(null)
 
   // VIP Group / Channel Access State
   const [vipRooms, setVipRooms] = useState<any[]>([])
@@ -616,6 +622,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             webhookUrl: data.shop.webhookUrl || '',
             returnUrl: data.shop.returnUrl || '',
             telegramChannelId: data.shop.telegramChannelId || '',
+            theme: data.shop.theme || 'cyber_blue',
           })
         }
         loadVipRooms(authToken, fallbackUserId || data.telegramId || data.userId)
@@ -665,6 +672,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       webhookUrl: selected.webhookUrl || '',
       returnUrl: selected.returnUrl || '',
       telegramChannelId: selected.telegramChannelId || '',
+      theme: selected.theme || 'cyber_blue',
     })
     showToast(`Faol do‘kon tanlandi: ${selected.name}`)
   }
@@ -1344,6 +1352,43 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     }
   }
 
+  // Instant Theme Saver
+  const handleSetTheme = async (themeId: string) => {
+    setSettingTheme(themeId)
+    setShopForm((prev) => ({ ...prev, theme: themeId }))
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    const targetShopId = shopData?.id || activeShopId
+    try {
+      const res = await fetch('/api/shop/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'update_shop',
+          shopId: targetShopId,
+          userId: effectiveUserId,
+          ...shopForm,
+          theme: themeId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        if (data.shop) setShopData(data.shop)
+        if (data.shops) setMyShops(data.shops)
+        showToast(`🎨 To‘lov sahifasi dizayni saqlandi: ${PAYMENT_THEMES[themeId]?.name || themeId}`)
+      } else {
+        showToast(data.error || 'Dizaynni saqlashda xatolik', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    } finally {
+      setSettingTheme(null)
+    }
+  }
+
   // Test Channel
   const handleTestChannel = async () => {
     if (!shopForm.telegramChannelId) {
@@ -1933,6 +1978,26 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
 
                     <button
                       onClick={() => {
+                        handleSwitchTab('checkout_themes')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'checkout_themes'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Palette size={16} />
+                        <span>🎨 To‘lov Sahifasi Dizaynlari (10 ta)</span>
+                      </div>
+                      <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-bold">
+                        5 VIP
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
                         handleSwitchTab('my_shops')
                         setIsNavDrawerOpen(false)
                       }}
@@ -2260,6 +2325,18 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               }`}
             >
               ⚙️ Sozlamalar
+            </button>
+
+            <button
+              onClick={() => handleSwitchTab('checkout_themes')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                activeTab === 'checkout_themes'
+                  ? 'bg-[#1769e0] text-white shadow-xs'
+                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Palette size={14} />
+              <span>🎨 To‘lov Dizaynlari (10)</span>
             </button>
 
             <button
@@ -2740,6 +2817,130 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     </div>
                   </div>
 
+                  {/* ------------------------------------------------------------- */}
+                  {/* CHECKOUT THEME SELECTION SECTION (5 FREE + 5 VIP) */}
+                  {/* ------------------------------------------------------------- */}
+                  <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 border border-slate-800 p-5 text-white space-y-4 shadow-md">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-sky-400">
+                          <Palette size={18} />
+                          <span>🎨 To‘lov Sahifasi Dizayni & Mavzusi</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Mijozlaringiz to‘lov qilganda ko‘rinadigan shaxsiy do‘koningiz vizual dizaynini tanlang.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-500/20 text-sky-300 border border-blue-500/30">
+                          Faol: {PAYMENT_THEMES[shopForm.theme]?.name || 'Cyber Blue'}
+                        </span>
+                        <a
+                          href={`/pay/test-payment?preview=true&theme=${shopForm.theme || 'cyber_blue'}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 transition active:scale-95 shadow-sm"
+                        >
+                          <ExternalLink size={13} />
+                          <span>Jonli ko‘rish</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Free Designs */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <span>⚡️ 5 ta Bepul Dizayn</span>
+                          <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-md font-bold">100% Tekin</span>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                        {Object.values(PAYMENT_THEMES).filter(t => t.tier === 'free').map((t) => {
+                          const isSelected = (shopForm.theme || 'cyber_blue') === t.id
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setShopForm({ ...shopForm, theme: t.id })}
+                              className={`relative flex flex-col p-3 rounded-xl border text-left transition-all ${
+                                isSelected
+                                  ? 'bg-blue-600/30 border-sky-400 ring-2 ring-sky-400/50 text-white shadow-lg'
+                                  : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
+                              }`}
+                            >
+                              {isSelected && (
+                                <span className="absolute top-2 right-2 size-5 rounded-full bg-sky-400 text-slate-950 flex items-center justify-center font-bold text-xs shadow-sm">
+                                  <Check size={12} strokeWidth={3} />
+                                </span>
+                              )}
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <span className="text-base">{t.icon}</span>
+                                <span className="text-[11px] font-bold truncate">{t.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1 mt-auto pt-2">
+                                <span className="size-3.5 rounded-full border border-white/20" style={{ backgroundColor: t.previewColor }} />
+                                <span className="text-[10px] font-medium text-slate-400">{t.accentColor}</span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* VIP Premium Designs */}
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                          <Crown size={13} className="text-amber-400" />
+                          <span>💎 5 ta VIP Premium Dizayn</span>
+                          <span className="text-[10px] text-amber-300 bg-amber-950/80 border border-amber-500/50 px-2 py-0.5 rounded-md font-extrabold">PRO & VIP</span>
+                        </span>
+                        {!(currentUser?.tier === 'premium' || currentUser?.isAdmin) && (
+                          <Link href="/tariffs" className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline">
+                            Tarifni yangilash →
+                          </Link>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                        {Object.values(PAYMENT_THEMES).filter(t => t.tier === 'premium').map((t) => {
+                          const isSelected = shopForm.theme === t.id
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setShopForm({ ...shopForm, theme: t.id })}
+                              className={`relative flex flex-col p-3 rounded-xl border text-left transition-all ${
+                                isSelected
+                                  ? 'bg-amber-500/20 border-amber-400 ring-2 ring-amber-400/50 text-white shadow-lg'
+                                  : 'bg-slate-900/80 border-amber-900/30 hover:border-amber-700/60 text-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  VIP
+                                </span>
+                                {isSelected && (
+                                  <span className="size-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-xs shadow-sm">
+                                    <Check size={12} strokeWidth={3} />
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 mb-2 mt-1">
+                                <span className="text-base">{t.icon}</span>
+                                <span className="text-[11px] font-bold truncate">{t.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1 mt-auto pt-2">
+                                <span className="size-3.5 rounded-full border border-white/20" style={{ backgroundColor: t.previewColor }} />
+                                <span className="text-[10px] font-medium text-amber-200/70">{t.accentColor}</span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Karta qismi */}
                   <div className="rounded-2xl bg-[#f8fafc] p-5 border border-[#e2e8f0] space-y-4">
                     <div className="flex items-center gap-2 text-xs font-bold text-[#1e40af]">
@@ -2928,6 +3129,224 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </div>
             </div>
           </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB: CHECKOUT THEMES (10 Themes Showroom & Store Activation) */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'checkout_themes' && (
+          <div className="space-y-6 animate-in fade-in">
+            {/* Top Showcase Banner */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-3xl border border-blue-200 bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-950 p-6 text-white shadow-md">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-sky-400/20 text-sky-300 border border-sky-400/30 px-3 py-0.5 text-xs font-bold flex items-center gap-1.5">
+                    <Palette size={13} />
+                    <span>10 ta To‘lov Sahifasi Dizayni</span>
+                  </span>
+                  <span className="rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-extrabold flex items-center gap-1">
+                    <Crown size={12} /> 5 Free + 5 VIP
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                  To‘lov Sahifasi Dizaynini Tanlash
+                </h2>
+                <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                  Do‘koningiz uchun zamonaviy dizaynni tanlang. Mijozlaringiz to‘lov qilayotganda hech qanday sozlama yoki ortiqcha tugmalar ko‘rmaydi — faqat siz tanlagan chiroyli interfeys ko‘rinadi!
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 px-4 py-2.5 text-xs">
+                  <span className="text-slate-300 block text-[10px] font-semibold">Tanlangan do‘kon:</span>
+                  <span className="font-bold text-sky-300">{shopData?.name || 'Do‘koningiz'}</span>
+                </div>
+
+                <a
+                  href={`/pay/test-payment?preview=true&theme=${shopForm.theme || 'cyber_blue'}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-2xl bg-sky-400 hover:bg-sky-300 text-slate-950 px-4 py-3 text-xs font-black transition active:scale-95 shadow-md"
+                >
+                  <ExternalLink size={15} />
+                  <span>Jonli Ko‘rish (Preview)</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                <button
+                  onClick={() => setDashboardThemeFilter('all')}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-bold transition whitespace-nowrap ${
+                    dashboardThemeFilter === 'all'
+                      ? 'bg-[#1769e0] text-white shadow-sm'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  Barchasi (10 ta)
+                </button>
+                <button
+                  onClick={() => setDashboardThemeFilter('free')}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                    dashboardThemeFilter === 'free'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-white border border-slate-200 text-emerald-800 hover:bg-emerald-50'
+                  }`}
+                >
+                  <span>⚡️ 5 ta Bepul Dizayn</span>
+                </button>
+                <button
+                  onClick={() => setDashboardThemeFilter('premium')}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                    dashboardThemeFilter === 'premium'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm font-extrabold'
+                      : 'bg-amber-50 border border-amber-200 text-amber-900 hover:bg-amber-100'
+                  }`}
+                >
+                  <Crown size={14} className="text-amber-600" />
+                  <span>💎 5 ta VIP Premium Dizayn</span>
+                </button>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Joriy mavzu:</span>
+                <span className="font-bold text-blue-600">{PAYMENT_THEMES[shopForm.theme]?.name || 'Cyber Blue'}</span>
+              </div>
+            </div>
+
+            {/* 10 Themes Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {Object.values(PAYMENT_THEMES)
+                .filter(t => dashboardThemeFilter === 'all' || t.tier === dashboardThemeFilter)
+                .map((theme) => {
+                  const isCurrentActive = (shopForm.theme || 'cyber_blue') === theme.id
+                  const isSettingThis = settingTheme === theme.id
+
+                  return (
+                    <div
+                      key={theme.id}
+                      className={`relative flex flex-col justify-between rounded-3xl border transition-all overflow-hidden bg-white shadow-sm ${
+                        isCurrentActive
+                          ? 'border-[#1769e0] ring-2 ring-[#1769e0]/40 shadow-lg'
+                          : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                      }`}
+                    >
+                      {/* Visual Header Mockup */}
+                      <div className={`p-4 ${theme.pageBg} text-white relative overflow-hidden border-b border-slate-100`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">{theme.icon}</span>
+                            <div>
+                              <h3 className={`text-sm font-bold ${theme.isDark ? 'text-white' : 'text-slate-900'}`}>
+                                {theme.name}
+                              </h3>
+                              <p className={`text-[10px] ${theme.isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                {theme.accentColor}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                              theme.tier === 'premium'
+                                ? 'bg-amber-500 text-slate-950 shadow-sm'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}
+                          >
+                            {theme.tier === 'premium' ? '👑 VIP' : '⚡️ BEPUL'}
+                          </span>
+                        </div>
+
+                        {/* Mini UI Preview Card */}
+                        <div className={`rounded-xl p-3 border ${theme.cardBg} ${theme.cardBorder} shadow-inner`}>
+                          <div className="flex items-center justify-between text-[11px] mb-1.5 opacity-90">
+                            <span className={theme.isDark ? 'text-slate-300' : 'text-slate-700'}>To‘lov miqdori:</span>
+                            <span className={`font-mono font-bold ${theme.accentText}`}>99 000 UZS</span>
+                          </div>
+                          <div className={`h-1.5 w-full rounded-full ${theme.accentBg} opacity-80`} />
+                        </div>
+                      </div>
+
+                      {/* Card Details & Actions */}
+                      <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2">
+                          <p className="text-xs text-slate-600 leading-relaxed">
+                            {theme.description}
+                          </p>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                              <span className="size-3 rounded-full border" style={{ backgroundColor: theme.previewColor }} />
+                              <span>{theme.accentColor}</span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg">
+                              {theme.isDark ? '🌙 Tun rejim' : '☀️ Kun rejim'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 flex items-center gap-2 border-t border-slate-100">
+                          <a
+                            href={`/pay/test-payment?preview=true&theme=${theme.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 py-2.5 text-xs font-bold text-slate-700 transition active:scale-95 text-center"
+                          >
+                            <ExternalLink size={13} />
+                            <span>Sinash</span>
+                          </a>
+
+                          {isCurrentActive ? (
+                            <button
+                              type="button"
+                              disabled
+                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-white py-2.5 text-xs font-bold shadow-sm"
+                            >
+                              <Check size={14} strokeWidth={3} />
+                              <span>Faol Dizayn</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSetTheme(theme.id)}
+                              disabled={isSettingThis}
+                              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold text-white transition active:scale-95 shadow-sm disabled:opacity-50 ${
+                                theme.tier === 'premium'
+                                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black'
+                                  : 'bg-[#1769e0] hover:bg-blue-700'
+                              }`}
+                            >
+                              {isSettingThis ? (
+                                <span>Saqlanmoqda...</span>
+                              ) : (
+                                <>
+                                  <Sparkles size={13} />
+                                  <span>O‘rnatish</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+
+            {/* Merchant Guarantee Banner */}
+            <div className="rounded-3xl border border-blue-200 bg-blue-50/60 p-5 flex items-center gap-3.5 text-xs text-blue-900">
+              <ShieldCheck size={24} className="shrink-0 text-[#1769e0]" />
+              <div>
+                <p className="font-bold text-sm text-[#1769e0]">Mijozlarga Hech Qanday Ortiqcha Element Ko‘rinmaydi</p>
+                <p className="text-slate-600 mt-0.5 leading-relaxed">
+                  Siz tanlagan dizayn to‘lov yaratilganda avtomatik ravishda yuklanadi. Mijozlar to‘lov sahifasida hech qanday dizayn menyulari yoki sozlamalarsiz toza va xavfsiz to‘lovni amalga oshirishadi.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
