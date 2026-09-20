@@ -14,8 +14,10 @@ import {
   RotateCw,
   Share2,
   ShieldCheck,
+  Crown,
+  User,
 } from 'lucide-react'
-import { HumoLogo, UzcardLogo } from '@/components/brand-logos'
+import { HumoLogo, UzcardLogo, PayGoLogo } from '@/components/brand-logos'
 
 interface ReceiptData {
   id: string
@@ -25,6 +27,12 @@ interface ReceiptData {
   createdAt?: string
   paidAt?: string
   expiresAt?: string
+  merchantUser?: {
+    telegramId?: string
+    name?: string
+    tier?: string
+    image?: string
+  } | null
   shop?: {
     id: string
     name: string
@@ -33,6 +41,7 @@ interface ReceiptData {
     accountOwner: string
     cardBank?: string
     logoUrl?: string | null
+    tier?: string
   }
 }
 
@@ -64,9 +73,11 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
   }
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   if (loading && !data) {
@@ -80,12 +91,13 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
     )
   }
 
-  const amount = data?.amount || 15000
-  const shopName = data?.shop?.name || 'PayGo Rasmiy Savdogar'
-  const cardOwner = data?.shop?.accountOwner || 'HUMO Hisob Egasi'
-  const cardRaw = data?.shop?.cardNumber || '9860350123453587'
+  const amount = data?.amount || 99000
+  const shopName = data?.shop?.name || 'HUMO To‘lov Xizmati'
+  const cardOwner = data?.shop?.accountOwner || 'SARDOR T'
+  const cardRaw = data?.shop?.cardNumber || '9860166655238557'
   const cardFormatted = cardRaw.replace(/(\d{4})(?=\d)/g, '$1 ')
   const isPaid = data?.status === 'paid'
+  const isPremium = data?.shop?.tier === 'premium' || data?.merchantUser?.tier === 'premium'
   const dateStr = data?.paidAt
     ? new Date(data.paidAt).toLocaleString('uz-UZ', { dateStyle: 'medium', timeStyle: 'short' })
     : new Date().toLocaleString('uz-UZ', { dateStyle: 'medium', timeStyle: 'short' })
@@ -99,7 +111,7 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
       <div className="max-w-xl mx-auto mb-6 flex items-center justify-between print:hidden">
         <Link
           href={`/pay/${paymentId}`}
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm transition"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs transition"
         >
           <ArrowLeft size={14} />
           <span>To‘lov sahifasiga</span>
@@ -108,7 +120,7 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopyLink}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-50 transition"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs hover:bg-slate-50 transition"
           >
             <Share2 size={14} />
             <span>{copied ? 'Havola olindi!' : 'Ulashish'}</span>
@@ -132,23 +144,34 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
 
         {/* Receipt Header */}
         <div className="border-b border-slate-200 pb-6 text-center">
+          {/* Top Brand Bar */}
+          <div className="flex items-center justify-between mb-4">
+            <PayGoLogo className="h-8 w-auto" showText={true} />
+            {isPremium && (
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-800 text-[10.5px] font-bold">
+                <Crown size={12} className="text-amber-600" />
+                <span>VIP Merchant</span>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-center mb-3">
-            {data.shop.logoUrl ? (
+            {data?.shop?.logoUrl ? (
               <img 
                 src={data.shop.logoUrl} 
                 alt="Shop Logo" 
-                className="h-14 w-auto max-w-[150px] object-contain rounded-2xl shadow-sm border border-slate-100"
+                className="h-14 w-auto max-w-[150px] object-contain rounded-2xl shadow-xs border border-slate-100"
                 onError={(e) => { e.currentTarget.style.display = 'none' }}
               />
             ) : (
-              <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-blue-600 text-white font-black text-2xl shadow-lg shadow-blue-500/30">
-                {data.shop.name.charAt(0).toUpperCase()}
+              <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl shadow-lg shadow-blue-500/30">
+                {shopName.charAt(0).toUpperCase()}
               </div>
             )}
           </div>
           <h1 className="text-xl font-extrabold tracking-tight text-slate-900">TO‘LOV KVITANSIYASI / CHEK</h1>
-          <p className="text-xs font-medium text-slate-500 mt-1 uppercase tracking-wider">
-            {data.shop.name}
+          <p className="text-xs font-semibold text-slate-600 mt-1 uppercase tracking-wider">
+            {shopName}
           </p>
           <div className="mt-3 flex items-center justify-center gap-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
@@ -163,7 +186,7 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
         {/* Amount Box */}
         <div className="my-6 p-5 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">To‘langan Summa</p>
-          <div className="text-3xl sm:text-4xl font-black text-slate-900 mt-1 tracking-tight">
+          <div className="text-3xl sm:text-4xl font-black text-slate-900 mt-1 tracking-tight font-mono">
             {amount.toLocaleString('uz-UZ')}{' '}
             <span className="text-lg font-bold text-slate-600">UZS</span>
           </div>
@@ -185,16 +208,22 @@ export function PaymentReceipt({ paymentId }: { paymentId: string }) {
             <span className="font-bold text-slate-900">{shopName}</span>
           </div>
           <div className="flex justify-between py-1.5 border-b border-dashed border-slate-200">
-            <span className="text-slate-500">HUMO Karta:</span>
+            <span className="text-slate-500">Karta raqami:</span>
             <span className="font-mono font-bold text-slate-900">{cardFormatted}</span>
           </div>
           <div className="flex justify-between py-1.5 border-b border-dashed border-slate-200">
             <span className="text-slate-500">Hisob egasi:</span>
             <span className="font-semibold text-slate-900">{cardOwner}</span>
           </div>
+          {data?.merchantUser?.telegramId && (
+            <div className="flex justify-between py-1.5 border-b border-dashed border-slate-200">
+              <span className="text-slate-500">Merchant Telegram ID:</span>
+              <span className="font-mono font-bold text-blue-600">ID: {data.merchantUser.telegramId}</span>
+            </div>
+          )}
           <div className="flex justify-between py-1.5 border-b border-dashed border-slate-200">
             <span className="text-slate-500">To‘lov usuli:</span>
-            <span className="font-semibold text-blue-600">HUMOCARD (P2P Transfer)</span>
+            <span className="font-semibold text-blue-600">{data?.shop?.cardBank || 'HUMOCARD'} (P2P Transfer)</span>
           </div>
           <div className="flex justify-between py-1.5 border-b border-dashed border-slate-200">
             <span className="text-slate-500">Fiskal ID / RRN:</span>

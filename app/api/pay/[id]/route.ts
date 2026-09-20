@@ -153,6 +153,24 @@ export async function GET(
       console.warn('Failed to fetch site_logo:', err)
     }
 
+    // Attempt to enrich with merchant user profile if available
+    let merchantUser: { telegramId?: string; name?: string; tier?: string; image?: string } | null = null
+    if (shop?.userId) {
+      try {
+        const profileRows = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, shop.userId)).limit(1)
+        if (profileRows.length > 0) {
+          const p = profileRows[0]
+          merchantUser = {
+            telegramId: p.telegramId,
+            name: shop.accountOwner || 'Foydalanuvchi',
+            tier: p.tier || 'free',
+          }
+        }
+      } catch (e) {
+        console.warn('Error fetching merchant profile:', e)
+      }
+    }
+
     return NextResponse.json({
       id: payment.id,
       amount: payment.amount,
@@ -163,6 +181,7 @@ export async function GET(
       matchedAt: payment.matchedAt,
       siteLogo,
       brandLogos,
+      merchantUser,
       returnUrl: resolveReturnUrl(payment.returnUrl, shop?.returnUrl, shop?.webhookUrl),
       shop: {
         id: shop?.id ?? 'default-shop',
@@ -172,6 +191,7 @@ export async function GET(
         cardBank: shop?.cardBank ?? 'HUMOCARD',
         accountOwner: shop?.accountOwner ?? 'Hisob egasi',
         logoUrl: shop?.logoUrl || null,
+        tier: shop?.tier || 'free',
       },
     })
   } catch (error: any) {

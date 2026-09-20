@@ -34,9 +34,16 @@ import {
   BadgeCheck,
   Radio,
   Layers,
+  Palette,
+  Crown,
+  Share2,
+  Shield,
+  Star,
+  Flame,
 } from 'lucide-react'
 import Link from 'next/link'
 import { HumoLogo, UzcardLogo, PayGoLogo, PaymeLogo, ClickLogo, UzumBankLogo } from '@/components/brand-logos'
+import { PAYMENT_THEMES, PaymentTheme, getPaymentTheme } from '@/lib/payment-themes'
 
 type PaymentData = {
   id: string
@@ -48,6 +55,12 @@ type PaymentData = {
   matchedAt?: string
   siteLogo?: string | null
   returnUrl?: string | null
+  merchantUser?: {
+    telegramId?: string
+    name?: string
+    tier?: string
+    image?: string
+  } | null
   shop: {
     id: string
     name: string
@@ -56,6 +69,7 @@ type PaymentData = {
     cardBank: string
     accountOwner: string
     logoUrl?: string | null
+    tier?: string
   }
 }
 
@@ -80,12 +94,38 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [simulating, setSimulating] = useState(false)
   const [simulationResult, setSimulationResult] = useState<string | null>(null)
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
-  const [logoError, setLogoError] = useState(false)
-  const [siteLogoError, setSiteLogoError] = useState(false)
   const [extending, setExtending] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [showPromoModal, setShowPromoModal] = useState(false)
+  const [showThemeModal, setShowThemeModal] = useState(false)
+  const [themeFilter, setThemeFilter] = useState<'all' | 'free' | 'premium'>('all')
+  const [currentThemeId, setCurrentThemeId] = useState<string>('cyber_blue')
   const [appRedirectToast, setAppRedirectToast] = useState<string | null>(null)
+
+  // Load theme from localStorage or query if available
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const qTheme = urlParams.get('theme')
+      if (qTheme && PAYMENT_THEMES[qTheme]) {
+        setCurrentThemeId(qTheme)
+      } else {
+        const saved = localStorage.getItem('paygo_selected_theme')
+        if (saved && PAYMENT_THEMES[saved]) {
+          setCurrentThemeId(saved)
+        }
+      }
+    }
+  }, [])
+
+  const currentTheme = getPaymentTheme(currentThemeId)
+
+  const handleSelectTheme = (themeId: string) => {
+    setCurrentThemeId(themeId)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('paygo_selected_theme', themeId)
+    }
+  }
 
   const handleExtendTime = async () => {
     setExtending(true)
@@ -106,8 +146,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   }
 
   // Auto-redirect to returnUrl on successful payment
-  const hasAdBanner = true
-  const initialRedirectDelay = hasAdBanner ? 3 : 1
+  const initialRedirectDelay = 3
 
   useEffect(() => {
     if (data?.status === 'paid' && data?.returnUrl) {
@@ -124,7 +163,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
       }, 1000)
       return () => clearInterval(interval)
     }
-  }, [data?.status, data?.returnUrl, initialRedirectDelay])
+  }, [data?.status, data?.returnUrl])
 
   // Fetch payment data
   const fetchPayment = async () => {
@@ -278,6 +317,8 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const formattedCard = formatCardNumber(cardNumber)
   const cardOwner = data?.shop?.accountOwner || 'SARDOR T'
   const shopName = data?.shop?.name || 'HUMO To‘lov Xizmati'
+  const shopId = data?.shop?.id || paymentId.slice(0, 8)
+  const isShopPremium = data?.shop?.tier === 'premium' || data?.merchantUser?.tier === 'premium'
   const amountNumber = data?.amount ?? 99000
   const isPaid = data?.status === 'paid'
   const isExpired = data?.status === 'expired' || seconds <= 0
@@ -285,52 +326,77 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
 
+  const themesList = Object.values(PAYMENT_THEMES)
+  const filteredThemes = themesList.filter((t) => {
+    if (themeFilter === 'free') return t.tier === 'free'
+    if (themeFilter === 'premium') return t.tier === 'premium'
+    return true
+  })
+
   return (
-    <main className="min-h-screen bg-[#040812] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#0c1f44] via-[#060e1d] to-[#040711] px-3.5 sm:px-6 py-6 text-white antialiased font-sans selection:bg-blue-600 selection:text-white">
+    <main className={`min-h-screen ${currentTheme.bgGradient} px-3.5 sm:px-6 py-6 ${currentTheme.isDark ? 'text-white' : 'text-slate-900'} antialiased ${currentTheme.fontClass} selection:bg-blue-600 selection:text-white transition-colors duration-500`}>
       <div className="mx-auto max-w-xl space-y-4 sm:space-y-5">
 
-        {/* 1. BRAND HEADER (TOP BAR) */}
-        <header className="flex items-center justify-between gap-3 bg-[#0a1428]/80 backdrop-blur-xl px-4 py-3 rounded-2xl border border-blue-900/40 shadow-xl shadow-blue-950/20">
+        {/* 1. BRAND HEADER & USER/MERCHANT PROFILE */}
+        <header className={`flex items-center justify-between gap-3 ${currentTheme.headerBg} backdrop-blur-xl px-4 py-3 rounded-2xl border ${currentTheme.headerBorder} shadow-xl`}>
           {/* Left: PayGo Secure Brand */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="relative size-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-sky-400 p-0.5 shadow-lg shadow-blue-500/25 flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 32 32" fill="none" className="size-6">
-                <path d="M7 6C7 4.89543 7.89543 4 9 4H18C22.4183 4 26 7.58172 26 12C26 16.4183 22.4183 20 18 20H13V26C13 27.1046 12.1046 28 11 28H9C7.89543 28 7 27.1046 7 26V6Z" fill="white" />
-                <path d="M13 10H18C19.1046 10 20 10.8954 20 12C20 13.1046 19.1046 14 18 14H13V10Z" fill="#1e3a8a" />
-                <path d="M19 16L25 24H20L18 27L21 21H16L19 16Z" fill="#38bdf8" />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono text-xs font-black tracking-widest text-sky-400 uppercase">
-                  PAYGO <span className="text-white">SECURE</span>
-                </span>
-              </div>
-              <p className="text-[10.5px] text-slate-400 truncate">
-                Xavfsiz to‘lovlar, siz bilan
-              </p>
-            </div>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <PayGoLogo className="h-9 w-auto" url={data?.siteLogo || undefined} showText={true} />
           </div>
 
-          {/* Right: User / Shop Profile Badge */}
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-2 rounded-xl bg-[#0e1c38]/90 border border-blue-800/40 px-2.5 py-1.5 shadow-inner">
-              <div className="size-6 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
-                {shopName.charAt(0) || 'Y'}
-              </div>
-              <div className="text-right hidden sm:block">
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold text-slate-100 max-w-[90px] truncate">{shopName}</span>
-                  <BadgeCheck size={13} className="text-sky-400 fill-sky-400/20" />
+          {/* Right: User / Shop Profile Badge + Theme Switcher */}
+          <div className="flex items-center gap-2">
+            {/* Theme Selector Button (10 Designs) */}
+            <button
+              onClick={() => setShowThemeModal(true)}
+              title="10 xil to‘lov sahifasi dizaynini tanlash"
+              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition border ${
+                currentTheme.tier === 'premium'
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
+                  : 'bg-blue-600/20 border-blue-500/40 text-sky-300 hover:bg-blue-600/30'
+              }`}
+            >
+              <Palette size={14} className={currentTheme.tier === 'premium' ? 'text-amber-400' : 'text-sky-400'} />
+              <span className="hidden xs:inline">Dizayn ({currentTheme.tier === 'premium' ? 'VIP' : '5/5'})</span>
+            </button>
+
+            {/* Shop & User Profile Badge */}
+            <div className={`flex items-center gap-2 rounded-xl ${currentTheme.isDark ? 'bg-black/30' : 'bg-slate-100'} border ${currentTheme.headerBorder} px-2.5 py-1.5`}>
+              {data?.shop?.logoUrl ? (
+                <img
+                  src={data.shop.logoUrl}
+                  alt={shopName}
+                  className="size-7 rounded-lg object-cover border border-white/20 shrink-0"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              ) : (
+                <div className={`size-7 rounded-lg ${currentTheme.accentColor} flex items-center justify-center text-xs font-black text-white shadow-xs shrink-0`}>
+                  {shopName.charAt(0) || 'M'}
                 </div>
-                <p className="text-[9.5px] font-mono text-slate-400">ID: {paymentId.slice(0, 8)}</p>
+              )}
+              <div className="text-right hidden sm:block max-w-[120px]">
+                <div className="flex items-center justify-end gap-1">
+                  <span className={`text-xs font-bold truncate ${currentTheme.isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                    {shopName}
+                  </span>
+                  {isShopPremium ? (
+                    <Crown size={12} className="text-amber-400 shrink-0" />
+                  ) : (
+                    <BadgeCheck size={13} className="text-sky-400 fill-sky-400/20 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[9.5px] font-mono text-slate-400 truncate">
+                  ID: {shopId.slice(0, 8)}
+                </p>
               </div>
             </div>
 
             <button
               onClick={() => setShowGuide(!showGuide)}
               title="Qo‘llanma va xabarlar"
-              className="relative rounded-xl p-2 bg-[#0e1c38] border border-blue-900/50 text-slate-300 hover:text-white hover:bg-blue-900/40 transition"
+              className={`relative rounded-xl p-2 ${currentTheme.isDark ? 'bg-black/30' : 'bg-slate-100'} border ${currentTheme.headerBorder} text-slate-300 hover:text-white transition`}
             >
               <Bell size={16} />
               <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-sky-400 animate-ping" />
@@ -354,19 +420,19 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
         {/* STATUS 1: SUCCESS / PAID STATE */}
         {/* ========================================================================= */}
         {isPaid ? (
-          <div className="rounded-3xl border border-emerald-500/30 bg-[#091824]/90 backdrop-blur-xl p-6 sm:p-8 shadow-2xl text-center relative overflow-hidden">
+          <div className={`rounded-3xl border border-emerald-500/30 ${currentTheme.isDark ? 'bg-[#091824]/95' : 'bg-white'} backdrop-blur-xl p-6 sm:p-8 shadow-2xl text-center relative overflow-hidden`}>
             <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 shadow-xl shadow-emerald-500/20">
               <CheckCircle2 size={38} className="animate-in zoom-in-75 duration-300" />
             </div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className={`text-2xl font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>
               To‘lov muvaffaqiyatli qabul qilindi!
             </h1>
-            <p className="mt-1.5 text-xs text-slate-300">
-              HUMO / UZCARD to‘lovi avtomatik tarzda tasdiqlandi va merchantga yuborildi.
+            <p className="mt-1.5 text-xs text-slate-400">
+              HUMO / UZCARD to‘lovi avtomatik tarzda tasdiqlandi va merchantga yetkazildi.
             </p>
 
             {/* Receipt Summary Card */}
-            <div className="mt-6 rounded-2xl bg-[#06101c] p-5 text-left border border-emerald-900/40 relative overflow-hidden">
+            <div className={`mt-6 rounded-2xl ${currentTheme.isDark ? 'bg-[#06101c]' : 'bg-slate-50'} p-5 text-left border border-emerald-900/40 relative overflow-hidden`}>
               <div className="absolute right-3 top-3 opacity-90 pointer-events-none transform rotate-[-6deg]">
                 <div className="size-20 rounded-full border-2 border-dashed border-emerald-500/80 flex flex-col items-center justify-center p-1 text-center bg-emerald-950/40">
                   <span className="text-[7px] font-black text-emerald-400 tracking-wider">PAYGO</span>
@@ -378,19 +444,19 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               <div className="space-y-2.5 pr-16 text-xs text-slate-400">
                 <div className="flex justify-between">
                   <span>To‘lov summasi:</span>
-                  <b className="text-sm font-bold text-white font-mono">
+                  <b className={`text-sm font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'} font-mono`}>
                     {formatAmount(amountNumber)} UZS
                   </b>
                 </div>
                 <div className="flex justify-between">
                   <span>Karta:</span>
-                  <span className="font-mono font-semibold text-slate-200">
+                  <span className="font-mono font-semibold text-slate-300">
                     {formattedCard}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Karta egasi:</span>
-                  <span className="font-medium text-slate-200">{cardOwner}</span>
+                  <span className="font-medium text-slate-300">{cardOwner}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Holati:</span>
@@ -421,21 +487,21 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               <div className="flex gap-2.5">
                 <button
                   onClick={() => window.open(`/pay/${paymentId}/receipt`, '_blank')}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/90 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/90 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
                 >
                   <Printer size={14} /> Chop etish
                 </button>
                 {data?.returnUrl ? (
                   <a
                     href={data.returnUrl}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/90 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/90 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
                   >
                     <ArrowLeft size={14} /> Do‘konga qaytish
                   </a>
                 ) : (
                   <Link
                     href="/"
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/90 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/90 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
                   >
                     <ArrowLeft size={14} /> Bosh sahifa
                   </Link>
@@ -453,11 +519,11 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
           /* ========================================================================= */
           /* STATUS 2: EXPIRED STATE */
           /* ========================================================================= */
-          <div className="rounded-3xl border border-red-900/40 bg-[#0a1220]/90 backdrop-blur-xl p-6 sm:p-8 shadow-2xl text-center">
+          <div className={`rounded-3xl border border-red-900/40 ${currentTheme.isDark ? 'bg-[#0a1220]/90' : 'bg-white'} backdrop-blur-xl p-6 sm:p-8 shadow-2xl text-center`}>
             <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-red-950/80 border border-red-500/40 text-red-400 shadow-xl shadow-red-950/40">
               <AlertCircle size={36} />
             </div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className={`text-2xl font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>
               To‘lov muddati tugadi
             </h1>
             <p className="mt-2 text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
@@ -474,7 +540,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/80 px-5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/80 px-5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
               >
                 <RefreshCw size={14} /> Qayta tekshirish
               </button>
@@ -488,12 +554,12 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
           </div>
         ) : (
           /* ========================================================================= */
-          /* STATUS 3: PENDING PAYMENT (MATCHING USER MOCKUP PERFECTLY) */
+          /* STATUS 3: PENDING PAYMENT */
           /* ========================================================================= */
           <div className="space-y-4">
 
             {/* 3. ASOSIY BALANS / TO'LOV SUMMASI CARD */}
-            <div className="rounded-3xl border border-blue-900/40 bg-[#091428]/90 backdrop-blur-xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+            <div className={`rounded-3xl border ${currentTheme.amountCardBorder} ${currentTheme.amountCardBg} backdrop-blur-xl p-5 sm:p-6 shadow-2xl relative overflow-hidden`}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* Left: Amount & Security */}
                 <div>
@@ -501,7 +567,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                     <span>Asosiy to‘lov</span>
                     <button
                       onClick={() => setShowAmount(!showAmount)}
-                      className="text-slate-400 hover:text-sky-400 transition"
+                      className={`hover:${currentTheme.accentText} transition`}
                       title={showAmount ? 'Summani yashirish' : 'Summani ko‘rsatish'}
                     >
                       {showAmount ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -509,7 +575,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                   </div>
 
                   <div className="mt-1 flex items-baseline gap-2">
-                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white font-mono">
+                    <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tight ${currentTheme.isDark ? 'text-white' : 'text-slate-900'} font-mono`}>
                       {showAmount ? formatAmount(amountNumber) : '••••••'}{' '}
                       <span className="text-lg font-bold text-slate-400">UZS</span>
                     </h1>
@@ -522,10 +588,10 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                     </button>
                   </div>
 
-                  <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-blue-950/80 border border-blue-800/50 px-3 py-1 text-[11px] font-medium text-slate-300">
-                    <ShieldCheck size={13} className="text-sky-400" />
-                    <span>Hisobingiz xavfsiz</span>
-                    <Check size={12} className="text-sky-400" />
+                  <div className={`mt-2.5 inline-flex items-center gap-1.5 rounded-full ${currentTheme.isDark ? 'bg-black/40' : 'bg-slate-100'} border ${currentTheme.headerBorder} px-3 py-1 text-[11px] font-medium text-slate-300`}>
+                    <ShieldCheck size={13} className={currentTheme.accentText} />
+                    <span className={currentTheme.isDark ? 'text-slate-300' : 'text-slate-700'}>Hisobingiz xavfsiz</span>
+                    <Check size={12} className={currentTheme.accentText} />
                   </div>
                 </div>
 
@@ -533,7 +599,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <div className="flex flex-col gap-2 shrink-0">
                   <button
                     onClick={() => handleOpenPaymentApp('Payme', 'https://payme.uz')}
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-[#0066ff] hover:bg-[#0052cc] px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-600/30 transition active:scale-98"
+                    className={`flex items-center justify-center gap-2 rounded-2xl ${currentTheme.actionBtnBg} px-5 py-2.5 text-xs font-bold text-white shadow-lg transition active:scale-98`}
                   >
                     <Plus size={15} />
                     <span>Tez to‘lov</span>
@@ -541,9 +607,9 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
 
                   <button
                     onClick={() => handleOpenPaymentApp('Click', 'https://my.click.uz')}
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-[#0e1c38] hover:bg-[#13274e] border border-blue-900/60 px-5 py-2.5 text-xs font-bold text-slate-200 transition active:scale-98"
+                    className={`flex items-center justify-center gap-2 rounded-2xl ${currentTheme.quickBtnBg} ${currentTheme.quickBtnHover} border ${currentTheme.quickBtnBorder} px-5 py-2.5 text-xs font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-700'} transition active:scale-98`}
                   >
-                    <ArrowUpRight size={14} className="text-sky-400" />
+                    <ArrowUpRight size={14} className={currentTheme.accentText} />
                     <span>Pul o‘tkazish</span>
                   </button>
                 </div>
@@ -553,40 +619,40 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
             {/* 4. REALISTIC METALLIC DEBIT CARD + SIDE ACTION PANEL */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
               {/* Metallic Card Mockup */}
-              <div className="md:col-span-8 rounded-3xl bg-gradient-to-br from-[#0c2452] via-[#103478] to-[#091a3b] border border-blue-500/40 p-5 sm:p-6 shadow-2xl shadow-blue-950/50 relative overflow-hidden flex flex-col justify-between min-h-[210px]">
+              <div className={`md:col-span-8 rounded-3xl ${currentTheme.cardGradient} border ${currentTheme.cardBorder} p-5 sm:p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-[215px]`}>
                 {/* Subtle card sheen reflections */}
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-sky-400/15 via-transparent to-transparent pointer-events-none" />
-                <div className="absolute -right-10 -bottom-10 size-48 rounded-full bg-blue-600/10 blur-2xl pointer-events-none" />
+                <div className={`absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] ${currentTheme.cardSheen} pointer-events-none`} />
 
-                {/* Card Top: Brand & Network Logos */}
+                {/* Card Top: Brand & Network Logos (Pristine High-Definition Badges) */}
                 <div className="flex items-center justify-between relative z-10">
                   <div className="flex items-center gap-2">
-                    <div className="size-6 rounded-md bg-white/10 backdrop-blur-xs flex items-center justify-center">
-                      <span className="font-black text-xs text-sky-300">P</span>
+                    <div className="size-6 rounded-md bg-white/15 backdrop-blur-xs flex items-center justify-center">
+                      <span className="font-black text-xs text-white">P</span>
                     </div>
                     <span className="font-mono text-xs font-extrabold tracking-widest text-white uppercase">
                       PAYGO CARD
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 bg-black/30 backdrop-blur-xs rounded-xl px-2.5 py-1 border border-white/10">
-                    <UzcardLogo className="h-4.5 w-auto" />
-                    <div className="w-px h-3 bg-white/20" />
-                    <HumoLogo className="h-4.5 w-auto" />
+                  {/* Pristine Humo & Uzcard Vector Badges */}
+                  <div className="flex items-center gap-2 bg-black/40 backdrop-blur-xs rounded-xl p-1 border border-white/15">
+                    <UzcardLogo className="h-5 w-auto" />
+                    <div className="w-px h-3 bg-white/25" />
+                    <HumoLogo className="h-5 w-auto" />
                   </div>
                 </div>
 
                 {/* EMV Gold Circuit Chip */}
                 <div className="my-4 relative z-10 flex items-center justify-between">
-                  <div className="w-10 h-7 rounded-lg bg-gradient-to-tr from-amber-400 via-amber-200 to-amber-500 border border-amber-300/80 shadow-md flex items-center justify-center relative overflow-hidden">
+                  <div className={`w-10 h-7 rounded-lg bg-gradient-to-tr ${currentTheme.cardChipBg} shadow-md flex items-center justify-center relative overflow-hidden`}>
                     <div className="w-full h-[1px] bg-amber-700/50 absolute top-2.5"></div>
                     <div className="w-full h-[1px] bg-amber-700/50 absolute bottom-2.5"></div>
                     <div className="h-full w-[1px] bg-amber-700/50 absolute left-3"></div>
                     <div className="h-full w-[1px] bg-amber-700/50 absolute right-3"></div>
-                    <Radio size={12} className="text-amber-900/60" />
+                    <Radio size={12} className="text-amber-900/70" />
                   </div>
 
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-sky-200/80 font-bold bg-blue-950/60 px-2.5 py-0.5 rounded-full border border-sky-400/20">
+                  <span className="text-[9.5px] font-mono uppercase tracking-widest text-white/90 font-bold bg-black/40 px-2.5 py-0.5 rounded-full border border-white/20">
                     ONLINE REKVIZIT
                   </span>
                 </div>
@@ -599,14 +665,14 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 </div>
 
                 {/* Card Holder & Expiry */}
-                <div className="mt-4 flex items-center justify-between relative z-10 pt-2 border-t border-white/10 text-xs">
+                <div className="mt-4 flex items-center justify-between relative z-10 pt-2 border-t border-white/15 text-xs text-white">
                   <div className="flex items-center gap-1.5">
-                    <User size={13} className="text-sky-300" />
-                    <span className="font-bold tracking-wider text-slate-100 uppercase">{cardOwner}</span>
+                    <User size={13} className="text-white/80" />
+                    <span className="font-bold tracking-wider uppercase">{cardOwner}</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-[8.5px] uppercase tracking-wider text-sky-200/70 font-semibold leading-none">VALID THRU</p>
-                    <p className="font-mono font-bold text-slate-100 text-[11px] mt-0.5">12/28</p>
+                    <p className="text-[8.5px] uppercase tracking-wider text-white/70 font-semibold leading-none">VALID THRU</p>
+                    <p className="font-mono font-bold text-[11px] mt-0.5">12/28</p>
                   </div>
                 </div>
               </div>
@@ -617,25 +683,25 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <button
                   type="button"
                   onClick={() => copyToClipboard(cardNumber.replace(/\s/g, ''), 'card')}
-                  className="flex-1 flex flex-col items-center justify-center p-4 rounded-3xl bg-[#091428]/90 border border-blue-900/50 hover:border-blue-500/60 hover:bg-[#0d1d3a] transition text-center shadow-xl group active:scale-98"
+                  className={`flex-1 flex flex-col items-center justify-center p-4 rounded-3xl ${currentTheme.amountCardBg} border ${currentTheme.amountCardBorder} hover:border-blue-500/60 transition text-center shadow-xl group active:scale-98`}
                 >
-                  <div className="size-10 rounded-2xl bg-blue-950/80 border border-blue-800/60 grid place-items-center text-sky-400 group-hover:scale-105 transition mb-2">
+                  <div className={`size-10 rounded-2xl ${currentTheme.isDark ? 'bg-black/40' : 'bg-slate-100'} border ${currentTheme.headerBorder} grid place-items-center ${currentTheme.accentText} group-hover:scale-105 transition mb-2`}>
                     {copiedCard ? <Check size={20} className="text-emerald-400" /> : <QrCode size={20} />}
                   </div>
-                  <p className="text-xs font-bold text-white">
+                  <p className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>
                     {copiedCard ? 'Nusxalandi! ✅' : 'Karta raqamini nusxalash'}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">1 marta bosish bilan</p>
                 </button>
 
                 {/* Card Network Switcher / Info */}
-                <div className="p-4 rounded-3xl bg-[#091428]/90 border border-blue-900/50 flex items-center justify-between shadow-xl">
+                <div className={`p-4 rounded-3xl ${currentTheme.amountCardBg} border ${currentTheme.amountCardBorder} flex items-center justify-between shadow-xl`}>
                   <div className="flex items-center gap-2.5">
-                    <div className="size-9 rounded-xl bg-blue-950/80 border border-blue-800/60 grid place-items-center text-sky-400">
+                    <div className={`size-9 rounded-xl ${currentTheme.isDark ? 'bg-black/40' : 'bg-slate-100'} border ${currentTheme.headerBorder} grid place-items-center ${currentTheme.accentText}`}>
                       <Wallet size={18} />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-white">{data?.shop?.cardBank || 'HUMOCARD'}</p>
+                      <p className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>{data?.shop?.cardBank || 'HUMOCARD'}</p>
                       <p className="text-[10px] text-emerald-400 font-semibold">Faol qabul qiluvchi</p>
                     </div>
                   </div>
@@ -648,77 +714,79 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               <button
                 onClick={() => handleOpenPaymentApp('Payme', 'https://payme.uz')}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#091428]/80 border border-blue-900/40 hover:border-blue-500/50 hover:bg-[#0e1d38] transition active:scale-95"
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
               >
-                <div className="size-8 rounded-xl bg-blue-600/20 text-sky-400 grid place-items-center mb-1.5">
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
                   <Zap size={16} />
                 </div>
-                <span className="text-[11px] font-bold text-slate-200">To‘lov</span>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>To‘lov</span>
               </button>
 
               <button
                 onClick={() => handleOpenPaymentApp('Click', 'https://my.click.uz')}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#091428]/80 border border-blue-900/40 hover:border-blue-500/50 hover:bg-[#0e1d38] transition active:scale-95"
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
               >
-                <div className="size-8 rounded-xl bg-blue-600/20 text-sky-400 grid place-items-center mb-1.5">
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
                   <ArrowRight size={16} />
                 </div>
-                <span className="text-[11px] font-bold text-slate-200">O‘tkazma</span>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>O‘tkazma</span>
               </button>
 
               <button
                 onClick={() => handleOpenPaymentApp('Payme', 'https://payme.uz')}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#091428]/80 border border-blue-900/40 hover:border-blue-500/50 hover:bg-[#0e1d38] transition active:scale-95"
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
               >
-                <div className="size-8 rounded-xl bg-blue-600/20 text-sky-400 grid place-items-center mb-1.5">
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
                   <Smartphone size={16} />
                 </div>
-                <span className="text-[11px] font-bold text-slate-200">Mobil aloqa</span>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Mobil aloqa</span>
               </button>
 
               <button
                 onClick={() => handleOpenPaymentApp('Click', 'https://my.click.uz')}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#091428]/80 border border-blue-900/40 hover:border-blue-500/50 hover:bg-[#0e1d38] transition active:scale-95"
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
               >
-                <div className="size-8 rounded-xl bg-blue-600/20 text-sky-400 grid place-items-center mb-1.5">
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
                   <Globe size={16} />
                 </div>
-                <span className="text-[11px] font-bold text-slate-200">Internet</span>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Internet</span>
               </button>
 
               <button
                 onClick={() => handleOpenPaymentApp('Uzum Bank', 'https://uzumbank.uz')}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#091428]/80 border border-blue-900/40 hover:border-blue-500/50 hover:bg-[#0e1d38] transition active:scale-95"
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
               >
-                <div className="size-8 rounded-xl bg-blue-600/20 text-sky-400 grid place-items-center mb-1.5">
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
                   <Home size={16} />
                 </div>
-                <span className="text-[11px] font-bold text-slate-200">Kommunal</span>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Kommunal</span>
               </button>
 
               <button
-                onClick={() => setShowGuide(!showGuide)}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#091428]/80 border border-blue-900/40 hover:border-blue-500/50 hover:bg-[#0e1d38] transition active:scale-95"
+                onClick={() => setShowThemeModal(true)}
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
               >
-                <div className="size-8 rounded-xl bg-blue-600/20 text-sky-400 grid place-items-center mb-1.5">
-                  <MoreHorizontal size={16} />
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
+                  <Palette size={16} />
                 </div>
-                <span className="text-[11px] font-bold text-slate-200">Boshqalar</span>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Dizaynlar</span>
               </button>
             </div>
 
-            {/* 6. TO'LOV XIZMATLARI (DIRECT FINTECH APPS GRID) */}
+            {/* 6. TO'LOV XIZMATLARI (ORIGINAL VIVID BRAND LOGOS) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
-                  <Layers size={16} className="text-sky-400" />
-                  <h3 className="text-xs font-bold text-slate-100">To‘lov xizmatlari</h3>
+                  <Layers size={16} className={currentTheme.accentText} />
+                  <h3 className={`text-xs font-bold ${currentTheme.isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                    To‘lov xizmatlari (Ilovalar)
+                  </h3>
                 </div>
                 <button
                   onClick={() => setShowGuide(true)}
-                  className="text-[11px] font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1"
+                  className={`text-[11px] font-bold ${currentTheme.accentText} flex items-center gap-1`}
                 >
-                  <span>Barchasi</span>
+                  <span>Qo‘llanma</span>
                   <ArrowRight size={12} />
                 </button>
               </div>
@@ -728,14 +796,14 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <button
                   type="button"
                   onClick={() => handleOpenPaymentApp('Payme', 'https://payme.uz')}
-                  className="flex flex-col justify-between p-3.5 rounded-2xl bg-[#091428]/90 border border-blue-900/40 hover:border-sky-400/50 hover:bg-[#0e1d38] transition text-left group shadow-lg min-h-[105px] active:scale-98"
+                  className={`flex flex-col justify-between p-3.5 rounded-2xl ${currentTheme.appCardBg} border ${currentTheme.appCardBorder} hover:border-sky-400/60 transition text-left group shadow-lg min-h-[110px] active:scale-98`}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <PaymeLogo className="h-6 w-auto" />
+                    <PaymeLogo className="h-6.5 w-auto" />
                   </div>
                   <div className="mt-3 flex items-end justify-between w-full">
                     <div>
-                      <p className="text-xs font-bold text-white">Payme</p>
+                      <p className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>Payme</p>
                       <p className="text-[10px] text-slate-400">Tez va qulay</p>
                     </div>
                     <div className="size-6 rounded-full bg-blue-600 group-hover:bg-sky-500 text-white grid place-items-center transition">
@@ -748,14 +816,14 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <button
                   type="button"
                   onClick={() => handleOpenPaymentApp('Click', 'https://my.click.uz')}
-                  className="flex flex-col justify-between p-3.5 rounded-2xl bg-[#091428]/90 border border-blue-900/40 hover:border-sky-400/50 hover:bg-[#0e1d38] transition text-left group shadow-lg min-h-[105px] active:scale-98"
+                  className={`flex flex-col justify-between p-3.5 rounded-2xl ${currentTheme.appCardBg} border ${currentTheme.appCardBorder} hover:border-sky-400/60 transition text-left group shadow-lg min-h-[110px] active:scale-98`}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <ClickLogo className="h-6 w-auto" />
+                    <ClickLogo className="h-6.5 w-auto" />
                   </div>
                   <div className="mt-3 flex items-end justify-between w-full">
                     <div>
-                      <p className="text-xs font-bold text-white">Click</p>
+                      <p className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>Click</p>
                       <p className="text-[10px] text-slate-400">Oson to‘lovlar</p>
                     </div>
                     <div className="size-6 rounded-full bg-blue-600 group-hover:bg-sky-500 text-white grid place-items-center transition">
@@ -768,14 +836,14 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <button
                   type="button"
                   onClick={() => handleOpenPaymentApp('Uzum Bank', 'https://uzumbank.uz')}
-                  className="flex flex-col justify-between p-3.5 rounded-2xl bg-[#091428]/90 border border-blue-900/40 hover:border-sky-400/50 hover:bg-[#0e1d38] transition text-left group shadow-lg min-h-[105px] active:scale-98"
+                  className={`flex flex-col justify-between p-3.5 rounded-2xl ${currentTheme.appCardBg} border ${currentTheme.appCardBorder} hover:border-sky-400/60 transition text-left group shadow-lg min-h-[110px] active:scale-98`}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <UzumBankLogo className="h-6 w-auto" />
+                    <UzumBankLogo className="h-6.5 w-auto" />
                   </div>
                   <div className="mt-3 flex items-end justify-between w-full">
                     <div>
-                      <p className="text-xs font-bold text-white">Uzum Bank</p>
+                      <p className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>Uzum Bank</p>
                       <p className="text-[10px] text-slate-400">Bank xizmatlari</p>
                     </div>
                     <div className="size-6 rounded-full bg-blue-600 group-hover:bg-sky-500 text-white grid place-items-center transition">
@@ -784,21 +852,20 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                   </div>
                 </button>
 
-                {/* Anorbank / Beeline / Boshqa */}
+                {/* Bank ilovasi / HUMO & UZCARD */}
                 <button
                   type="button"
                   onClick={() => copyToClipboard(cardNumber.replace(/\s/g, ''), 'card')}
-                  className="flex flex-col justify-between p-3.5 rounded-2xl bg-[#091428]/90 border border-blue-900/40 hover:border-sky-400/50 hover:bg-[#0e1d38] transition text-left group shadow-lg min-h-[105px] active:scale-98"
+                  className={`flex flex-col justify-between p-3.5 rounded-2xl ${currentTheme.appCardBg} border ${currentTheme.appCardBorder} hover:border-sky-400/60 transition text-left group shadow-lg min-h-[110px] active:scale-98`}
                 >
-                  <div className="flex items-center justify-between w-full">
-                    <div className="size-7 rounded-xl bg-amber-500/20 border border-amber-500/40 grid place-items-center text-amber-400 font-bold text-xs">
-                      B
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <HumoLogo className="h-5 w-auto" />
+                    <UzcardLogo className="h-5 w-auto" />
                   </div>
                   <div className="mt-3 flex items-end justify-between w-full">
                     <div>
-                      <p className="text-xs font-bold text-white">Bank ilovasi</p>
-                      <p className="text-[10px] text-slate-400">Karta o‘tkazmasi</p>
+                      <p className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>Barcha banklar</p>
+                      <p className="text-[10px] text-slate-400">P2P o‘tkazma</p>
                     </div>
                     <div className="size-6 rounded-full bg-blue-600 group-hover:bg-sky-500 text-white grid place-items-center transition">
                       <ArrowRight size={12} />
@@ -808,41 +875,45 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               </div>
             </div>
 
-            {/* 7. PROMO FEATURE BANNER (PAYGO CARD) */}
-            <div className="rounded-3xl border border-blue-800/40 bg-gradient-to-r from-[#0b1938] via-[#0f2552] to-[#0a162e] p-4 sm:p-5 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            {/* 7. PROMO FEATURE BANNER */}
+            <div className={`rounded-3xl border ${currentTheme.headerBorder} ${currentTheme.headerBg} p-4 sm:p-5 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
               <div className="flex items-center gap-3.5">
                 <div className="size-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-sky-400 p-0.5 shadow-lg shadow-blue-500/20 shrink-0 flex items-center justify-center">
-                  <div className="size-full rounded-[14px] bg-[#091428] flex items-center justify-center text-sky-400">
+                  <div className={`size-full rounded-[14px] ${currentTheme.isDark ? 'bg-[#091428]' : 'bg-white'} flex items-center justify-center ${currentTheme.accentText}`}>
                     <Wallet size={22} />
                   </div>
                 </div>
                 <div>
                   <div className="inline-flex items-center gap-1 rounded-md bg-blue-950/80 border border-blue-700/40 px-2 py-0.5 text-[9.5px] font-bold text-sky-400 uppercase tracking-wider mb-1">
-                    YANGILIK
+                    10 XIL DIZAYN
                   </div>
-                  <h4 className="text-xs font-bold text-white">PayGo Card — endi yanada qulay!</h4>
-                  <p className="text-[10.5px] text-slate-400">Kartangiz orqali tez va xavfsiz to‘lov qiling.</p>
+                  <h4 className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>
+                    5 Tekin + 5 VIP Dizaynlar mavjud!
+                  </h4>
+                  <p className="text-[10.5px] text-slate-400">
+                    O‘zingizga yoqqan rang va uslubni tanlang yoki VIP rejimga o‘ting.
+                  </p>
                 </div>
               </div>
 
               <button
-                onClick={() => setShowPromoModal(true)}
+                onClick={() => setShowThemeModal(true)}
                 className="flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-bold text-white transition shrink-0 shadow-md shadow-blue-600/30"
               >
-                <span>Batafsil</span>
-                <ArrowRight size={13} />
+                <Palette size={13} />
+                <span>Mavzularni ko‘rish</span>
               </button>
             </div>
 
             {/* 8. TIMER & REAL-TIME STATUS CHECK BAR */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
               {/* Timer Pill */}
-              <div className="sm:col-span-5 flex items-center justify-between rounded-2xl bg-[#091428]/90 border border-blue-900/40 px-4 py-3 shadow-lg">
-                <div className="flex items-center gap-2 text-xs text-slate-300 font-medium">
-                  <Clock3 size={15} className="text-sky-400" />
+              <div className={`sm:col-span-5 flex items-center justify-between rounded-2xl ${currentTheme.amountCardBg} border ${currentTheme.amountCardBorder} px-4 py-3 shadow-lg`}>
+                <div className={`flex items-center gap-2 text-xs ${currentTheme.isDark ? 'text-slate-300' : 'text-slate-700'} font-medium`}>
+                  <Clock3 size={15} className={currentTheme.accentText} />
                   <span>To‘lov uchun vaqt:</span>
                 </div>
-                <span className="font-mono text-sm font-extrabold text-sky-400 tracking-wider">
+                <span className={`font-mono text-sm font-extrabold ${currentTheme.accentText} tracking-wider`}>
                   {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
                 </span>
               </div>
@@ -850,7 +921,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               {/* Instant Verification Button */}
               <button
                 onClick={fetchPayment}
-                className="sm:col-span-7 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#0066ff] to-[#0052cc] hover:from-blue-500 hover:to-blue-600 py-3 px-4 text-xs font-bold text-white shadow-xl shadow-blue-600/25 transition active:scale-98"
+                className={`sm:col-span-7 flex items-center justify-center gap-2 rounded-2xl ${currentTheme.actionBtnBg} py-3 px-4 text-xs font-bold text-white shadow-xl transition active:scale-98`}
               >
                 <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
                 <span>To‘lov qilinganini tekshirish</span>
@@ -885,18 +956,18 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
             )}
 
             {/* 10. INSTRUCTION ACCORDION CARD */}
-            <div className="rounded-3xl border border-blue-900/40 bg-[#091428]/90 p-4 sm:p-5 shadow-xl">
+            <div className={`rounded-3xl border ${currentTheme.amountCardBorder} ${currentTheme.amountCardBg} p-4 sm:p-5 shadow-xl`}>
               <button
                 type="button"
                 onClick={() => setShowGuide(!showGuide)}
                 className="w-full flex items-center justify-between text-left"
               >
                 <div className="flex items-center gap-2.5">
-                  <div className="size-8 rounded-xl bg-blue-950/90 border border-blue-800/60 grid place-items-center text-sky-400">
+                  <div className={`size-8 rounded-xl ${currentTheme.isDark ? 'bg-black/40' : 'bg-slate-100'} border ${currentTheme.headerBorder} grid place-items-center ${currentTheme.accentText}`}>
                     <FileText size={16} />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-white">To‘lov bo‘yicha qo‘llanma:</h4>
+                    <h4 className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>To‘lov bo‘yicha qo‘llanma:</h4>
                     <p className="text-[10px] text-slate-400">3 qadamda xavfsiz to‘lov</p>
                   </div>
                 </div>
@@ -904,17 +975,17 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               </button>
 
               {(showGuide || true) && (
-                <div className="mt-3.5 pt-3.5 border-t border-blue-900/40 space-y-2 text-xs text-slate-300 leading-relaxed">
+                <div className={`mt-3.5 pt-3.5 border-t ${currentTheme.headerBorder} space-y-2 text-xs ${currentTheme.isDark ? 'text-slate-300' : 'text-slate-600'} leading-relaxed`}>
                   <p className="flex items-start gap-2">
-                    <span className="font-bold text-sky-400 font-mono">1.</span>
+                    <span className={`font-bold ${currentTheme.accentText} font-mono`}>1.</span>
                     <span><b>Payme, Click, Uzum Bank</b> tugmasini bosing yoki bank ilovangizni oching.</span>
                   </p>
                   <p className="flex items-start gap-2">
-                    <span className="font-bold text-sky-400 font-mono">2.</span>
-                    <span>Yuqoridagi <b className="text-white font-mono">{formattedCard}</b> kartasiga aynan <b className="text-sky-300 font-mono">{formatAmount(amountNumber)} UZS</b> o‘tkazing.</span>
+                    <span className={`font-bold ${currentTheme.accentText} font-mono`}>2.</span>
+                    <span>Yuqoridagi <b className={`${currentTheme.isDark ? 'text-white' : 'text-slate-900'} font-mono`}>{formattedCard}</b> kartasiga aynan <b className={`${currentTheme.accentText} font-mono`}>{formatAmount(amountNumber)} UZS</b> o‘tkazing.</span>
                   </p>
                   <p className="flex items-start gap-2">
-                    <span className="font-bold text-sky-400 font-mono">3.</span>
+                    <span className={`font-bold ${currentTheme.accentText} font-mono`}>3.</span>
                     <span>Userbot <b>@humocardbot</b> xabarini o‘qishi bilanoq ushbu sahifa 1-3 soniyada avtomatik tasdiqlanadi.</span>
                   </p>
                 </div>
@@ -932,6 +1003,149 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
         </footer>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* 10 TA DIZAYN MAVZULARI MODAL (5 FREE + 5 VIP) */}
+      {/* ========================================================================= */}
+      {showThemeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div onClick={() => setShowThemeModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-xs" />
+          <div className="relative w-full max-w-2xl rounded-3xl bg-[#091428] border border-blue-800/60 p-5 sm:p-6 shadow-2xl z-50 text-white max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-blue-900/50">
+              <div className="flex items-center gap-2.5">
+                <div className="size-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white grid place-items-center shadow-md shadow-blue-500/30">
+                  <Palette size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
+                    To‘lov Sahifasi Dizaynlari
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600/30 text-sky-400 border border-blue-500/40">10 ta</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">5 ta Bepul + 5 ta Eksklyuziv VIP dizaynlar</p>
+                </div>
+              </div>
+              <button onClick={() => setShowThemeModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg">
+                ✕
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 my-3.5">
+              <button
+                onClick={() => setThemeFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  themeFilter === 'all'
+                    ? 'bg-[#0066ff] text-white shadow-md shadow-blue-600/30'
+                    : 'bg-[#060e1d] text-slate-400 hover:text-white border border-blue-900/40'
+                }`}
+              >
+                Barchasi (10)
+              </button>
+              <button
+                onClick={() => setThemeFilter('free')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                  themeFilter === 'free'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                    : 'bg-[#060e1d] text-slate-400 hover:text-white border border-emerald-900/40'
+                }`}
+              >
+                <span>Bepul (5)</span>
+              </button>
+              <button
+                onClick={() => setThemeFilter('premium')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                  themeFilter === 'premium'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/30'
+                    : 'bg-[#060e1d] text-amber-400/80 hover:text-amber-300 border border-amber-900/40'
+                }`}
+              >
+                <Crown size={12} />
+                <span>VIP Premium (5)</span>
+              </button>
+            </div>
+
+            {/* Themes Grid */}
+            <div className="overflow-y-auto pr-1 space-y-2.5 max-h-[50vh] sm:max-h-[55vh]">
+              {filteredThemes.map((t) => {
+                const isSelected = currentThemeId === t.id
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => handleSelectTheme(t.id)}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'border-sky-400 bg-blue-950/60 shadow-lg shadow-blue-500/20 ring-2 ring-sky-400/30'
+                        : 'border-blue-900/40 bg-[#060e1d]/80 hover:border-blue-700/60 hover:bg-[#0a1529]'
+                    }`}
+                  >
+                    {/* Left: Color swatch & Info */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="size-10 rounded-xl border border-white/20 shadow-md shrink-0 flex items-center justify-center relative overflow-hidden"
+                        style={{ backgroundColor: t.previewDot }}
+                      >
+                        {t.tier === 'premium' ? (
+                          <Crown size={18} className="text-white drop-shadow-sm" />
+                        ) : (
+                          <div className="size-3 rounded-full bg-white/80" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-white truncate">{t.name}</h4>
+                          <span
+                            className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                              t.tier === 'premium'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            }`}
+                          >
+                            {t.tier === 'premium' ? '👑 VIP' : 'TEKIN'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 truncate mt-0.5">{t.description}</p>
+                      </div>
+                    </div>
+
+                    {/* Right: Select / Active indicator */}
+                    <div className="shrink-0">
+                      {isSelected ? (
+                        <span className="flex items-center gap-1 text-xs font-bold text-sky-400 bg-blue-950 px-2.5 py-1 rounded-xl border border-sky-400/40">
+                          <Check size={14} /> Tanlangan
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-slate-400 hover:text-white bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700 transition"
+                        >
+                          Qo‘llash
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="mt-4 pt-3 border-t border-blue-900/50 flex items-center justify-between">
+              <p className="text-[11px] text-slate-400">
+                Tanlangan: <b className="text-sky-300">{currentTheme.name}</b>
+              </p>
+              <button
+                onClick={() => setShowThemeModal(false)}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-md shadow-blue-600/30"
+              >
+                Tayyor
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* PROMO / INFO MODAL */}
       {showPromoModal && (
@@ -955,6 +1169,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <p className="text-sky-400 font-bold">Qulayliklar:</p>
                 <p>• 100% avtomatik tekshiruv (1-3 soniyada)</p>
                 <p>• Barcha bank kartalari qo‘llab-quvvatlanadi</p>
+                <p>• 10 xil qulay va jozibali dizayn mavzulari</p>
                 <p>• Rasmiy PDF chek yaratish va chop etish</p>
               </div>
             </div>

@@ -11,7 +11,15 @@ import { Check, ShieldCheck, Zap } from 'lucide-react'
 /**
  * PayGo Official Logo (Pristine High-Definition Vector SVG)
  */
-export function PayGoLogo({ className = "h-8", url }: { className?: string; url?: string }) {
+export function PayGoLogo({ 
+  className = "h-8", 
+  url, 
+  showText = true 
+}: { 
+  className?: string
+  url?: string
+  showText?: boolean 
+}) {
   const [imgError, setImgError] = useState(false)
 
   if (url && !imgError) {
@@ -29,12 +37,12 @@ export function PayGoLogo({ className = "h-8", url }: { className?: string; url?
   return (
     <div className={`inline-flex items-center gap-2 select-none shrink-0 ${className}`}>
       {/* PayGo Emblem Icon */}
-      <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto aspect-square drop-shadow-xs">
+      <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto aspect-square drop-shadow-md">
         <defs>
           <linearGradient id="paygo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#1769e0" />
+            <stop offset="0%" stopColor="#0066ff" />
             <stop offset="50%" stopColor="#2563eb" />
-            <stop offset="100%" stopColor="#0ea5e9" />
+            <stop offset="100%" stopColor="#38bdf8" />
           </linearGradient>
           <linearGradient id="paygo-accent" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#38bdf8" />
@@ -42,21 +50,32 @@ export function PayGoLogo({ className = "h-8", url }: { className?: string; url?
           </linearGradient>
         </defs>
         <rect width="44" height="44" rx="12" fill="url(#paygo-grad)" />
-        {/* Stylized P/G Speed Wave */}
+        {/* Stylized P / Fast Flash Wave */}
         <path
-          d="M13 14C13 12.3431 14.3431 11 16 11H25.5C29.0899 11 32 13.9101 32 17.5C32 21.0899 29.0899 24 25.5 24H18.5V32C18.5 32.5523 18.0523 33 17.5 33H14C13.4477 33 13 32.5523 13 32V14Z"
+          d="M13 13C13 11.3431 14.3431 10 16 10H25.5C29.0899 10 32 12.9101 32 16.5C32 20.0899 29.0899 23 25.5 23H18.5V33C18.5 33.5523 18.0523 34 17.5 34H14C13.4477 34 13 33.5523 13 33V13Z"
           fill="white"
         />
         <path
-          d="M19 16.5H25C26.3807 16.5 27.5 17.6193 27.5 19C27.5 20.3807 26.3807 21.5 25 21.5H19V16.5Z"
+          d="M19 15.5H25C26.3807 15.5 27.5 16.6193 27.5 18C27.5 19.3807 26.3807 20.5 25 20.5H19V15.5Z"
           fill="#1d4ed8"
         />
         {/* Fast Lightning Arrow */}
         <path
-          d="M26 23L33 30H27L25 33L28 27H23L26 23Z"
+          d="M26 22L33 29H27L25 32L28 26H23L26 22Z"
           fill="url(#paygo-accent)"
         />
       </svg>
+
+      {showText && (
+        <div className="flex flex-col text-left leading-none">
+          <span className="font-mono text-xs font-black tracking-widest text-sky-400 uppercase">
+            PAYGO <span className="text-white">SECURE</span>
+          </span>
+          <span className="text-[9.5px] text-slate-400 font-medium tracking-tight">
+            Xavfsiz to‘lovlar
+          </span>
+        </div>
+      )}
     </div>
   )
 }
@@ -80,16 +99,16 @@ export function HumoLogo({ className = "h-6", customUrl }: { className?: string;
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-white rounded-md px-1.5 py-0.5 border border-slate-200/80 shadow-xs shrink-0 select-none ${className}`}>
-      <svg viewBox="0 0 76 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto">
-        {/* Official HUMO Bird Emblem */}
-        <g transform="translate(1, 1)">
-          <path d="M12.5 3.5C10.5 6.5 8 10 5.5 13.5C9 12.8 13 12.2 17 12C15.3 9.3 13.8 6.5 12.5 3.5Z" fill="#FF9E1B" />
-          <path d="M18 12C14 12.2 10 12.8 6.5 13.5C9.5 17.5 14 20.5 19 20.5C23 20.5 26.5 18.5 29 15.5C25.3 14.7 21.5 13.5 18 12Z" fill="#00A3A6" />
-          <path d="M20.5 4C18 7 15.5 10.3 13 13.7C16.7 13.1 20.7 12.5 24.7 12.3C23 9.5 21.7 6.7 20.5 4Z" fill="#FFB74D" />
+    <div className={`inline-flex items-center justify-center bg-white rounded-lg px-2 py-1 border border-slate-200 shadow-xs shrink-0 select-none ${className}`}>
+      <svg viewBox="0 0 88 26" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto">
+        {/* Official HUMO Bird Wings */}
+        <g transform="translate(2, 2)">
+          <path d="M13.5 3.5C11.5 6.8 8.8 10.5 6 14C9.8 13.3 14 12.7 18.5 12.5C16.6 9.7 15 6.7 13.5 3.5Z" fill="#FF9E1B" />
+          <path d="M19.5 12.5C15 12.7 10.8 13.3 7 14C10.2 18.2 15 21.5 20.5 21.5C24.8 21.5 28.5 19.3 31.2 16C27.2 15.2 23.2 14 19.5 12.5Z" fill="#00A3A6" />
+          <path d="M22 4C19.5 7.3 16.8 10.8 14 14.2C18 13.6 22.3 13 26.5 12.8C24.8 9.8 23.3 6.8 22 4Z" fill="#FFB74D" />
         </g>
-        {/* Bold Clean HUMO Text */}
-        <text x="34" y="17" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="900" fill="#00A3A6" letterSpacing="0.5">
+        {/* Bold HUMO Lettering */}
+        <text x="38" y="19" fontFamily="system-ui, -apple-system, sans-serif" fontSize="15" fontWeight="900" fill="#00A3A6" letterSpacing="0.8">
           HUMO
         </text>
       </svg>
@@ -116,18 +135,18 @@ export function UzcardLogo({ className = "h-6", customUrl }: { className?: strin
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-[#0d2346] rounded-md px-1.5 py-0.5 border border-[#163566] shadow-xs shrink-0 select-none ${className}`}>
-      <svg viewBox="0 0 82 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto">
+    <div className={`inline-flex items-center justify-center bg-[#0d2346] rounded-lg px-2 py-1 border border-[#1b3a6b] shadow-xs shrink-0 select-none ${className}`}>
+      <svg viewBox="0 0 94 26" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto">
         {/* UZCARD Stylized 'U' Shield */}
-        <g transform="translate(2, 2)">
-          <rect width="20" height="20" rx="4" fill="#0072CE" />
+        <g transform="translate(3, 2.5)">
+          <rect width="21" height="21" rx="5" fill="#0072CE" />
           <path
-            d="M5.5 6V11.5C5.5 14 7.5 16 10 16C12.5 16 14.5 14 14.5 11.5V6H12V11.5C12 12.6 11.1 13.5 10 13.5C8.9 13.5 8 12.6 8 11.5V6H5.5Z"
+            d="M6 6V12C6 14.5 8 16.5 10.5 16.5C13 16.5 15 14.5 15 12V6H12.5V12C12.5 13.1 11.6 14 10.5 14C9.4 14 8.5 13.1 8.5 12V6H6Z"
             fill="white"
           />
         </g>
         {/* Crisp UZCARD Lettering */}
-        <text x="27" y="17" fontFamily="system-ui, -apple-system, sans-serif" fontSize="12" fontWeight="900" fill="#FFFFFF" letterSpacing="0.8">
+        <text x="31" y="19" fontFamily="system-ui, -apple-system, sans-serif" fontSize="14" fontWeight="900" fill="#FFFFFF" letterSpacing="0.9">
           UZCARD
         </text>
       </svg>
@@ -154,16 +173,16 @@ export function PaymeLogo({ className = "h-6", customUrl }: { className?: string
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-[#00cccc] rounded-xl px-3 py-1.5 shadow-xs shrink-0 select-none ${className}`}>
-      <svg viewBox="0 0 100 28" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto max-h-7">
+    <div className={`inline-flex items-center justify-center bg-[#00cccc] rounded-xl px-3 py-1.5 shadow-sm shrink-0 select-none ${className}`}>
+      <svg viewBox="0 0 106 28" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto max-h-7">
         <g transform="translate(2, 2)">
           {/* Payme White Card Emblem */}
           <rect width="24" height="24" rx="7" fill="white" />
-          <path d="M7 8.5H17C17.8 8.5 18.5 9.2 18.5 10V16C18.5 16.8 17.8 17.5 17 17.5H7C6.2 17.5 5.5 16.8 5.5 16V10C5.5 9.2 6.2 8.5 7 8.5Z" fill="#00cccc" />
-          <rect x="5.5" y="10.5" width="13" height="2" fill="white" />
-          <circle cx="8.5" cy="14.5" r="1" fill="white" />
+          <path d="M6.5 8.5H17.5C18.3 8.5 19 9.2 19 10V16C19 16.8 18.3 17.5 17.5 17.5H6.5C5.7 17.5 5 16.8 5 16V10C5 9.2 5.7 8.5 6.5 8.5Z" fill="#00cccc" />
+          <rect x="5" y="10.5" width="14" height="2" fill="white" />
+          <circle cx="8" cy="14.5" r="1.2" fill="white" />
         </g>
-        <text x="32" y="20" fontFamily="system-ui, -apple-system, sans-serif" fontSize="17" fontWeight="900" fill="white" letterSpacing="-0.3">
+        <text x="32" y="20" fontFamily="system-ui, -apple-system, sans-serif" fontSize="18" fontWeight="900" fill="white" letterSpacing="-0.3">
           payme
         </text>
       </svg>
@@ -190,14 +209,14 @@ export function ClickLogo({ className = "h-6", customUrl }: { className?: string
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-white rounded-xl px-3 py-1.5 border border-slate-200 shadow-xs shrink-0 select-none ${className}`}>
-      <svg viewBox="0 0 100 28" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto max-h-7">
+    <div className={`inline-flex items-center justify-center bg-white rounded-xl px-3 py-1.5 border border-slate-200 shadow-sm shrink-0 select-none ${className}`}>
+      <svg viewBox="0 0 106 28" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto max-h-7">
         {/* Click Dual-Blue Ring */}
         <g transform="translate(4, 2)">
           <circle cx="12" cy="12" r="10" stroke="#0073FF" strokeWidth="4" />
           <circle cx="12" cy="12" r="4.5" fill="#00C4FE" />
         </g>
-        <text x="32" y="20" fontFamily="system-ui, -apple-system, sans-serif" fontSize="17" fontWeight="900" fill="#0073FF" letterSpacing="-0.4">
+        <text x="32" y="20" fontFamily="system-ui, -apple-system, sans-serif" fontSize="18" fontWeight="900" fill="#0073FF" letterSpacing="-0.4">
           click
         </text>
       </svg>
@@ -224,8 +243,8 @@ export function UzumBankLogo({ className = "h-6", customUrl }: { className?: str
   }
 
   return (
-    <div className={`inline-flex items-center justify-center bg-[#7000FF] rounded-xl px-3 py-1.5 shadow-xs shrink-0 select-none ${className}`}>
-      <svg viewBox="0 0 120 28" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto max-h-7">
+    <div className={`inline-flex items-center justify-center bg-[#7000FF] rounded-xl px-3 py-1.5 shadow-sm shrink-0 select-none ${className}`}>
+      <svg viewBox="0 0 130 28" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto max-h-7">
         {/* Uzum Emblem */}
         <g transform="translate(4, 3)">
           <circle cx="11" cy="11" r="10" stroke="white" strokeWidth="3" />
@@ -245,7 +264,7 @@ export function UzumBankLogo({ className = "h-6", customUrl }: { className?: str
 
 export function AcceptedBrandsBar({ className = "" }: { className?: string }) {
   return (
-    <div className={`flex flex-wrap items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white border border-slate-200 shadow-sm ${className}`}>
+    <div className={`flex flex-wrap items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white border border-slate-200 shadow-xs ${className}`}>
       <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
         <ShieldCheck size={14} className="text-emerald-500" /> Qabul qilinadigan kartalar:
       </span>
@@ -258,95 +277,49 @@ export function AcceptedBrandsBar({ className = "" }: { className?: string }) {
   )
 }
 
-/* ==========================================================================
-   PAYMENT APP BUTTONS (CLICK, PAYME, UZUM BANK)
-   ========================================================================== */
-
-interface PaymentAppButtonsProps {
-  cardNumber: string
+/**
+ * Quick Payment App Buttons row (Payme, Click, Uzum Bank)
+ */
+export function PaymentAppButtons({ 
+  cardNumber, 
+  amount, 
+  className = "" 
+}: { 
+  cardNumber?: string
   amount?: number
-  className?: string
-}
-
-export function PaymentAppButtons({ cardNumber, amount, className = "" }: PaymentAppButtonsProps) {
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
-  const cleanCard = cardNumber.replace(/\D/g, '')
-
-  const handleOpenApp = (appName: string, url: string) => {
-    // 1. Copy card number automatically
-    if (cleanCard && typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(cleanCard)
+  className?: string 
+}) {
+  const handleOpenApp = (url: string) => {
+    if (cardNumber && typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(cardNumber.replace(/\D/g, ''))
     }
-
-    // 2. Show user feedback toast
-    const msg = `Karta (${cleanCard}) nusxalandi! ${appName} ga o‘tilmoqda...`
-    setToastMessage(msg)
-
-    // 3. Open mobile payment app / website synchronously without delay to bypass popup blockers
-    try {
-      window.open(url, '_blank', 'noopener,noreferrer')
-    } catch {
-      window.location.href = url
-    }
-
-    setTimeout(() => {
-      setToastMessage(null)
-    }, 4000)
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   return (
-    <div className={`space-y-3 ${className}`}>
-      <div className="flex items-center justify-between px-1">
-        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-          <Zap size={14} className="text-amber-500 fill-amber-500" />
-          <span>To‘lov ilovalari orqali tezkor o‘tish</span>
-        </span>
-        <span className="text-[11px] text-emerald-600 font-bold">Bosing va o‘ting →</span>
-      </div>
-
-      {/* Toast Banner */}
-      {toastMessage && (
-        <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center justify-between animate-fadeIn">
-          <span>{toastMessage}</span>
-          <Check size={14} className="text-emerald-500 shrink-0" />
-        </div>
-      )}
-
-      {/* App Launch Buttons */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* PAYME BUTTON */}
-        <button
-          type="button"
-          onClick={() => handleOpenApp('Payme', 'https://payme.uz')}
-          className="group relative flex h-14 items-center justify-center px-4 rounded-xl bg-slate-50/50 hover:bg-slate-100/80 active:scale-[0.98] transition-all border border-slate-200 hover:border-slate-300 cursor-pointer shadow-xs"
-        >
-          <PaymeLogo className="h-8 max-h-8 max-w-[120px]" />
-        </button>
-
-        {/* CLICK BUTTON */}
-        <button
-          type="button"
-          onClick={() => handleOpenApp('Click', 'https://my.click.uz')}
-          className="group relative flex h-14 items-center justify-center px-4 rounded-xl bg-slate-50/50 hover:bg-slate-100/80 active:scale-[0.98] transition-all border border-slate-200 hover:border-slate-300 cursor-pointer shadow-xs"
-        >
-          <ClickLogo className="h-8 max-h-8 max-w-[120px]" />
-        </button>
-
-        {/* UZUM BANK BUTTON */}
-        <button
-          type="button"
-          onClick={() => handleOpenApp('Uzum Bank', 'https://uzumbank.uz')}
-          className="group relative flex h-14 items-center justify-center px-4 rounded-xl bg-slate-50/50 hover:bg-slate-100/80 active:scale-[0.98] transition-all border border-slate-200 hover:border-slate-300 cursor-pointer shadow-xs"
-        >
-          <UzumBankLogo className="h-8 max-h-8 max-w-[120px]" />
-        </button>
-      </div>
-
-      <p className="text-[11px] text-slate-400 text-center leading-normal font-medium">
-        💡 Tugmani bosishingiz bilan karta raqami nusxalanadi va to‘lov ilovasi ochiladi.
-      </p>
+    <div className={`grid grid-cols-3 gap-2 ${className}`}>
+      <button
+        type="button"
+        onClick={() => handleOpenApp('https://payme.uz')}
+        className="flex items-center justify-center p-2 rounded-xl bg-[#00cccc]/10 border border-[#00cccc]/30 hover:bg-[#00cccc]/20 transition"
+      >
+        <PaymeLogo className="h-5 w-auto" />
+      </button>
+      <button
+        type="button"
+        onClick={() => handleOpenApp('https://my.click.uz')}
+        className="flex items-center justify-center p-2 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 transition"
+      >
+        <ClickLogo className="h-5 w-auto" />
+      </button>
+      <button
+        type="button"
+        onClick={() => handleOpenApp('https://uzumbank.uz')}
+        className="flex items-center justify-center p-2 rounded-xl bg-purple-50 border border-purple-200 hover:bg-purple-100 transition"
+      >
+        <UzumBankLogo className="h-5 w-auto" />
+      </button>
     </div>
   )
 }
-
 
