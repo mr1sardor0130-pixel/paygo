@@ -47,6 +47,11 @@ import {
   ShieldAlert,
   Database,
   Archive,
+  Menu,
+  X,
+  SlidersHorizontal,
+  UserPlus,
+  DownloadCloud,
 } from 'lucide-react'
 import Link from 'next/link'
 import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
@@ -455,6 +460,18 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   const [broadcastBtnUrl, setBroadcastBtnUrl] = useState('')
   const [sendingBroadcast, setSendingBroadcast] = useState(false)
   const [userSearchQuery, setUserSearchQuery] = useState('')
+
+  // Navigation Drawer & Menu State
+  const [isNavDrawerOpen, setIsNavDrawerOpen] = useState(false)
+  const [navSearchQuery, setNavSearchQuery] = useState('')
+
+  // Enhanced User Management State
+  const [userModalOpen, setUserModalOpen] = useState(false)
+  const [importUserText, setImportUserText] = useState('')
+  const [importUserTier, setImportUserTier] = useState<'free' | 'premium'>('free')
+  const [importUserDays, setImportUserDays] = useState('30')
+  const [importingUsers, setImportingUsers] = useState(false)
+  const [userFilter, setUserFilter] = useState<'all' | 'premium' | 'free'>('all')
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMsg({ text, type })
@@ -1700,10 +1717,21 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         </div>
       )}
 
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 border-b border-[#e2e8f0] bg-white/90 backdrop-blur-md px-4 lg:px-8 py-3.5">
+      {/* Top Navigation Bar with Hamburger Menu Trigger */}
+      <header className="sticky top-0 z-40 border-b border-[#e2e8f0] bg-white/95 backdrop-blur-md px-4 lg:px-8 py-3 shadow-xs">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Hamburger Menu Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsNavDrawerOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-[#1769e0] border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition active:scale-95 shadow-xs"
+              title="Barcha bo‘limlar menyusini ochish"
+            >
+              <Menu size={17} className="text-[#1769e0]" />
+              <span className="hidden sm:inline">Menyu</span>
+            </button>
+
             <Link href="/" className="flex items-center gap-2.5">
               {paygoOfficialLogo ? (
                 <img src={paygoOfficialLogo} alt="PayGo Official Logo" className="size-9 rounded-xl object-contain bg-slate-900 p-0.5 border border-slate-700 shadow-sm" />
@@ -1722,9 +1750,9 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
               </div>
             </Link>
 
-            <div className="hidden md:flex items-center gap-1 border-l border-[#e2e8f0] pl-4">
+            <div className="hidden md:flex items-center gap-1.5 border-l border-[#e2e8f0] pl-3.5">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eaf8f1] px-2.5 py-0.5 text-[11px] font-semibold text-[#16865b]">
-                <span className="size-1.5 rounded-full bg-[#16865b]" /> Userbot Faol
+                <span className="size-1.5 rounded-full bg-[#16865b] animate-pulse" /> Userbot Faol
               </span>
               {currentUser?.isAdmin && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#eff6ff] px-2.5 py-0.5 text-[11px] font-bold text-[#1769e0]">
@@ -1735,14 +1763,14 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
 
             {/* Header Multi-Shop Selector */}
             {myShops.length > 0 && (
-              <div className="relative hidden md:block">
+              <div className="relative hidden lg:block">
                 <button
                   type="button"
                   onClick={() => setIsShopSwitcherOpen(!isShopSwitcherOpen)}
                   className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100/70 px-3 py-1.5 text-xs font-bold text-[#1769e0] transition"
                 >
                   <Store size={14} />
-                  <span className="max-w-[130px] truncate">{shopData?.name || 'Do‘kon'}</span>
+                  <span className="max-w-[120px] truncate">{shopData?.name || 'Do‘kon'}</span>
                   <span className="rounded-full bg-blue-200 px-1.5 py-0.5 text-[10px]">{myShops.length}</span>
                 </button>
 
@@ -1790,23 +1818,30 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           </div>
 
           {/* Right Action buttons */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsNavDrawerOpen(true)}
+              className="lg:hidden flex items-center gap-1.5 rounded-xl bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-[#1769e0] border border-blue-200"
+            >
+              <SlidersHorizontal size={14} /> Bo‘limlar
+            </button>
+
             <Link
               href="/"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-xs font-semibold text-[#64748b] hover:bg-[#f8fafc] transition"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 py-1.5 text-xs font-semibold text-[#64748b] hover:bg-[#f8fafc] transition"
             >
               <ArrowLeft size={14} /> Asosiy sahifa
             </Link>
 
-            <div className="flex items-center gap-2 rounded-xl bg-[#f1f5f9] px-3 py-1.5 text-xs text-[#64748b]">
+            <div className="flex items-center gap-1.5 rounded-xl bg-[#f1f5f9] px-2.5 py-1.5 text-xs text-[#64748b]">
               <UserCheck size={14} className="text-[#1769e0]" />
-              <span className="font-mono">{currentUser?.telegramId || currentUser?.userId || 'User'}</span>
+              <span className="font-mono text-[11px]">{currentUser?.telegramId || currentUser?.userId || 'User'}</span>
             </div>
 
             <button
               onClick={handleLogout}
               title="Chiqish"
-              className="rounded-xl border border-[#e2e8f0] p-2 text-[#64748b] hover:bg-[#fee2e2] hover:text-[#dc2626] transition"
+              className="rounded-xl border border-[#e2e8f0] p-1.5 text-[#64748b] hover:bg-[#fee2e2] hover:text-[#dc2626] transition"
             >
               <LogOut size={16} />
             </button>
@@ -1814,170 +1849,474 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         </div>
       </header>
 
+      {/* Modern Hamburger Slide-Over Navigation Drawer */}
+      {isNavDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop Blur Overlay */}
+          <div
+            onClick={() => setIsNavDrawerOpen(false)}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+          />
+
+          {/* Slide-out Drawer Panel */}
+          <div className="relative ml-0 flex w-full max-w-sm flex-col bg-white shadow-2xl z-50 animate-in slide-in-from-left duration-250">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                {paygoOfficialLogo ? (
+                  <img src={paygoOfficialLogo} alt="PayGo" className="size-8 rounded-lg object-contain bg-slate-900 p-0.5" />
+                ) : (
+                  <div className="grid size-8 place-items-center rounded-lg bg-[#1769e0] font-bold text-white text-xs">P</div>
+                )}
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900">PayGo Boshqaruv Menyusi</h3>
+                  <p className="text-[10px] text-slate-500 font-mono">ID: {currentUser?.telegramId || 'User'}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsNavDrawerOpen(false)}
+                className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Quick Search inside Drawer */}
+            <div className="p-3 border-b border-slate-100">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={navSearchQuery}
+                  onChange={(e) => setNavSearchQuery(e.target.value)}
+                  placeholder="Bo‘lim nomini qidirish..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs text-slate-700 outline-none focus:border-[#1769e0] focus:bg-white transition"
+                />
+                {navSearchQuery && (
+                  <button
+                    onClick={() => setNavSearchQuery('')}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Navigation Sections */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-4">
+              {/* Category 1: Merchant Xizmatlari */}
+              {(!navSearchQuery || 'do‘kon sozlamalari karta mening do‘konlarim vip guruh test to‘lov webhook loglar'.includes(navSearchQuery.toLowerCase())) && (
+                <div>
+                  <div className="px-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    🏪 Merchant & Do‘kon Xizmatlari
+                  </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('shop_settings')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'shop_settings'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Settings2 size={16} />
+                        <span>⚙️ Do‘kon Sozlamalari & Karta</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('my_shops')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'my_shops'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Store size={16} />
+                        <span>🏪 Mening Do‘konlarim</span>
+                      </div>
+                      <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] text-slate-700">
+                        {myShops.length || 1}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('vip_rooms', () => loadVipRooms())
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'vip_rooms'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Lock size={16} />
+                        <span>🔐 VIP Guruh & Pullik Yozish</span>
+                      </div>
+                      <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] text-slate-700">
+                        {vipRooms.length}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('test_payment')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'test_payment'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Sparkles size={16} />
+                        <span>🧪 Test To‘lov Yaratish (5 min)</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('webhook_docs')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'webhook_docs'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <FileCode size={16} />
+                        <span>📚 Webhook Doksi (JSON)</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('logs', () => fetchMyLogs())
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'logs'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Radio size={16} />
+                        <span>📋 Tizim Loglari & Webhooklar</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Category 2: Tariflar */}
+              {(!navSearchQuery || 'tariflar premium obuna vip'.includes(navSearchQuery.toLowerCase())) && (
+                <div>
+                  <div className="px-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    💎 Tariflar & Obunalar
+                  </div>
+                  <div className="space-y-1">
+                    <Link
+                      href="/tariffs"
+                      onClick={() => setIsNavDrawerOpen(false)}
+                      className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Crown size={16} className="text-amber-600" />
+                        <span>💎 Tariflar & Premium VIP (/tariffs)</span>
+                      </div>
+                      <ExternalLink size={13} className="text-amber-600" />
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Category 3: Admin Boshqaruv Markazi (CRM) */}
+              {currentUser?.isAdmin && (!navSearchQuery || 'admin statistika foydalanuvchilar do‘konlar e‘lon kanal backup adminlar'.includes(navSearchQuery.toLowerCase())) && (
+                <div>
+                  <div className="px-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 flex items-center gap-1">
+                    <ShieldCheck size={13} /> 👑 Admin Boshqaruv Markazi (CRM)
+                  </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('overview', () => { if (!crmData) loadCrm() })
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'overview'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-blue-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Activity size={16} />
+                        <span>📊 Admin Statistika & Monitoring</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('users', () => { if (!crmData) loadCrm() })
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'users'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-blue-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Users size={16} />
+                        <span>👥 Foydalanuvchilar Boshqaruvi</span>
+                      </div>
+                      <span className="rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] font-bold">
+                        {crmData?.users?.length || 0}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('shops', () => { if (!crmData) loadCrm() })
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'shops'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-blue-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Store size={16} />
+                        <span>🏪 Barcha Do‘konlar Ro‘yxati</span>
+                      </div>
+                      <span className="rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] font-bold">
+                        {crmData?.shops?.length || 0}
+                      </span>
+                    </button>
+
+                    <Link
+                      href="/admin/tariffs"
+                      onClick={() => setIsNavDrawerOpen(false)}
+                      className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <CreditCard size={16} className="text-blue-600" />
+                        <span>💳 Tariflar Boshqaruvi (/admin/tariffs)</span>
+                      </div>
+                      <ExternalLink size={13} className="text-blue-600" />
+                    </Link>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('broadcast')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'broadcast'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-blue-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Send size={16} />
+                        <span>📢 Ommaviy E'lon Yuborish</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('official_channels')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'official_channels'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-blue-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Radio size={16} />
+                        <span>📣 Rasmiy Kanal & Majburiy Obuna</span>
+                      </div>
+                      <span className="rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] font-bold">
+                        {mandatoryChannelsList.length}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('admins')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'admins'
+                          ? 'bg-[#1769e0] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-blue-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <UserCheck size={16} />
+                        <span>🛠 Tizim Adminlari</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSwitchTab('db_backup')
+                        setIsNavDrawerOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                        activeTab === 'db_backup'
+                          ? 'bg-[#16865b] text-white shadow-xs'
+                          : 'text-emerald-800 bg-emerald-50/70 hover:bg-emerald-100 border border-emerald-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Database size={16} className={activeTab === 'db_backup' ? 'text-white' : 'text-emerald-700'} />
+                        <span>💾 Neon Baza Backup (.zip/.sql)</span>
+                      </div>
+                      <ChevronRight size={14} className="opacity-60" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Drawer Footer Status */}
+            <div className="border-t border-slate-100 p-3.5 bg-slate-50 text-[11px] text-slate-500 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
+                <span className="font-semibold text-slate-700">Neon PostgreSQL</span>
+              </div>
+              <span className="text-[10px] font-mono text-slate-400">v2.4 Online</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Layout */}
-      <div className="mx-auto max-w-7xl px-4 lg:px-8 py-8">
-        {/* Navigation Tabs */}
-        <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#e2e8f0] pb-3">
-          <button
-            onClick={() => handleSwitchTab('shop_settings')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-              activeTab === 'shop_settings'
-                ? 'bg-[#1769e0] text-white shadow-sm'
-                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-            }`}
-          >
-            <Settings2 size={15} /> ⚙️ Do‘kon Sozlamalari & Karta
-          </button>
+      <div className="mx-auto max-w-7xl px-4 lg:px-8 py-6">
+        {/* Sleek Subheader Navigation Bar */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-white border border-[#e2e8f0] rounded-2xl p-2.5 shadow-xs">
+          {/* Active section info badge */}
+          <div className="flex items-center gap-2.5 pl-1.5">
+            <button
+              onClick={() => setIsNavDrawerOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 px-3 py-2 text-xs font-bold text-white shadow-xs transition active:scale-95"
+            >
+              <Menu size={15} />
+              <span>Barcha Menyu</span>
+            </button>
+            <div className="hidden sm:block">
+              <p className="text-xs font-bold text-slate-900">
+                {activeTab === 'shop_settings' && '⚙️ Do‘kon Sozlamalari & Karta'}
+                {activeTab === 'my_shops' && `🏪 Mening Do‘konlarim (${myShops.length || 1})`}
+                {activeTab === 'vip_rooms' && `🔐 VIP Guruh & Pullik Yozish (${vipRooms.length})`}
+                {activeTab === 'test_payment' && '🧪 Test To‘lov Yaratish (5 min)'}
+                {activeTab === 'webhook_docs' && '📚 Webhook Doksi (JSON)'}
+                {activeTab === 'logs' && '📋 Tizim Loglari & Webhooklar'}
+                {activeTab === 'overview' && '📊 Admin Statistika & Monitoring'}
+                {activeTab === 'shops' && `🏪 Jami Do‘konlar (${crmData?.shops?.length || 0})`}
+                {activeTab === 'users' && `👥 Foydalanuvchilar Boshqaruvi (${crmData?.users?.length || 0})`}
+                {activeTab === 'broadcast' && '📢 Ommaviy E‘lon Yuborish'}
+                {activeTab === 'official_channels' && `📣 Rasmiy Kanal & Majburiy Obuna (${mandatoryChannelsList.length})`}
+                {activeTab === 'admins' && '🛠 Tizim Adminlari'}
+                {activeTab === 'db_backup' && '💾 Neon Baza Backup'}
+              </p>
+            </div>
+          </div>
 
-          <button
-            onClick={() => handleSwitchTab('my_shops')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-              activeTab === 'my_shops'
-                ? 'bg-[#1769e0] text-white shadow-sm'
-                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-            }`}
-          >
-            <Store size={15} /> 🏪 Mening Do‘konlarim ({myShops.length || 1})
-          </button>
+          {/* Quick Tab Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+            <button
+              onClick={() => handleSwitchTab('shop_settings')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition whitespace-nowrap ${
+                activeTab === 'shop_settings'
+                  ? 'bg-[#1769e0] text-white shadow-xs'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              ⚙️ Sozlamalar
+            </button>
 
-          <button
-            onClick={() => handleSwitchTab('vip_rooms', () => loadVipRooms())}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-              activeTab === 'vip_rooms'
-                ? 'bg-[#1769e0] text-white shadow-sm'
-                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-            }`}
-          >
-            <Lock size={15} /> 🔐 VIP Guruh & Pullik Yozish ({vipRooms.length})
-          </button>
+            <button
+              onClick={() => handleSwitchTab('my_shops')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition whitespace-nowrap ${
+                activeTab === 'my_shops'
+                  ? 'bg-[#1769e0] text-white shadow-xs'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              🏪 Do‘konlar ({myShops.length || 1})
+            </button>
 
-          <button
-            onClick={() => handleSwitchTab('test_payment')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-              activeTab === 'test_payment'
-                ? 'bg-[#1769e0] text-white shadow-sm'
-                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-            }`}
-          >
-            <Sparkles size={15} /> 🧪 Test To‘lov Yaratish (5 min)
-          </button>
+            <button
+              onClick={() => handleSwitchTab('vip_rooms', () => loadVipRooms())}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition whitespace-nowrap ${
+                activeTab === 'vip_rooms'
+                  ? 'bg-[#1769e0] text-white shadow-xs'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              🔐 VIP Guruh ({vipRooms.length})
+            </button>
 
-          <button
-            onClick={() => handleSwitchTab('webhook_docs')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-              activeTab === 'webhook_docs'
-                ? 'bg-[#1769e0] text-white shadow-sm'
-                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-            }`}
-          >
-            <FileCode size={15} /> 📚 Webhook Doksi (JSON)
-          </button>
+            {currentUser?.isAdmin && (
+              <>
+                <button
+                  onClick={() => handleSwitchTab('users', () => { if (!crmData) loadCrm() })}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition whitespace-nowrap ${
+                    activeTab === 'users'
+                      ? 'bg-[#1769e0] text-white shadow-xs'
+                      : 'bg-blue-50 text-[#1769e0] hover:bg-blue-100'
+                  }`}
+                >
+                  👥 Foydalanuvchilar ({crmData?.users?.length || 0})
+                </button>
 
-          <button
-            onClick={() => handleSwitchTab('logs', () => fetchMyLogs())}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-              activeTab === 'logs'
-                ? 'bg-[#1769e0] text-white shadow-sm'
-                : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-            }`}
-          >
-            <Radio size={15} /> 📋 Tizim Loglari & Webhooklar
-          </button>
+                <button
+                  onClick={() => handleSwitchTab('overview', () => { if (!crmData) loadCrm() })}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition whitespace-nowrap ${
+                    activeTab === 'overview'
+                      ? 'bg-[#1769e0] text-white shadow-xs'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  📊 Statistika
+                </button>
+              </>
+            )}
 
-          <Link
-            href="/tariffs"
-            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition bg-amber-50/90 text-amber-900 border border-amber-300 hover:bg-amber-100 hover:border-amber-400 shadow-sm"
-          >
-            <Crown size={15} className="text-amber-600" /> 💎 Tariflar & Premium (/tariffs)
-          </Link>
-
-          {currentUser?.isAdmin && (
-            <>
-              <button
-                onClick={() => handleSwitchTab('overview')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'overview'
-                    ? 'bg-[#1769e0] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-                }`}
-              >
-                <Activity size={15} /> 📊 Admin Statistika
-              </button>
-
-              <button
-                onClick={() => handleSwitchTab('shops', () => { if (!crmData) loadCrm() })}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'shops'
-                    ? 'bg-[#1769e0] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-                }`}
-              >
-                <Store size={15} /> 🏪 Jami Do‘konlar ({crmData?.shops?.length || 0})
-              </button>
-
-              <Link
-                href="/admin/tariffs"
-                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 shadow-sm"
-              >
-                <CreditCard size={15} className="text-blue-600" /> 💎 Tariflar Boshqaruvi (/admin/tariffs)
-              </Link>
-
-              <button
-                onClick={() => handleSwitchTab('users')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'users'
-                    ? 'bg-[#1769e0] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-                }`}
-              >
-                <Users size={15} /> 👥 Foydalanuvchilar ({crmData?.users?.length || 0})
-              </button>
-
-              <button
-                onClick={() => handleSwitchTab('broadcast')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'broadcast'
-                    ? 'bg-[#1769e0] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-                }`}
-              >
-                <Send size={15} /> 📢 E'lon Yuborish
-              </button>
-
-              <button
-                onClick={() => handleSwitchTab('official_channels')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'official_channels'
-                    ? 'bg-[#1769e0] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-                }`}
-              >
-                <Radio size={15} /> 📣 Rasmiy Kanal & Majburiy Obuna ({mandatoryChannelsList.length})
-              </button>
-
-              <button
-                onClick={() => handleSwitchTab('admins')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'admins'
-                    ? 'bg-[#1769e0] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f8fafc]'
-                }`}
-              >
-                <UserCheck size={15} /> 🛠 Adminlar
-              </button>
-
-              <button
-                onClick={() => handleSwitchTab('db_backup')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  activeTab === 'db_backup'
-                    ? 'bg-[#16865b] text-white shadow-sm'
-                    : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
-                }`}
-              >
-                <Database size={15} className={activeTab === 'db_backup' ? 'text-white' : 'text-emerald-700'} /> 💾 Neon Baza Backup (.zip / .sql)
-              </button>
-            </>
-          )}
+            <Link
+              href="/tariffs"
+              className="rounded-xl px-3 py-1.5 text-xs font-bold transition bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 whitespace-nowrap"
+            >
+              💎 Tariflar
+            </Link>
+          </div>
         </div>
 
         {/* Dynamic Gear Loader Transition for Tab changes */}
@@ -5075,29 +5414,91 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
         {/* ------------------------------------------------------------- */}
         {/* TAB: USERS MANAGEMENT */}
         {/* ------------------------------------------------------------- */}
-        {activeTab === 'users' && currentUser?.isAdmin && crmData && (
+        {activeTab === 'users' && currentUser?.isAdmin && (
           <div className="bg-white border border-[#e2e8f0] rounded-3xl p-6 sm:p-8 shadow-sm">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               <div>
-                <h2 className="text-lg font-bold text-[#152238]">
-                  👥 Foydalanuvchilar Boshqaruvi ({crmData?.users?.length || 0} ta)
-                </h2>
-                <p className="text-xs text-[#718096]">
-                  Telegram foydalanuvchilar ro‘yxati, referallar, status va shaxsiy chat havola tugmalari
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-lg font-bold text-[#152238]">
+                    👥 Foydalanuvchilar Boshqaruvi ({crmData?.users?.length || 0} ta)
+                  </h2>
+                  <button
+                    onClick={() => {
+                      loadCrm()
+                      showToast('Foydalanuvchilar ro‘yxati yangilandi')
+                    }}
+                    title="Ro‘yxatni yangilash"
+                    className="flex items-center gap-1 rounded-xl bg-slate-100 hover:bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition"
+                  >
+                    <RefreshCw size={12} className={loading ? 'animate-spin text-[#1769e0]' : ''} />
+                    <span>Yangilash</span>
+                  </button>
+                </div>
+                <p className="text-xs text-[#718096] mt-0.5">
+                  Telegram foydalanuvchilar ro‘yxati, referallar, status, import va shaxsiy chat boshqaruvi
                 </p>
               </div>
 
-              <div className="w-full sm:w-64">
-                <input
-                  type="text"
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  placeholder="ID bo‘yicha qidirish..."
-                  className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2 text-xs outline-none focus:border-[#1769e0]"
-                />
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setUserModalOpen(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-[#1769e0] hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition shadow-sm active:scale-95"
+                >
+                  <UserPlus size={14} />
+                  <span>+ Foydalanuvchi Qo‘shish / Import</span>
+                </button>
+
+                <div className="w-full sm:w-56">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      placeholder="Telegram ID bo‘yicha..."
+                      className="w-full rounded-xl border border-[#cbd5e1] pl-8 pr-3 py-2 text-xs outline-none focus:border-[#1769e0]"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
+            {/* Filter Chips */}
+            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+              <button
+                onClick={() => setUserFilter('all')}
+                className={`rounded-xl px-3 py-1 text-xs font-bold transition ${
+                  userFilter === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Barchasi ({crmData?.users?.length || 0})
+              </button>
+              <button
+                onClick={() => setUserFilter('premium')}
+                className={`rounded-xl px-3 py-1 text-xs font-bold transition ${
+                  userFilter === 'premium'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                💎 Premium VIP ({crmData?.users?.filter((u: any) => u.tier === 'premium' && u.premiumEndsAt && new Date(u.premiumEndsAt) > new Date()).length || 0})
+              </button>
+              <button
+                onClick={() => setUserFilter('free')}
+                className={`rounded-xl px-3 py-1 text-xs font-bold transition ${
+                  userFilter === 'free'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
+                }`}
+              >
+                👤 Oddiy (Bepul) ({crmData?.users?.filter((u: any) => u.tier !== 'premium' || !u.premiumEndsAt || new Date(u.premiumEndsAt) <= new Date()).length || 0})
+              </button>
+            </div>
+
+            {/* Users Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-[#64748b]">
                 <thead className="bg-[#f8fafc] text-[#475569] font-bold border-b border-[#e2e8f0]">
@@ -5106,12 +5507,19 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     <th className="p-3">Maqom (Tarif)</th>
                     <th className="p-3">Amal Muddati</th>
                     <th className="p-3">Referallar</th>
-                    <th className="p-3 text-right">Premium Boshqaruv</th>
+                    <th className="p-3 text-right">Amallar & Premium</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f1f5f9]">
                   {crmData?.users
-                    ?.filter((u: any) => !userSearchQuery || u.telegramId?.includes(userSearchQuery))
+                    ?.filter((u: any) => {
+                      const matchesSearch = !userSearchQuery || u.telegramId?.includes(userSearchQuery)
+                      const isPrem = u.tier === 'premium' && u.premiumEndsAt && new Date(u.premiumEndsAt) > new Date()
+                      if (!matchesSearch) return false
+                      if (userFilter === 'premium') return isPrem
+                      if (userFilter === 'free') return !isPrem
+                      return true
+                    })
                     ?.map((u: any) => {
                       const isPrem = u.tier === 'premium' && u.premiumEndsAt && new Date(u.premiumEndsAt) > new Date()
                       return (
@@ -5244,6 +5652,30 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                                   Bekor Qilish
                                 </button>
                               )}
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`Haqiqatan ham ${u.telegramId} foydalanuvchisini o‘chirmoqchimisiz?`)) return
+                                  const res = await fetch('/api/admin/crm', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                                    },
+                                    body: JSON.stringify({
+                                      action: 'delete_user',
+                                      telegramId: u.telegramId,
+                                    }),
+                                  })
+                                  if (res.ok) {
+                                    showToast('Foydalanuvchi o‘chirildi')
+                                    loadCrm()
+                                  }
+                                }}
+                                title="Foydalanuvchini o‘chirish"
+                                className="rounded-lg p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 transition ml-1"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -5251,7 +5683,137 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     })}
                 </tbody>
               </table>
+
+              {(!crmData?.users || crmData.users.length === 0) && (
+                <div className="py-12 text-center">
+                  <Users size={36} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-xs font-bold text-slate-700">Foydalanuvchilar ro‘yxati bo‘sh</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Bot foydalanuvchilari tizimga kirishi bilan bu yerda aks etadi yoki qo‘lda import qilishingiz mumkin.</p>
+                  <button
+                    onClick={() => setUserModalOpen(true)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#1769e0] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition"
+                  >
+                    <UserPlus size={13} /> + Foydalanuvchi Import Qilish
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* User Import / Add Modal */}
+            {userModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div onClick={() => setUserModalOpen(false)} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" />
+                <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl z-50 animate-in zoom-in-95">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-xl bg-blue-50 p-2 text-[#1769e0]">
+                        <UserPlus size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">Foydalanuvchi Qo‘shish / Import Qilish</h3>
+                        <p className="text-[11px] text-slate-500">Telegram ID orqali bitta yoki ommaviy import qiling</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setUserModalOpen(false)} className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Telegram ID(lar) <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={importUserText}
+                        onChange={(e) => setImportUserText(e.target.value)}
+                        placeholder="Masalan: 8021115446 yoki bir nechta:&#10;8021115446, 123456789, 987654321"
+                        className="w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#1769e0] font-mono"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Vergul, probel yoki yangi qatorda bir nechta ID yozishingiz mumkin.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Boshlang‘ich Maqom</label>
+                        <select
+                          value={importUserTier}
+                          onChange={(e: any) => setImportUserTier(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 p-2.5 text-xs outline-none focus:border-[#1769e0]"
+                        >
+                          <option value="free">👤 Oddiy (Bepul)</option>
+                          <option value="premium">💎 Premium VIP</option>
+                        </select>
+                      </div>
+
+                      {importUserTier === 'premium' && (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Premium Muddati (Kun)</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={3650}
+                            value={importUserDays}
+                            onChange={(e) => setImportUserDays(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 p-2 text-xs outline-none focus:border-[#1769e0]"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setUserModalOpen(false)}
+                        className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                      >
+                        Bekor qilish
+                      </button>
+                      <button
+                        type="button"
+                        disabled={importingUsers || !importUserText.trim()}
+                        onClick={async () => {
+                          setImportingUsers(true)
+                          try {
+                            const res = await fetch('/api/admin/crm', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'x-telegram-user-id': currentUser?.telegramId || '8021115446',
+                              },
+                              body: JSON.stringify({
+                                action: 'import_users',
+                                userIds: importUserText,
+                                tier: importUserTier,
+                                days: Number(importUserDays) || 0,
+                              }),
+                            })
+                            const data = await res.json()
+                            if (res.ok && data.ok) {
+                              showToast(data.message)
+                              setUserModalOpen(false)
+                              setImportUserText('')
+                              loadCrm()
+                            } else {
+                              showToast(data.error || 'Import qilishda xatolik', 'error')
+                            }
+                          } catch (err: any) {
+                            showToast(err.message || 'Xatolik', 'error')
+                          } finally {
+                            setImportingUsers(false)
+                          }
+                        }}
+                        className="flex items-center gap-1.5 rounded-xl bg-[#1769e0] px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {importingUsers ? <RefreshCw size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                        <span>Import Qilish</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

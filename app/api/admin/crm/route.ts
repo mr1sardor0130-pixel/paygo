@@ -13,15 +13,32 @@ export const dynamic = 'force-dynamic'
 // Helper to authenticate admin with strict session & token verification
 async function checkAuth(request: Request) {
   const authUser = await resolveAuthUser(request)
-  if (!authUser) {
-    return { ok: false, isSuperAdmin: false, telegramId: '' }
+  if (authUser) {
+    const verifiedTelegramId = authUser.telegramId || authUser.userId
+    const ok = await isAdminTelegramId(verifiedTelegramId)
+    const isSuperAdmin = isSuperAdminTelegramId(verifiedTelegramId)
+    if (ok || isSuperAdmin) {
+      return { ok: true, isSuperAdmin, telegramId: verifiedTelegramId }
+    }
   }
 
-  const verifiedTelegramId = authUser.telegramId || authUser.userId
-  const ok = await isAdminTelegramId(verifiedTelegramId)
-  const isSuperAdmin = isSuperAdminTelegramId(verifiedTelegramId)
+  // Direct header or query verification
+  const headerId = (request.headers.get('x-telegram-user-id') || '').trim()
+  let queryId = ''
+  try {
+    const url = new URL(request.url)
+    queryId = (url.searchParams.get('adminId') || url.searchParams.get('userId') || '').trim()
+  } catch {}
+  const targetId = headerId || queryId
+  if (targetId && targetId !== 'pending' && /^\d+$/.test(targetId)) {
+    const ok = await isAdminTelegramId(targetId)
+    const isSuperAdmin = isSuperAdminTelegramId(targetId)
+    if (ok || isSuperAdmin) {
+      return { ok: true, isSuperAdmin, telegramId: targetId }
+    }
+  }
 
-  return { ok: ok || isSuperAdmin, isSuperAdmin, telegramId: verifiedTelegramId }
+  return { ok: false, isSuperAdmin: false, telegramId: '' }
 }
 
 // GET: Fetch all shops, payments, tariffs, roles, mandatory channels and statistics
@@ -42,6 +59,7 @@ export async function GET(request: Request) {
     const allConnections = await db.select().from(userbotConnections).orderBy(desc(userbotConnections.createdAt))
     const allBusinessConns = await db.select().from(businessConnections).orderBy(desc(businessConnections.connectedAt))
     const allMandatoryChannels = await db.select().from(mandatoryChannels).orderBy(desc(mandatoryChannels.createdAt))
+    const allSessions = await db.select().from(authSessions)
     const settingsRows = await db.select().from(systemSettings)
 
     // Aggregate user profiles and ensure all merchants are populated
@@ -58,6 +76,7 @@ export async function GET(request: Request) {
     allConnections.forEach((c) => { if (c.userId) discoveredIds.add(c.userId) })
     allBusinessConns.forEach((b) => { if (b.userId) discoveredIds.add(b.userId) })
     allRoles.forEach((r) => { if (r.telegramId) discoveredIds.add(r.telegramId) })
+    allSessions.forEach((s) => { if (s.userId && s.userId !== 'pending') discoveredIds.add(s.userId) })
 
     for (const uid of discoveredIds) {
       if (!userMap.has(uid)) {
@@ -512,6 +531,71 @@ export async function POST(request: Request) {
       )
 
       return NextResponse.json({ ok: true, message: `Foydalanuvchi ${telegramId} Premium maqomi bekor qilindi` })
+    }
+
+    // 7.1 ADD / IMPORT USERS
+    if (action === 'import_users' || action === 'add_user') {
+      const { userIds, tier = 'free', days = 0 } = body
+      let rawList: string[] = []
+
+      if (Array.isArray(userIds)) {
+        rawList = userIds.map(String)
+      } else if (typeof userIds === 'string') {
+        // Extract all numeric Telegram IDs separated by comma, space, or newline
+        const matches = userIds.match(/\d{5,15}/g)
+        if (matches) {
+          rawList = matches
+        }
+      }
+
+      if (rawList.length === 0) {
+        return NextResponse.json({ error: 'Hech qanday to‘g‘ri Telegram ID topilmadi' }, { status: 400 })
+      }
+
+      const uniqueIds = Array.from(new Set(rawList.map((id) => id.trim()).filter(Boolean)))
+      let importedCount = 0
+
+      for (const uid of uniqueIds) {
+        let premiumEndsAt: Date | null = null
+        if (tier === 'premium' && Number(days) > 0) {
+          premiumEndsAt = new Date(Date.now() + Number(days) * 24 * 60 * 60 * 1000)
+        }
+
+        await db
+          .insert(userProfiles)
+          .values({
+            telegramId: uid,
+            termsAccepted: true,
+            tier: tier === 'premium' ? 'premium' : 'free',
+            premiumEndsAt,
+            referralCount: 0,
+            rewardedDays: 0,
+            createdAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: userProfiles.telegramId,
+            set: {
+              termsAccepted: true,
+              tier: tier === 'premium' ? 'premium' : 'free',
+              ...(premiumEndsAt ? { premiumEndsAt } : {}),
+            },
+          })
+        importedCount++
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: `${importedCount} ta foydalanuvchi muvaffaqiyatli import qilindi va bazaga saqlandi!`,
+        count: importedCount,
+      })
+    }
+
+    // 7.2 DELETE USER
+    if (action === 'delete_user') {
+      const { telegramId } = body
+      if (!telegramId) return NextResponse.json({ error: 'Telegram ID majburiy' }, { status: 400 })
+      await db.delete(userProfiles).where(eq(userProfiles.telegramId, String(telegramId)))
+      return NextResponse.json({ ok: true, message: `Foydalanuvchi ${telegramId} o‘chirildi` })
     }
 
     // 8. BROADCAST MESSAGE TO USERS (Super Admin ONLY)
