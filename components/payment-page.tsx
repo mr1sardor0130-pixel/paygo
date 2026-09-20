@@ -254,7 +254,7 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
         {/* Brand Header */}
         <header className="mb-6 flex items-center justify-between gap-3 bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-white/50 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
-            {data?.siteLogo && !siteLogoError ? (
+            {data?.siteLogo && !siteLogoError && !data.siteLogo.includes('sd8RnH9N') ? (
               <img
                 src={data.siteLogo}
                 alt="PayGo"

@@ -128,10 +128,10 @@ export async function GET(
       (shop?.cardLast4 ? `986035012345${shop.cardLast4}` : '9860350123453587')
 
     // Get site logo from system_settings
-    let siteLogo = 'https://i.ibb.co/sd8RnH9N/Pix-WYE0d-PXzy-DGc8-OLd6-I6-NXw5y-Og3y6.webp'
+    let siteLogo: string | null = null
     try {
       const settingsRows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'site_logo')).limit(1)
-      if (settingsRows[0]?.value) {
+      if (settingsRows[0]?.value && !settingsRows[0].value.includes('sd8RnH9N')) {
         siteLogo = settingsRows[0].value
       }
     } catch (err) {

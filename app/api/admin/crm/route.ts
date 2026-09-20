@@ -34,15 +34,68 @@ export async function GET(request: Request) {
   await ensureDbSchema()
 
   try {
-    const allUsers = await db.select().from(userProfiles)
+    const rawProfiles = await db.select().from(userProfiles)
     const allShops = await db.select().from(shops).orderBy(desc(shops.createdAt))
-    const allPayments = await db.select().from(payments).orderBy(desc(payments.createdAt)).limit(100)
+    const allPayments = await db.select().from(payments).orderBy(desc(payments.createdAt)).limit(200)
     const allTariffs = await db.select().from(systemTariffs).orderBy(desc(systemTariffs.createdAt))
     const allRoles = await db.select().from(systemRoles).orderBy(desc(systemRoles.createdAt))
     const allConnections = await db.select().from(userbotConnections).orderBy(desc(userbotConnections.createdAt))
     const allBusinessConns = await db.select().from(businessConnections).orderBy(desc(businessConnections.connectedAt))
     const allMandatoryChannels = await db.select().from(mandatoryChannels).orderBy(desc(mandatoryChannels.createdAt))
     const settingsRows = await db.select().from(systemSettings)
+
+    // Aggregate user profiles and ensure all merchants are populated
+    const userMap = new Map<string, any>()
+    rawProfiles.forEach((p) => {
+      if (p.telegramId) {
+        userMap.set(p.telegramId, p)
+      }
+    })
+
+    const discoveredIds = new Set<string>()
+    allShops.forEach((s) => { if (s.userId) discoveredIds.add(s.userId) })
+    allPayments.forEach((p) => { if (p.userId) discoveredIds.add(p.userId) })
+    allConnections.forEach((c) => { if (c.userId) discoveredIds.add(c.userId) })
+    allBusinessConns.forEach((b) => { if (b.userId) discoveredIds.add(b.userId) })
+    allRoles.forEach((r) => { if (r.telegramId) discoveredIds.add(r.telegramId) })
+
+    for (const uid of discoveredIds) {
+      if (!userMap.has(uid)) {
+        try {
+          await db
+            .insert(userProfiles)
+            .values({
+              telegramId: uid,
+              termsAccepted: true,
+              tier: 'free',
+              referralCount: 0,
+              rewardedDays: 0,
+              createdAt: new Date(),
+            })
+            .onConflictDoNothing()
+
+          userMap.set(uid, {
+            telegramId: uid,
+            termsAccepted: true,
+            tier: 'free',
+            referralCount: 0,
+            rewardedDays: 0,
+            createdAt: new Date(),
+          })
+        } catch {
+          userMap.set(uid, {
+            telegramId: uid,
+            termsAccepted: true,
+            tier: 'free',
+            referralCount: 0,
+            rewardedDays: 0,
+            createdAt: new Date(),
+          })
+        }
+      }
+    }
+
+    const allUsers = Array.from(userMap.values())
 
     const settingsMap: Record<string, string> = {}
     settingsRows.forEach((r) => {

@@ -176,13 +176,13 @@ const menu = {
   keyboard: [
     [{ text: '🛍 Do‘kon ochish' }, { text: '🏪 Mening do‘konim' }],
     [{ text: '💳 Mening kartam' }, { text: '🔐 Userbot ulash' }],
-    [{ text: '🤝 Referal (Tekin Premium)' }, { text: '💎 Tariflar' }],
+    [{ text: '💎 Tariflar' }, { text: '🤝 Referal (Tekin Premium)' }],
     [{ text: '💎 VIP Guruhlar' }, { text: '📣 Kanal ulash' }],
-    [{ text: '🧪 Webhook Test' }, { text: '🔗 Webhook sozlash' }, { text: '📋 Webhook Loglari' }],
-    [{ text: '🌐 Veb-panelga kirish' }, { text: '📊 Statistika' }],
-    [{ text: '🏆 Liderlar' }, { text: '❤️ Qo‘llab-quvvatlash (Ehson)' }],
-    [{ text: '🤖 Bot haqida & FAQ' }, { text: '📚 API hujjat' }],
-    [{ text: '❌ Menyuni yopish' }],
+    [{ text: '🔗 Webhook sozlash' }, { text: '🧪 Webhook Test' }],
+    [{ text: '📊 Statistika' }, { text: '📋 Webhook Loglari' }],
+    [{ text: '🌐 Veb-panelga kirish' }, { text: '❤️ Qo‘llab-quvvatlash (Ehson)' }],
+    [{ text: '📚 API hujjat' }, { text: '🤖 Bot haqida & FAQ' }],
+    [{ text: '🏆 Liderlar' }, { text: '❌ Menyuni yopish' }],
   ],
   resize_keyboard: true,
   one_time_keyboard: true,
@@ -4415,6 +4415,21 @@ export async function POST(request: Request) {
   const norm = cleanText(raw)
   let flow = await stateGet(chatId)
 
+  // Ensure user profile is registered in userProfiles table
+  try {
+    await db
+      .insert(userProfiles)
+      .values({
+        telegramId: userIdStr,
+        termsAccepted: false,
+        tier: 'free',
+        referralCount: 0,
+        rewardedDays: 0,
+        createdAt: new Date(),
+      })
+      .onConflictDoNothing()
+  } catch {}
+
   // Top-level menu matchers for robust button and text detection
   const isMyShopCmd =
     norm.includes('mening do') ||
@@ -6886,21 +6901,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (text === 'Barcha statistika') {
+  if (text === 'Barcha statistika' || text === '📊 Barcha statistika') {
     const isAdmin = await isAdminTelegramId(userIdStr)
     if (!isAdmin) return NextResponse.json({ ok: true })
 
+    const allUsers = await db.select().from(userProfiles)
+    const allShops = await db.select().from(shops)
     const allPayments = await db.select().from(payments)
     const paid = allPayments.filter((p) => p.status === 'paid')
     const totalVolume = paid.reduce((s, p) => s + (p.amount || 0), 0)
+    const activeUserbots = (await db.select().from(userbotConnections).where(eq(userbotConnections.status, 'active'))).length
+    const activeRooms = (await db.select().from(paidRooms).where(eq(paidRooms.isActive, true))).length
 
     await send(
       token,
       chatId,
       `📊 <b>Umumiy Tizim Statistikasi:</b>\n\n` +
-      `💰 <b>Jami tushum:</b> ${totalVolume.toLocaleString()} UZS\n` +
+      `👥 <b>Jami foydalanuvchilar:</b> ${allUsers.length} ta\n` +
+      `🏪 <b>Jami yaratilgan do‘konlar:</b> ${allShops.length} ta\n` +
+      `💰 <b>Jami tushum aylanmasi:</b> ${totalVolume.toLocaleString('uz-UZ')} UZS\n` +
       `✅ <b>Muvaffaqiyatli to‘lovlar:</b> ${paid.length} ta\n` +
       `⏳ <b>Kutilayotgan to‘lovlar:</b> ${allPayments.filter((p) => p.status === 'pending').length} ta\n` +
+      `🤖 <b>Faol Userbotlar:</b> ${activeUserbots} ta\n` +
+      `👑 <b>Faol VIP Guruhlar:</b> ${activeRooms} ta\n\n` +
       `🌐 <b>Web CRM Dashboard:</b> <a href="${APP_URL}/admin">${APP_URL}/admin</a>`,
       adminMenu
     )
@@ -7001,19 +7024,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (text === 'Statistika' || text === '📊 Statistika') {
+  if (text === 'Statistika' || text === '📊 Statistika' || raw === '/stat' || raw === '/stats' || raw === '/statistika') {
     const totalPayments = await db.select().from(payments).where(eq(payments.userId, userIdStr))
+    const userShops = await db.select().from(shops).where(eq(shops.userId, userIdStr))
+    const allUsers = await db.select().from(userProfiles)
+    const profs = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, userIdStr)).limit(1)
     const paid = totalPayments.filter((p) => p.status === 'paid')
     const totalSum = paid.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const authUrl = await generateAuthUrl(userIdStr)
+    const tierName = profs[0]?.tier === 'premium' ? '💎 Premium VIP' : '🆓 Bepul (Free)'
 
     await send(
       token,
       chatId,
       `📊 <b>Sizning To‘lov Statistikangiz:</b>\n\n` +
-      `💰 <b>Jami tushum:</b> ${totalSum.toLocaleString()} UZS\n` +
+      `💰 <b>Sizdagi jami tushum:</b> ${totalSum.toLocaleString('uz-UZ')} UZS\n` +
       `✅ <b>Muvaffaqiyatli to‘lovlar:</b> ${paid.length} ta\n` +
-      `⏳ <b>Kutilayotgan:</b> ${totalPayments.filter((p) => p.status === 'pending').length} ta\n\n` +
+      `⏳ <b>Kutilayotgan to‘lovlar:</b> ${totalPayments.filter((p) => p.status === 'pending').length} ta\n` +
+      `🏪 <b>Sizning do‘konlaringiz:</b> ${userShops.length} ta\n` +
+      `🤝 <b>Taklif qilgan do‘stlaringiz:</b> ${profs[0]?.referralCount || 0} ta\n` +
+      `⭐️ <b>Faol tarif:</b> ${tierName}\n` +
+      `👥 <b>Platformadagi jami foydalanuvchilar:</b> ${allUsers.length} ta\n\n` +
       `🌐 <b>Batafsil Veb CRM:</b> <a href="${authUrl}">${APP_URL}/panel</a>`,
       {
         inline_keyboard: [
