@@ -349,9 +349,19 @@ export const PAYMENT_THEMES: Record<string, PaymentTheme> = {
   },
 }
 
+export const DEFAULT_THEME_ID = 'cyber_blue'
+
 export function getPaymentTheme(themeId?: string | null): PaymentTheme {
-  if (themeId && PAYMENT_THEMES[themeId]) {
-    return PAYMENT_THEMES[themeId]
+  if (themeId && typeof themeId === 'string') {
+    const normalized = themeId.trim().toLowerCase()
+    if (PAYMENT_THEMES[normalized]) {
+      return PAYMENT_THEMES[normalized]
+    }
+    // Direct alias mappings for standard / default design requests
+    if (normalized === 'standard' || normalized === 'standart' || normalized === 'default' || normalized === 'cyber') {
+      return PAYMENT_THEMES[DEFAULT_THEME_ID]
+    }
   }
-  return PAYMENT_THEMES.cyber_blue
+  // Standard fallback when design is not selected or unknown
+  return PAYMENT_THEMES[DEFAULT_THEME_ID]
 }

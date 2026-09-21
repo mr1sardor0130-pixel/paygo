@@ -122,6 +122,7 @@ export const shops = pgTable(
     telegramChannelId: text('telegramChannelId'),
     userbotSession: text('userbotSession'),
     tier: text('tier').notNull().default('free'), // free, premium
+    theme: text('theme').notNull().default('cyber_blue'), // selected checkout design theme
     createdAt: timestamp('createdAt').notNull().defaultNow(),
   },
   (table) => [

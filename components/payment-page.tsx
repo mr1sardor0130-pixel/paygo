@@ -43,7 +43,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { HumoLogo, UzcardLogo, PayGoLogo, PaymeLogo, ClickLogo, UzumBankLogo } from '@/components/brand-logos'
-import { PAYMENT_THEMES, PaymentTheme, getPaymentTheme } from '@/lib/payment-themes'
+import { PAYMENT_THEMES, PaymentTheme, getPaymentTheme, DEFAULT_THEME_ID } from '@/lib/payment-themes'
 
 type PaymentData = {
   id: string
@@ -100,30 +100,47 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [showThemeModal, setShowThemeModal] = useState(false)
   const [themeFilter, setThemeFilter] = useState<'all' | 'free' | 'premium'>('all')
   const [currentThemeId, setCurrentThemeId] = useState<string>('cyber_blue')
+  const [isOwnerPreview, setIsOwnerPreview] = useState(false)
   const [appRedirectToast, setAppRedirectToast] = useState<string | null>(null)
 
-  // Load theme from localStorage or query if available
+  // Load theme from shop configuration, URL parameters, or fallback to standard design
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
-      const qTheme = urlParams.get('theme')
-      if (qTheme && PAYMENT_THEMES[qTheme]) {
-        setCurrentThemeId(qTheme)
+      const previewMode = urlParams.get('preview') || urlParams.get('edit') || urlParams.get('owner')
+      if (previewMode === '1' || previewMode === 'true') {
+        setIsOwnerPreview(true)
+      }
+
+      const qTheme = urlParams.get('theme') || urlParams.get('design') || urlParams.get('dizayn')
+      if (qTheme) {
+        const validatedTheme = getPaymentTheme(qTheme)
+        setCurrentThemeId(validatedTheme.id)
+      } else if (data?.shop?.theme) {
+        // Priority 1: Do'kon egasi tomonidan belgilangan dizayn
+        const validatedTheme = getPaymentTheme(data.shop.theme)
+        setCurrentThemeId(validatedTheme.id)
       } else {
-        const saved = localStorage.getItem('paygo_selected_theme')
-        if (saved && PAYMENT_THEMES[saved]) {
-          setCurrentThemeId(saved)
-        }
+        // Fallback: Standart dizayn
+        setCurrentThemeId(DEFAULT_THEME_ID)
       }
     }
-  }, [])
+  }, [data])
 
   const currentTheme = getPaymentTheme(currentThemeId)
 
   const handleSelectTheme = (themeId: string) => {
-    setCurrentThemeId(themeId)
+    const validatedTheme = getPaymentTheme(themeId)
+    setCurrentThemeId(validatedTheme.id)
     if (typeof window !== 'undefined') {
-      localStorage.setItem('paygo_selected_theme', themeId)
+      localStorage.setItem('paygo_selected_theme', validatedTheme.id)
+    }
+  }
+
+  const handleResetToStandardTheme = () => {
+    setCurrentThemeId(DEFAULT_THEME_ID)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('paygo_selected_theme')
     }
   }
 
@@ -346,19 +363,21 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
 
           {/* Right: User / Shop Profile Badge + Theme Switcher */}
           <div className="flex items-center gap-2">
-            {/* Theme Selector Button (10 Designs) */}
-            <button
-              onClick={() => setShowThemeModal(true)}
-              title="10 xil to‘lov sahifasi dizaynini tanlash"
-              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition border ${
-                currentTheme.tier === 'premium'
-                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
-                  : 'bg-blue-600/20 border-blue-500/40 text-sky-300 hover:bg-blue-600/30'
-              }`}
-            >
-              <Palette size={14} className={currentTheme.tier === 'premium' ? 'text-amber-400' : 'text-sky-400'} />
-              <span className="hidden xs:inline">Dizayn ({currentTheme.tier === 'premium' ? 'VIP' : '5/5'})</span>
-            </button>
+            {/* Theme Selector Button (Only shown in Do'kon Egasi / Preview mode) */}
+            {isOwnerPreview && (
+              <button
+                onClick={() => setShowThemeModal(true)}
+                title="10 xil to‘lov sahifasi dizaynini tanlash (Do‘kon egasi rejimi)"
+                className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition border ${
+                  currentTheme.tier === 'premium'
+                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
+                    : 'bg-blue-600/20 border-blue-500/40 text-sky-300 hover:bg-blue-600/30'
+                }`}
+              >
+                <Palette size={14} className={currentTheme.tier === 'premium' ? 'text-amber-400' : 'text-sky-400'} />
+                <span className="hidden xs:inline">Dizayn ({currentTheme.tier === 'premium' ? 'VIP' : '5/5'})</span>
+              </button>
+            )}
 
             {/* Shop & User Profile Badge */}
             <div className={`flex items-center gap-2 rounded-xl ${currentTheme.isDark ? 'bg-black/30' : 'bg-slate-100'} border ${currentTheme.headerBorder} px-2.5 py-1.5`}>
@@ -1131,13 +1150,30 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
             </div>
 
             {/* Modal Footer */}
-            <div className="mt-4 pt-3 border-t border-blue-900/50 flex items-center justify-between">
-              <p className="text-[11px] text-slate-400">
-                Tanlangan: <b className="text-sky-300">{currentTheme.name}</b>
-              </p>
+            <div className="mt-4 pt-3 border-t border-blue-900/50 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] text-slate-400">
+                  Tanlangan: <b className="text-sky-300">{currentTheme.name}</b>
+                  {currentThemeId === DEFAULT_THEME_ID && (
+                    <span className="ml-1.5 text-[9.5px] font-extrabold px-1.5 py-0.5 rounded bg-blue-500/20 text-sky-300 border border-blue-500/30">
+                      (Standart Dizayn)
+                    </span>
+                  )}
+                </p>
+                {currentThemeId !== DEFAULT_THEME_ID && (
+                  <button
+                    type="button"
+                    onClick={handleResetToStandardTheme}
+                    className="text-[10px] font-bold text-sky-300 hover:text-white bg-blue-950/80 hover:bg-blue-900/80 px-2.5 py-1 rounded-lg border border-sky-500/40 transition"
+                  >
+                    Standart dizaynga tiklash
+                  </button>
+                )}
+              </div>
               <button
+                type="button"
                 onClick={() => setShowThemeModal(false)}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-md shadow-blue-600/30"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-md shadow-blue-600/30 ml-auto"
               >
                 Tayyor
               </button>

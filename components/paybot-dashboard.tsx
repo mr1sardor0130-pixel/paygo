@@ -52,10 +52,12 @@ import {
   SlidersHorizontal,
   UserPlus,
   DownloadCloud,
+  Palette,
 } from 'lucide-react'
 import Link from 'next/link'
 import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
 import { GearLoader, ButtonGearSpinner, DoubleGearIcon } from '@/components/gear-loader'
+import { PAYMENT_THEMES, getPaymentTheme, DEFAULT_THEME_ID } from '@/lib/payment-themes'
 
 export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels' | 'db_backup'
 
@@ -112,6 +114,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     webhookUrl: '',
     returnUrl: '',
     telegramChannelId: '',
+    theme: 'cyber_blue',
   })
   const [shopData, setShopData] = useState<any>(null)
   const [savingShop, setSavingShop] = useState(false)
@@ -665,6 +668,7 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       webhookUrl: selected.webhookUrl || '',
       returnUrl: selected.returnUrl || '',
       telegramChannelId: selected.telegramChannelId || '',
+      theme: selected.theme || 'cyber_blue',
     })
     showToast(`Faol do‘kon tanlandi: ${selected.name}`)
   }
@@ -2845,6 +2849,63 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                       <p className="mt-1 text-[11px] text-[#94a3b8]">
                         Botni kanalingizga admin qiling va kanal ID sini kiriting. Cheklar to‘g‘ridan-to‘g‘ri kanalga post bo‘ladi!
                       </p>
+                    </div>
+                  </div>
+
+                  {/* ------------------------------------------------------------- */}
+                  {/* CHECKOUT THEME / DESIGN SELECTION SECTION (FOR STORE OWNER) */}
+                  {/* ------------------------------------------------------------- */}
+                  <div className="rounded-2xl bg-[#081225] text-white p-5 space-y-4 shadow-md border border-blue-900/50">
+                    <div className="flex items-center justify-between border-b border-blue-800/40 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="size-8 rounded-xl bg-blue-600/30 border border-blue-500/40 text-sky-400 grid place-items-center shrink-0">
+                          <Palette size={18} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-white">To‘lov Sahifasi Dizayni (10 xil uslub)</h4>
+                          <p className="text-[11px] text-slate-400">
+                            Xaridorlar to‘lov sahifasida ko‘radigan dizayn. Faqat do‘kon egasi o‘zgartira oladi!
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-600/30 text-sky-300 border border-blue-500/40 shrink-0">
+                        Do‘kon Egasi Sozlamasi
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+                      {Object.values(PAYMENT_THEMES).map((theme) => {
+                        const isSelected = shopForm.theme === theme.id
+                        return (
+                          <div
+                            key={theme.id}
+                            onClick={() => setShopForm({ ...shopForm, theme: theme.id })}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                              isSelected
+                                ? 'border-sky-400 bg-blue-950/90 shadow-md ring-2 ring-sky-400/40'
+                                : 'border-blue-900/40 bg-[#060d1a] hover:border-blue-700/60'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                className="size-8 rounded-lg border border-white/20 shrink-0 flex items-center justify-center text-[10px] font-bold shadow-sm"
+                                style={{ backgroundColor: theme.previewDot }}
+                              >
+                                {theme.tier === 'premium' ? '👑' : '✓'}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-white truncate">{theme.name}</p>
+                                <p className="text-[10px] text-slate-400 truncate">{theme.tag} • {theme.tier === 'premium' ? 'VIP' : 'Tekin'}</p>
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <span className="text-[10px] font-bold text-sky-400 bg-blue-900/80 px-2 py-0.5 rounded-md border border-sky-400/40 shrink-0">
+                                Tanlangan
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
 
