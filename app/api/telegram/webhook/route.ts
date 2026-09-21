@@ -22,7 +22,7 @@ import {
   deliveryLogs,
 } from '@/lib/db/schema'
 import { eq, and, desc, inArray } from 'drizzle-orm'
-import { isAdminTelegramId, isSuperAdminTelegramId } from '@/lib/admin'
+import { isAdminTelegramId, isSuperAdminTelegramId, getSystemConfig, setSystemConfig } from '@/lib/admin'
 import { getSystemTariffs, getTariffById, DEFAULT_TARIFFS } from '@/lib/tariffs'
 import {
   beginOnboarding,
@@ -192,11 +192,11 @@ const menu = {
 const adminMenu = {
   keyboard: [
     [{ text: '🏪 Do‘konlar boshqaruvi' }, { text: '💎 Tariflar boshqaruvi' }],
-    [{ text: '📣 Rasmiy Kanal & Majburiy Obuna' }, { text: '👥 Adminlar boshqaruvi' }],
-    [{ text: '📢 Reklama & Broadcast' }, { text: '🛑 Faoliyat boshqaruvi' }],
-    [{ text: '📊 Barcha statistika' }, { text: '🤖 Userbotlar holati' }],
-    [{ text: '💾 Baza Backup (.zip / .sql)' }, { text: '🌐 Web CRM Dashboard' }],
-    [{ text: '🏠 Asosiy menyuga qaytish' }],
+    [{ text: '⏱ To‘lov Vaqti (Taymer)' }, { text: '👥 Adminlar boshqaruvi' }],
+    [{ text: '📣 Rasmiy Kanal & Majburiy Obuna' }, { text: '🛑 Faoliyat boshqaruvi' }],
+    [{ text: '📢 Reklama & Broadcast' }, { text: '📊 Barcha statistika' }],
+    [{ text: '🤖 Userbotlar holati' }, { text: '💾 Baza Backup (.zip / .sql)' }],
+    [{ text: '🌐 Web CRM Dashboard' }, { text: '🏠 Asosiy menyuga qaytish' }],
   ],
   resize_keyboard: true,
   one_time_keyboard: true,
@@ -2441,6 +2441,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    if (data.startsWith('set_expiry_')) {
+      const isAdmin = await isAdminTelegramId(userIdStr)
+      if (!isAdmin) return NextResponse.json({ ok: true })
+      const valStr = data.replace('set_expiry_', '')
+      const newMinutes = parseInt(valStr, 10)
+      if (newMinutes > 0 && newMinutes <= 1440) {
+        await setSystemConfig('payment_expiry_minutes', String(newMinutes))
+        await send(
+          token,
+          chatId,
+          `✅ <b>To‘lov taymeri vaqti saqlandi!</b>\n\n` +
+          `Yangi standart to‘lov muddati: <b>${newMinutes} daqiqa (${newMinutes * 60} soniya)</b>.\n` +
+          `Endi barcha yangi yaratiladigan to‘lov havolalari va QR kodlar ${newMinutes} daqiqa amal qiladi.`,
+          adminMenu
+        )
+      }
+      return NextResponse.json({ ok: true })
+    }
     if (data === 'bot_add_vip_group') {
       await promptConnectVipChat(token, chatId, 'group')
       return NextResponse.json({ ok: true })
@@ -6865,6 +6883,65 @@ export async function POST(request: Request) {
     const isAdmin = await isAdminTelegramId(userIdStr)
     if (!isAdmin) return NextResponse.json({ ok: true })
     await renderAdminTariffManagement(token, chatId)
+    return NextResponse.json({ ok: true })
+  }
+
+  // ⏱ Payment Expiration Timer Admin Management
+  if (
+    text === 'To‘lov Vaqti (Taymer)' ||
+    text === '⏱ To‘lov Vaqti (Taymer)' ||
+    norm === 'tolov vaqti' ||
+    norm === 'tolov vaqti taymer' ||
+    raw === '/set_expiry' ||
+    raw.startsWith('/set_expiry') ||
+    raw.startsWith('/expiry')
+  ) {
+    const isAdmin = await isAdminTelegramId(userIdStr)
+    if (!isAdmin) return NextResponse.json({ ok: true })
+
+    const parts = raw.split(/\s+/)
+    if (parts.length >= 2 && /^\d+$/.test(parts[1])) {
+      const newMinutes = parseInt(parts[1], 10)
+      if (newMinutes > 0 && newMinutes <= 1440) {
+        await setSystemConfig('payment_expiry_minutes', String(newMinutes))
+        await send(
+          token,
+          chatId,
+          `✅ <b>To‘lov taymeri vaqti saqlandi!</b>\n\n` +
+          `Yangi standart to‘lov muddati: <b>${newMinutes} daqiqa (${newMinutes * 60} soniya)</b>.\n` +
+          `Endi barcha yangi yaratiladigan to‘lov havolalari va QR kodlar ${newMinutes} daqiqa amal qiladi.`,
+          adminMenu
+        )
+        return NextResponse.json({ ok: true })
+      }
+    }
+
+    const currentExpiry = await getSystemConfig('payment_expiry_minutes', '15')
+    const currentMin = parseInt(currentExpiry, 10) || 15
+
+    const expiryInlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '5 daqiqa', callback_data: 'set_expiry_5' },
+          { text: '10 daqiqa', callback_data: 'set_expiry_10' },
+          { text: '15 daqiqa', callback_data: 'set_expiry_15' },
+        ],
+        [
+          { text: '30 daqiqa', callback_data: 'set_expiry_30' },
+          { text: '60 daqiqa (1 soat)', callback_data: 'set_expiry_60' },
+        ],
+      ],
+    }
+
+    await send(
+      token,
+      chatId,
+      `⏱ <b>Standard To‘lov Vaqti (Taymer Sozlamasi)</b>\n\n` +
+      `• Hozirgi to‘lov amal qilish muddati: <b>${currentMin} daqiqa (${currentMin * 60} soniya)</b>\n\n` +
+      `To‘lov havolalari uchun yangi vaqtni tanlang yoki buyruq orqali kiriting:\n` +
+      `<code>/set_expiry &lt;daqiqa_soni&gt;</code> (masalan: <code>/set_expiry 20</code>)`,
+      expiryInlineKeyboard
+    )
     return NextResponse.json({ ok: true })
   }
 

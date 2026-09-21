@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { payments, storeApiKeys } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { checkTransactionLimits } from '@/lib/utils/limits'
+import { getSystemConfig } from '@/lib/admin'
 
 const createPaymentSchema = z.object({
   shopId: z.string().min(1),
@@ -35,7 +36,9 @@ export async function POST(request: Request) {
     }
 
     const paymentId = randomUUID()
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+    const expiryMinConfig = await getSystemConfig('payment_expiry_minutes', '15')
+    const expiryMinutes = Number(expiryMinConfig) || 15
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000)
     
     await db.insert(payments).values({
       id: paymentId,

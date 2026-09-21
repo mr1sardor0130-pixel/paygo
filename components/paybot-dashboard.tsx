@@ -2131,6 +2131,18 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                       <ExternalLink size={13} className="text-blue-600" />
                     </Link>
 
+                    <Link
+                      href="/status"
+                      onClick={() => setIsNavDrawerOpen(false)}
+                      className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Activity size={16} className="text-emerald-600 animate-pulse" />
+                        <span>⚡️ Vercel Host & System Status (/status)</span>
+                      </div>
+                      <ExternalLink size={13} className="text-emerald-600" />
+                    </Link>
+
                     <button
                       onClick={() => {
                         handleSwitchTab('broadcast')

@@ -6,6 +6,7 @@ import { eq, or, desc } from 'drizzle-orm'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 import { isAdminTelegramId } from '@/lib/admin'
 import { resolveAuthUser } from '@/lib/auth-server'
+import { getPaymentTheme } from '@/lib/payment-themes'
 
 export const dynamic = 'force-dynamic'
 
@@ -206,7 +207,16 @@ export async function POST(request: Request) {
       if (body.webhookUrl !== undefined) updates.webhookUrl = body.webhookUrl.trim()
       if (body.returnUrl !== undefined) updates.returnUrl = body.returnUrl.trim()
       if (body.telegramChannelId !== undefined) updates.telegramChannelId = body.telegramChannelId.trim()
-      if (body.theme !== undefined) updates.theme = body.theme.trim() || 'cyber_blue'
+      if (body.theme !== undefined) {
+        const requestedTheme = getPaymentTheme(body.theme)
+        if (requestedTheme.tier === 'premium' && shop.tier !== 'premium' && !isAdmin) {
+          return NextResponse.json({
+            error: '👑 VIP Premium dizaynlardan foydalanish uchun do‘koningiz VIP Premium tarifida bo‘lishi kerak!',
+            requiresPremium: true,
+          }, { status: 403 })
+        }
+        updates.theme = requestedTheme.id
+      }
 
       await db.update(shops).set(updates).where(eq(shops.id, shop.id))
       const updated = await db.select().from(shops).where(eq(shops.id, shop.id)).limit(1)

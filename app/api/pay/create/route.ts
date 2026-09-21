@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
 import { payments, shops, authSessions } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
+import { getSystemConfig } from '@/lib/admin'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -113,8 +114,10 @@ async function handleRequest(request: Request, method: 'GET' | 'POST') {
       }
     }
 
+    const defaultExpiryConfig = await getSystemConfig('payment_expiry_minutes', '15')
+    const systemDefaultMinutes = Number(defaultExpiryConfig) || 15
     const customExpiryMin = Number(searchParams.get('expiresInMinutes') || searchParams.get('expiry') || body.expiresInMinutes || body.expiry)
-    const expiryMinutes = Number.isFinite(customExpiryMin) && customExpiryMin > 0 ? customExpiryMin : 30 // Default 30 minutes
+    const expiryMinutes = Number.isFinite(customExpiryMin) && customExpiryMin > 0 ? customExpiryMin : systemDefaultMinutes
     const paymentId = `pay_${randomUUID().replace(/-/g, '').slice(0, 12)}`
     const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000)
 

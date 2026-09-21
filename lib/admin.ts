@@ -1,9 +1,45 @@
 import { headers } from 'next/headers'
 import { db, ensureDbSchema, pool } from '@/lib/db'
-import { systemRoles } from '@/lib/db/schema'
+import { systemRoles, systemConfigs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 
 export const DEFAULT_SUPERADMIN_ID = process.env.ADMIN_TELEGRAM_ID ?? '8021115446'
+
+/**
+ * Gets a global system configuration value from DB.
+ */
+export async function getSystemConfig(key: string, defaultValue: string = ''): Promise<string> {
+  try {
+    await ensureDbSchema()
+    const rows = await db.select().from(systemConfigs).where(eq(systemConfigs.key, key)).limit(1)
+    if (rows.length > 0 && rows[0].value !== undefined) {
+      return rows[0].value
+    }
+  } catch (err) {
+    console.warn(`getSystemConfig error for key ${key}:`, err)
+  }
+  return defaultValue
+}
+
+/**
+ * Sets or updates a global system configuration value in DB.
+ */
+export async function setSystemConfig(key: string, value: string): Promise<boolean> {
+  try {
+    await ensureDbSchema()
+    await db
+      .insert(systemConfigs)
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: systemConfigs.key,
+        set: { value, updatedAt: new Date() },
+      })
+    return true
+  } catch (err) {
+    console.warn(`setSystemConfig error for key ${key}:`, err)
+    return false
+  }
+}
 
 /**
  * STRICT SECURITY: Only the system owner/configured Telegram ID can ever be Super Admin.

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { paidAccessRooms, paidAccessMembers, manualPaymentRequests } from '@/lib/db/schema'
+import { paidAccessRooms, paidAccessMembers, manualPaymentRequests, userProfiles, shops } from '@/lib/db/schema'
 import { eq, desc, and } from 'drizzle-orm'
 import { isAdminTelegramId } from '@/lib/admin'
 import { resolveAuthUser } from '@/lib/auth-server'
@@ -69,6 +69,29 @@ export async function POST(request: Request) {
       const { title, chatId, shopId, type, mode, hourlyPrice, dailyPrice, weeklyPrice, monthlyPrice, welcomeMessage, paymentType, manualCardNumber, manualCardOwner, manualInstructions } = body
       if (!title || !chatId) {
         return NextResponse.json({ error: 'Guruh nomi va Chat ID kiritilishi shart' }, { status: 400 })
+      }
+
+      // Check tier & existing rooms count for user/shop
+      const ownerId = user.telegramId || user.userId
+      const userProfileRows = await db.select().from(userProfiles).where(eq(userProfiles.telegramId, ownerId)).limit(1)
+      const userProf = userProfileRows[0] || null
+      
+      let isPremium = isAdmin || userProf?.tier === 'premium' || (userProf?.premiumEndsAt && new Date(userProf.premiumEndsAt) > new Date())
+      if (!isPremium && shopId) {
+        const shopRows = await db.select().from(shops).where(eq(shops.id, String(shopId))).limit(1)
+        if (shopRows.length && shopRows[0].tier === 'premium') {
+          isPremium = true
+        }
+      }
+
+      const existingRooms = await db.select().from(paidAccessRooms).where(eq(paidAccessRooms.ownerTelegramId, ownerId))
+      const activeRoomsCount = existingRooms.filter(r => r.active).length
+
+      if (!isPremium && activeRoomsCount >= 1) {
+        return NextResponse.json({
+          error: 'Oddiy (Free) tarifda maksimal 1 ta VIP Guruh/Kanal ulab foydalanish mumkin. Cheksiz guruh va kanallar ulash uchun VIP Premium tarifiga o‘ting!',
+          requiresPremium: true,
+        }, { status: 403 })
       }
 
       let cleanChatId = String(chatId).trim()

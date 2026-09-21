@@ -399,6 +399,13 @@ export const businessConnections = pgTable('business_connections', {
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 })
 
+// System Configuration Key-Value Store
+export const systemConfigs = pgTable('system_configs', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
 // Relations
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),

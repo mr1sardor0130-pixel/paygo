@@ -77,30 +77,16 @@ export async function POST(req: NextRequest) {
 
     const activeFundCount = Number(existingFunds[0]?.count || 0)
 
-    // FREE LIMIT: Max 1 active fundraiser, Max goal 50,000,000 UZS
+    // FREE LIMIT: Donate / Streamer widget features require VIP Premium tariff
     if (!isPremium) {
-      if (activeFundCount >= 1) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'Oddiy (Free) tarifda bir vaqtning o‘zida faqat 1 ta faol ehson havolasi yaratish mumkin. Cheksiz ehson kampaniyalari va 0% komissiya uchun Premium tarifiga o‘ting.',
-            requiresPremium: true,
-          },
-          { status: 403 }
-        )
-      }
-
-      const parsedGoal = parseInt(goalAmount, 10) || 0
-      if (parsedGoal > 50000000) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'Oddiy tarifda maksimal maqsad 50,000,000 UZS gacha ruxsat berilgan. Yuqoriroq summa uchun Premium tarifga o‘ting.',
-            requiresPremium: true,
-          },
-          { status: 403 }
-        )
-      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error: '🎗 Donate va Streamer ehson yig‘ish tizimidan foydalanish uchun do‘koningiz VIP Premium tarifida bo‘lishi kerak! Premium tarifga o‘tib, cheksiz donate va streamer vidjetlarini faollashtiring.',
+          requiresPremium: true,
+        },
+        { status: 403 }
+      )
     }
 
     const fundId = `fund_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`

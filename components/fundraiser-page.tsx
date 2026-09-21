@@ -442,18 +442,6 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={handleTestVerify}
-                    disabled={verifying}
-                    className="shrink-0 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    {verifying ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-3.5 h-3.5" />
-                    )}
-                    🧪 Test Tasdiqlash
-                  </button>
                 </div>
               )}
 

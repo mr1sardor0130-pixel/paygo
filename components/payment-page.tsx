@@ -947,8 +947,8 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               </button>
             </div>
 
-            {/* 9. TEST PAYMENT SIMULATION (ONLY IN TEST MODE) */}
-            {data?.isTest && (
+            {/* 9. TEST PAYMENT SIMULATION (ONLY IN TEST MODE FOR STORE OWNER PREVIEW) */}
+            {data?.isTest && isOwnerPreview && (
               <div className="rounded-3xl border border-dashed border-sky-400/40 bg-blue-950/40 p-4 shadow-xl">
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} className="text-sky-400" />
