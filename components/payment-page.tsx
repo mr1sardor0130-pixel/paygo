@@ -781,17 +781,15 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Kommunal</span>
               </button>
 
-              {isOwnerPreview && (
-                <button
-                  onClick={() => setShowThemeModal(true)}
-                  className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
-                >
-                  <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
-                    <Palette size={16} />
-                  </div>
-                  <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Dizaynlar</span>
-                </button>
-              )}
+              <button
+                onClick={() => setShowThemeModal(true)}
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
+              >
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
+                  <Palette size={16} />
+                </div>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Dizaynlar</span>
+              </button>
             </div>
 
             {/* 6. TO'LOV XIZMATLARI (ORIGINAL VIVID BRAND LOGOS) */}
@@ -896,37 +894,35 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               </div>
             </div>
 
-            {/* 7. PROMO FEATURE BANNER (ONLY SHOWN IN STORE OWNER PREVIEW MODE) */}
-            {isOwnerPreview && (
-              <div className={`rounded-3xl border ${currentTheme.headerBorder} ${currentTheme.headerBg} p-4 sm:p-5 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
-                <div className="flex items-center gap-3.5">
-                  <div className="size-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-sky-400 p-0.5 shadow-lg shadow-blue-500/20 shrink-0 flex items-center justify-center">
-                    <div className={`size-full rounded-[14px] ${currentTheme.isDark ? 'bg-[#091428]' : 'bg-white'} flex items-center justify-center ${currentTheme.accentText}`}>
-                      <Wallet size={22} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="inline-flex items-center gap-1 rounded-md bg-blue-950/80 border border-blue-700/40 px-2 py-0.5 text-[9.5px] font-bold text-sky-400 uppercase tracking-wider mb-1">
-                      10 XIL DIZAYN
-                    </div>
-                    <h4 className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>
-                      5 Tekin + 5 VIP Dizaynlar mavjud!
-                    </h4>
-                    <p className="text-[10.5px] text-slate-400">
-                      O‘zingizga yoqqan rang va uslubni tanlang yoki VIP rejimga o‘ting.
-                    </p>
+            {/* 7. PROMO FEATURE BANNER */}
+            <div className={`rounded-3xl border ${currentTheme.headerBorder} ${currentTheme.headerBg} p-4 sm:p-5 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+              <div className="flex items-center gap-3.5">
+                <div className="size-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-sky-400 p-0.5 shadow-lg shadow-blue-500/20 shrink-0 flex items-center justify-center">
+                  <div className={`size-full rounded-[14px] ${currentTheme.isDark ? 'bg-[#091428]' : 'bg-white'} flex items-center justify-center ${currentTheme.accentText}`}>
+                    <Wallet size={22} />
                   </div>
                 </div>
-
-                <button
-                  onClick={() => setShowThemeModal(true)}
-                  className="flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-bold text-white transition shrink-0 shadow-md shadow-blue-600/30"
-                >
-                  <Palette size={13} />
-                  <span>Mavzularni ko‘rish</span>
-                </button>
+                <div>
+                  <div className="inline-flex items-center gap-1 rounded-md bg-blue-950/80 border border-blue-700/40 px-2 py-0.5 text-[9.5px] font-bold text-sky-400 uppercase tracking-wider mb-1">
+                    10 XIL DIZAYN
+                  </div>
+                  <h4 className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>
+                    5 Tekin + 5 VIP Dizaynlar mavjud!
+                  </h4>
+                  <p className="text-[10.5px] text-slate-400">
+                    O‘zingizga yoqqan rang va uslubni tanlang yoki VIP rejimga o‘ting.
+                  </p>
+                </div>
               </div>
-            )}
+
+              <button
+                onClick={() => setShowThemeModal(true)}
+                className="flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-bold text-white transition shrink-0 shadow-md shadow-blue-600/30"
+              >
+                <Palette size={13} />
+                <span>Mavzularni ko‘rish</span>
+              </button>
+            </div>
 
             {/* 8. TIMER & REAL-TIME STATUS CHECK BAR */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
