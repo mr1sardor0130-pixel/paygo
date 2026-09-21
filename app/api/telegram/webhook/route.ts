@@ -5144,28 +5144,34 @@ export async function POST(request: Request) {
 
     await send(token, chatId, `🧪 <b>Webhook Sinov Simulyatsiyasi:</b>\n\n📍 URL: <code>${myShop.webhookUrl}</code>\n\nTest to‘lov payload yuborilmoqda...`)
 
-    const testPayload = {
-      event: 'payment.success',
-      paymentId: `test_${randomUUID().slice(0, 8)}`,
-      amount: 100000,
-      currency: 'UZS',
-      shopId: myShop.id,
+    const secretKey = myShop.apiSecret || process.env.PAYBOT_WORKER_SECRET || 'secret'
+    const testEvent = {
+      eventId: `evt_${randomUUID().slice(0, 8)}`,
+      type: 'payment.paid',
+      createdAt: new Date().toISOString(),
+      payment: {
+        id: `pay_test_${randomUUID().slice(0, 8)}`,
+        shopId: myShop.id,
+        userId: userIdStr,
+        amount: 100000,
+        currency: 'UZS',
+        status: 'paid',
+        isTest: true,
+      },
       shopName: myShop.name,
       cardLast4: myShop.cardLast4 || '3587',
-      timestamp: new Date().toISOString(),
-      isTest: true
     }
 
     try {
-      const whResult = await deliverWebhook(myShop.webhookUrl, testPayload, myShop.id)
-      if (whResult.success) {
+      const whResult = await deliverWebhook(myShop.webhookUrl, secretKey, testEvent)
+      if (whResult.success || whResult.ok) {
         await send(token, chatId, `✅ <b>Webhook Test Muvaffaqiyatli!</b>\n\n` +
-          `• HTTP Status: <code>${whResult.statusCode} OK</code>\n` +
+          `• HTTP Status: <code>${whResult.statusCode || whResult.status} OK</code>\n` +
           `• Serveringiz to‘lov xabarnomasini qabul qildi va to‘g‘ri javob qaytardi. 🚀`)
       } else {
         await send(token, chatId, `❌ <b>Webhook Testda Xatolik:</b>\n\n` +
-          `• HTTP Status: <code>${whResult.statusCode || 'Ulanib bo‘lmadi'}</code>\n` +
-          `• Xato: <code>${whResult.error || 'Server javob bermadi'}</code>\n\n` +
+          `• HTTP Status: <code>${whResult.statusCode || whResult.status || 'Ulanib bo‘lmadi'}</code>\n` +
+          `• Xato: <code>${whResult.error || whResult.response || 'Server javob bermadi'}</code>\n\n` +
           `Iltimos, serveringizda ushbu URL ochiq va tayyor ekanligini tekshiring: <code>${myShop.webhookUrl}</code>`)
       }
     } catch (err: any) {
