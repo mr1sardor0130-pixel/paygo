@@ -97,22 +97,35 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [extending, setExtending] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [showPromoModal, setShowPromoModal] = useState(false)
-  const [overrideTheme, setOverrideTheme] = useState<string | null>(null)
+  const [showThemeModal, setShowThemeModal] = useState(false)
+  const [themeFilter, setThemeFilter] = useState<'all' | 'free' | 'premium'>('all')
+  const [currentThemeId, setCurrentThemeId] = useState<string>('cyber_blue')
   const [appRedirectToast, setAppRedirectToast] = useState<string | null>(null)
 
-  // Load theme from query parameter if provided (for owner preview/testing)
+  // Load theme from localStorage or query if available
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
       const qTheme = urlParams.get('theme')
       if (qTheme && PAYMENT_THEMES[qTheme]) {
-        setOverrideTheme(qTheme)
+        setCurrentThemeId(qTheme)
+      } else {
+        const saved = localStorage.getItem('paygo_selected_theme')
+        if (saved && PAYMENT_THEMES[saved]) {
+          setCurrentThemeId(saved)
+        }
       }
     }
   }, [])
 
-  const currentThemeId = overrideTheme || data?.shop?.themeId || 'cyber_blue'
   const currentTheme = getPaymentTheme(currentThemeId)
+
+  const handleSelectTheme = (themeId: string) => {
+    setCurrentThemeId(themeId)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('paygo_selected_theme', themeId)
+    }
+  }
 
   const handleExtendTime = async () => {
     setExtending(true)
@@ -331,12 +344,21 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
             <PayGoLogo className="h-9 w-auto" url={data?.siteLogo || undefined} showText={true} />
           </div>
 
-          {/* Right: User / Shop Profile Badge + Secure Badge */}
+          {/* Right: User / Shop Profile Badge + Theme Switcher */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
-              <ShieldCheck size={14} className="text-emerald-400" />
-              <span className="hidden xs:inline">Xavfsiz to‘lov</span>
-            </div>
+            {/* Theme Selector Button (10 Designs) */}
+            <button
+              onClick={() => setShowThemeModal(true)}
+              title="10 xil to‘lov sahifasi dizaynini tanlash"
+              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition border ${
+                currentTheme.tier === 'premium'
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
+                  : 'bg-blue-600/20 border-blue-500/40 text-sky-300 hover:bg-blue-600/30'
+              }`}
+            >
+              <Palette size={14} className={currentTheme.tier === 'premium' ? 'text-amber-400' : 'text-sky-400'} />
+              <span className="hidden xs:inline">Dizayn ({currentTheme.tier === 'premium' ? 'VIP' : '5/5'})</span>
+            </button>
 
             {/* Shop & User Profile Badge */}
             <div className={`flex items-center gap-2 rounded-xl ${currentTheme.isDark ? 'bg-black/30' : 'bg-slate-100'} border ${currentTheme.headerBorder} px-2.5 py-1.5`}>
@@ -740,6 +762,15 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
                 <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Kommunal</span>
               </button>
 
+              <button
+                onClick={() => setShowThemeModal(true)}
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
+              >
+                <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
+                  <Palette size={16} />
+                </div>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Dizaynlar</span>
+              </button>
             </div>
 
             {/* 6. TO'LOV XIZMATLARI (ORIGINAL VIVID BRAND LOGOS) */}
@@ -844,6 +875,36 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               </div>
             </div>
 
+            {/* 7. PROMO FEATURE BANNER */}
+            <div className={`rounded-3xl border ${currentTheme.headerBorder} ${currentTheme.headerBg} p-4 sm:p-5 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+              <div className="flex items-center gap-3.5">
+                <div className="size-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-sky-400 p-0.5 shadow-lg shadow-blue-500/20 shrink-0 flex items-center justify-center">
+                  <div className={`size-full rounded-[14px] ${currentTheme.isDark ? 'bg-[#091428]' : 'bg-white'} flex items-center justify-center ${currentTheme.accentText}`}>
+                    <Wallet size={22} />
+                  </div>
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1 rounded-md bg-blue-950/80 border border-blue-700/40 px-2 py-0.5 text-[9.5px] font-bold text-sky-400 uppercase tracking-wider mb-1">
+                    10 XIL DIZAYN
+                  </div>
+                  <h4 className={`text-xs font-bold ${currentTheme.isDark ? 'text-white' : 'text-slate-900'}`}>
+                    5 Tekin + 5 VIP Dizaynlar mavjud!
+                  </h4>
+                  <p className="text-[10.5px] text-slate-400">
+                    O‘zingizga yoqqan rang va uslubni tanlang yoki VIP rejimga o‘ting.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowThemeModal(true)}
+                className="flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-bold text-white transition shrink-0 shadow-md shadow-blue-600/30"
+              >
+                <Palette size={13} />
+                <span>Mavzularni ko‘rish</span>
+              </button>
+            </div>
+
             {/* 8. TIMER & REAL-TIME STATUS CHECK BAR */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
               {/* Timer Pill */}
@@ -942,6 +1003,149 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
         </footer>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* 10 TA DIZAYN MAVZULARI MODAL (5 FREE + 5 VIP) */}
+      {/* ========================================================================= */}
+      {showThemeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div onClick={() => setShowThemeModal(false)} className="fixed inset-0 bg-black/85 backdrop-blur-xs" />
+          <div className="relative w-full max-w-2xl rounded-3xl bg-[#091428] border border-blue-800/60 p-5 sm:p-6 shadow-2xl z-50 text-white max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-blue-900/50">
+              <div className="flex items-center gap-2.5">
+                <div className="size-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white grid place-items-center shadow-md shadow-blue-500/30">
+                  <Palette size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
+                    To‘lov Sahifasi Dizaynlari
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600/30 text-sky-400 border border-blue-500/40">10 ta</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">5 ta Bepul + 5 ta Eksklyuziv VIP dizaynlar</p>
+                </div>
+              </div>
+              <button onClick={() => setShowThemeModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg">
+                ✕
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 my-3.5">
+              <button
+                onClick={() => setThemeFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  themeFilter === 'all'
+                    ? 'bg-[#0066ff] text-white shadow-md shadow-blue-600/30'
+                    : 'bg-[#060e1d] text-slate-400 hover:text-white border border-blue-900/40'
+                }`}
+              >
+                Barchasi (10)
+              </button>
+              <button
+                onClick={() => setThemeFilter('free')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                  themeFilter === 'free'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                    : 'bg-[#060e1d] text-slate-400 hover:text-white border border-emerald-900/40'
+                }`}
+              >
+                <span>Bepul (5)</span>
+              </button>
+              <button
+                onClick={() => setThemeFilter('premium')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                  themeFilter === 'premium'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/30'
+                    : 'bg-[#060e1d] text-amber-400/80 hover:text-amber-300 border border-amber-900/40'
+                }`}
+              >
+                <Crown size={12} />
+                <span>VIP Premium (5)</span>
+              </button>
+            </div>
+
+            {/* Themes Grid */}
+            <div className="overflow-y-auto pr-1 space-y-2.5 max-h-[50vh] sm:max-h-[55vh]">
+              {filteredThemes.map((t) => {
+                const isSelected = currentThemeId === t.id
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => handleSelectTheme(t.id)}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'border-sky-400 bg-blue-950/60 shadow-lg shadow-blue-500/20 ring-2 ring-sky-400/30'
+                        : 'border-blue-900/40 bg-[#060e1d]/80 hover:border-blue-700/60 hover:bg-[#0a1529]'
+                    }`}
+                  >
+                    {/* Left: Color swatch & Info */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="size-10 rounded-xl border border-white/20 shadow-md shrink-0 flex items-center justify-center relative overflow-hidden"
+                        style={{ backgroundColor: t.previewDot }}
+                      >
+                        {t.tier === 'premium' ? (
+                          <Crown size={18} className="text-white drop-shadow-sm" />
+                        ) : (
+                          <div className="size-3 rounded-full bg-white/80" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-white truncate">{t.name}</h4>
+                          <span
+                            className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                              t.tier === 'premium'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            }`}
+                          >
+                            {t.tier === 'premium' ? '👑 VIP' : 'TEKIN'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 truncate mt-0.5">{t.description}</p>
+                      </div>
+                    </div>
+
+                    {/* Right: Select / Active indicator */}
+                    <div className="shrink-0">
+                      {isSelected ? (
+                        <span className="flex items-center gap-1 text-xs font-bold text-sky-400 bg-blue-950 px-2.5 py-1 rounded-xl border border-sky-400/40">
+                          <Check size={14} /> Tanlangan
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-slate-400 hover:text-white bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700 transition"
+                        >
+                          Qo‘llash
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="mt-4 pt-3 border-t border-blue-900/50 flex items-center justify-between">
+              <p className="text-[11px] text-slate-400">
+                Tanlangan: <b className="text-sky-300">{currentTheme.name}</b>
+              </p>
+              <button
+                onClick={() => setShowThemeModal(false)}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-md shadow-blue-600/30"
+              >
+                Tayyor
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* PROMO / INFO MODAL */}
       {showPromoModal && (

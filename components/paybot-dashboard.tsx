@@ -52,10 +52,8 @@ import {
   SlidersHorizontal,
   UserPlus,
   DownloadCloud,
-  Palette,
 } from 'lucide-react'
 import Link from 'next/link'
-import { PAYMENT_THEMES, getPaymentTheme } from '@/lib/payment-themes'
 import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
 import { GearLoader, ButtonGearSpinner, DoubleGearIcon } from '@/components/gear-loader'
 
@@ -99,7 +97,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     webhookUrl: '',
     returnUrl: '',
     telegramChannelId: '',
-    themeId: 'cyber_blue',
   })
   const [logoModalShop, setLogoModalShop] = useState<any>(null)
   const [logoInputUrl, setLogoInputUrl] = useState<string>('')
@@ -115,7 +112,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     webhookUrl: '',
     returnUrl: '',
     telegramChannelId: '',
-    themeId: 'cyber_blue',
   })
   const [shopData, setShopData] = useState<any>(null)
   const [savingShop, setSavingShop] = useState(false)
@@ -620,7 +616,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             webhookUrl: data.shop.webhookUrl || '',
             returnUrl: data.shop.returnUrl || '',
             telegramChannelId: data.shop.telegramChannelId || '',
-            themeId: data.shop.themeId || 'cyber_blue',
           })
         }
         loadVipRooms(authToken, fallbackUserId || data.telegramId || data.userId)
@@ -670,7 +665,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       webhookUrl: selected.webhookUrl || '',
       returnUrl: selected.returnUrl || '',
       telegramChannelId: selected.telegramChannelId || '',
-      themeId: selected.themeId || 'cyber_blue',
     })
     showToast(`Faol do‘kon tanlandi: ${selected.name}`)
   }
@@ -711,7 +705,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
           cardBank: 'HUMOCARD',
           webhookUrl: '',
           telegramChannelId: '',
-          themeId: 'cyber_blue',
         })
         showToast('🎉 Yangi do‘kon muvaffaqiyatli ochildi!')
       } else {
@@ -2445,69 +2438,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                       placeholder="Online do‘konimiz orqali tezkor to‘lovlar"
                       className="w-full rounded-xl border border-[#cbd5e1] px-3.5 py-2.5 text-sm outline-none focus:border-[#1769e0] focus:ring-2 focus:ring-blue-50"
                     />
-                  </div>
-
-                  {/* ------------------------------------------------------------- */}
-                  {/* TO'LOV SAHIFASI DIZAYNI (THEME SELECTOR FOR SHOP OWNER ONLY) */}
-                  {/* ------------------------------------------------------------- */}
-                  <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 p-5 text-white border border-slate-800 space-y-4 shadow-md">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                      <div className="flex items-center gap-2.5">
-                        <Palette size={18} className="text-sky-400" />
-                        <div>
-                          <h3 className="text-sm font-bold text-white">🎨 To‘lov Sahifasi Dizayni (Mavzusi)</h3>
-                          <p className="text-[11px] text-slate-400">Xaridorlar to‘lov sahifangizga kirganda ushbu dizayn ko‘rinadi</p>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-500/20 text-sky-300 border border-blue-500/30">
-                        Do‘kon Egasi Sozlamasi
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1">
-                      {Object.values(PAYMENT_THEMES).map((theme) => {
-                        const isSelected = (shopForm.themeId || 'cyber_blue') === theme.id
-                        return (
-                          <button
-                            key={theme.id}
-                            type="button"
-                            onClick={() => setShopForm({ ...shopForm, themeId: theme.id })}
-                            className={`p-3 rounded-xl border text-left transition relative overflow-hidden flex items-start gap-3 ${
-                              isSelected
-                                ? 'bg-blue-600/30 border-sky-400 ring-2 ring-sky-400/40'
-                                : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/80 hover:border-slate-700'
-                            }`}
-                          >
-                            <div
-                              className="size-8 rounded-lg shrink-0 flex items-center justify-center border border-white/20 shadow-sm"
-                              style={{ backgroundColor: theme.previewDot }}
-                            >
-                              {theme.tier === 'premium' ? (
-                                <Crown size={14} className="text-white" />
-                              ) : (
-                                <div className="size-2 rounded-full bg-white" />
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-xs font-bold text-white truncate">{theme.name}</span>
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${
-                                  theme.tier === 'premium' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                }`}>
-                                  {theme.tier === 'premium' ? '👑 VIP' : 'TEKIN'}
-                                </span>
-                              </div>
-                              <p className="text-[10.5px] text-slate-300 line-clamp-1 mt-0.5">{theme.description}</p>
-                            </div>
-                            {isSelected && (
-                              <div className="absolute top-2 right-2 size-5 rounded-full bg-sky-400 text-slate-950 grid place-items-center font-bold text-xs">
-                                ✓
-                              </div>
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
                   </div>
 
                   {/* ------------------------------------------------------------- */}

@@ -192,7 +192,6 @@ export async function GET(
         accountOwner: shop?.accountOwner ?? 'Hisob egasi',
         logoUrl: shop?.logoUrl || null,
         tier: shop?.tier || 'free',
-        themeId: shop?.themeId || 'cyber_blue',
       },
     })
   } catch (error: any) {
