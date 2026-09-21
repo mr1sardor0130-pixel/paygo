@@ -1449,10 +1449,12 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
 
       const data = await res.json()
       if (res.ok && data.ok) {
+        const origin = typeof window !== 'undefined' ? window.location.origin : ''
+        const directUrl = `${origin}/pay/${data.id}`
         setCreatedPayment({
           id: data.id,
           amount: data.amount,
-          payUrl: data.payUrl || `${window.location.origin}/pay/${data.id}`,
+          payUrl: directUrl,
           expiresAt: data.expiresAt,
         })
         showToast('5 daqiqalik test to‘lov havolasi Neon bazaga yozildi!')
