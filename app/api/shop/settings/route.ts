@@ -103,6 +103,7 @@ export async function POST(request: Request) {
         webhookUrl: body.webhookUrl?.trim() || null,
         returnUrl: body.returnUrl?.trim() || null,
         telegramChannelId: body.telegramChannelId?.trim() || null,
+        themeId: body.themeId?.trim() || 'cyber_blue',
         approved: true,
       })
 
@@ -205,6 +206,7 @@ export async function POST(request: Request) {
       if (body.webhookUrl !== undefined) updates.webhookUrl = body.webhookUrl.trim()
       if (body.returnUrl !== undefined) updates.returnUrl = body.returnUrl.trim()
       if (body.telegramChannelId !== undefined) updates.telegramChannelId = body.telegramChannelId.trim()
+      if (body.themeId !== undefined) updates.themeId = body.themeId.trim()
 
       await db.update(shops).set(updates).where(eq(shops.id, shop.id))
       const updated = await db.select().from(shops).where(eq(shops.id, shop.id)).limit(1)

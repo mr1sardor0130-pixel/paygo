@@ -94,6 +94,7 @@ function loadInitialData(): Record<string, any[]> {
         accountOwner: 'Hisob egasi',
         approved: true,
         tier: 'free',
+        themeId: 'cyber_blue',
         createdAt: new Date().toISOString(),
       },
     ]
@@ -674,6 +675,7 @@ export async function ensureDbSchema() {
         "addedBy" text,
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );`,
+      `ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "themeId" text NOT NULL DEFAULT 'cyber_blue';`,
       `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "paymentType" text NOT NULL DEFAULT 'auto';`,
       `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "manualCardNumber" text;`,
       `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "manualCardOwner" text;`,
