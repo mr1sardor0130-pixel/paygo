@@ -101,16 +101,12 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
   const [themeFilter, setThemeFilter] = useState<'all' | 'free' | 'premium'>('all')
   const [currentThemeId, setCurrentThemeId] = useState<string>('cyber_blue')
   const [appRedirectToast, setAppRedirectToast] = useState<string | null>(null)
-  const [isPreviewMode, setIsPreviewMode] = useState(false)
 
   // Load theme from localStorage or query if available
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
       const qTheme = urlParams.get('theme')
-      const isPrev = urlParams.get('preview') === 'true' || urlParams.has('theme_picker')
-      setIsPreviewMode(isPrev)
-
       if (qTheme && PAYMENT_THEMES[qTheme]) {
         setCurrentThemeId(qTheme)
       } else {
@@ -177,17 +173,6 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
         const json: PaymentData = await res.json()
         setData(json)
         setFetchError(null)
-
-        // Automatically use shop owner's configured theme if not overridden in query
-        if (json.shop && (json.shop as any).theme && PAYMENT_THEMES[(json.shop as any).theme]) {
-          if (typeof window !== 'undefined') {
-            const urlParams = new URLSearchParams(window.location.search)
-            if (!urlParams.get('theme')) {
-              setCurrentThemeId((json.shop as any).theme)
-            }
-          }
-        }
-
         if (json.expiresAt) {
           const diff = Math.max(
             0,
@@ -359,23 +344,21 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
             <PayGoLogo className="h-9 w-auto" url={data?.siteLogo || undefined} showText={true} />
           </div>
 
-          {/* Right: User / Shop Profile Badge + Theme Switcher (Preview Mode Only) */}
+          {/* Right: User / Shop Profile Badge + Theme Switcher */}
           <div className="flex items-center gap-2">
-            {/* Theme Selector Button (Only visible in Preview/Test Mode so it does not distract customers) */}
-            {isPreviewMode && (
-              <button
-                onClick={() => setShowThemeModal(true)}
-                title="10 xil to‘lov sahifasi dizaynini tanlash"
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition border ${
-                  currentTheme.tier === 'premium'
-                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
-                    : 'bg-blue-600/20 border-blue-500/40 text-sky-300 hover:bg-blue-600/30'
-                }`}
-              >
-                <Palette size={14} className={currentTheme.tier === 'premium' ? 'text-amber-400' : 'text-sky-400'} />
-                <span className="hidden xs:inline">Dizayn ({currentTheme.tier === 'premium' ? 'VIP' : '5/5'})</span>
-              </button>
-            )}
+            {/* Theme Selector Button (10 Designs) */}
+            <button
+              onClick={() => setShowThemeModal(true)}
+              title="10 xil to‘lov sahifasi dizaynini tanlash"
+              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition border ${
+                currentTheme.tier === 'premium'
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
+                  : 'bg-blue-600/20 border-blue-500/40 text-sky-300 hover:bg-blue-600/30'
+              }`}
+            >
+              <Palette size={14} className={currentTheme.tier === 'premium' ? 'text-amber-400' : 'text-sky-400'} />
+              <span className="hidden xs:inline">Dizayn ({currentTheme.tier === 'premium' ? 'VIP' : '5/5'})</span>
+            </button>
 
             {/* Shop & User Profile Badge */}
             <div className={`flex items-center gap-2 rounded-xl ${currentTheme.isDark ? 'bg-black/30' : 'bg-slate-100'} border ${currentTheme.headerBorder} px-2.5 py-1.5`}>
@@ -780,13 +763,13 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
               </button>
 
               <button
-                onClick={() => setShowGuide(true)}
+                onClick={() => setShowThemeModal(true)}
                 className={`flex flex-col items-center justify-center p-3 rounded-2xl ${currentTheme.quickBtnBg} border ${currentTheme.quickBtnBorder} ${currentTheme.quickBtnHover} transition active:scale-95`}
               >
                 <div className={`size-8 rounded-xl bg-blue-600/20 ${currentTheme.accentText} grid place-items-center mb-1.5`}>
-                  <HelpCircle size={16} />
+                  <Palette size={16} />
                 </div>
-                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Qo‘llab-quvvatlash</span>
+                <span className={`text-[11px] font-bold ${currentTheme.isDark ? 'text-slate-200' : 'text-slate-800'}`}>Dizaynlar</span>
               </button>
             </div>
 

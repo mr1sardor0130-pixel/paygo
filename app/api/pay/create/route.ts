@@ -143,17 +143,17 @@ async function handleRequest(request: Request, method: 'GET' | 'POST') {
 
     // Resolve accurate host
     const reqHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || ''
-    const reqProto = request.headers.get('x-forwarded-proto') || (reqHost.includes('localhost') ? 'http' : 'https')
-    const dynamicHost = reqHost ? `${reqProto}://${reqHost}` : ''
+    const reqProto = request.headers.get('x-forwarded-proto') || 'https'
+    const dynamicHost = reqHost && !reqHost.includes('localhost') ? `${reqProto}://${reqHost}` : undefined
 
     const baseUrl =
       dynamicHost ||
       process.env.APP_URL ||
       process.env.NEXT_PUBLIC_APP_URL ||
-      ''
+      'https://paygo-pearl.vercel.app'
 
-    const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/$/, '') : ''
-    const payUrl = cleanBaseUrl ? `${cleanBaseUrl}/pay/${paymentId}` : `/pay/${paymentId}`
+    const cleanBaseUrl = baseUrl.replace(/\/$/, '')
+    const payUrl = `${cleanBaseUrl}/pay/${paymentId}`
 
     // Check if caller expects JSON or a browser redirection (clicked a link on browser)
     const acceptHeader = request.headers.get('accept') || ''

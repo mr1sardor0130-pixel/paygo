@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { db, ensureDbSchema } from '@/lib/db'
-import { payments, shops, deliveryLogs, donations, fundraisers, systemSettings, userProfiles } from '@/lib/db/schema'
+import { payments, shops, deliveryLogs, donations, fundraisers, systemSettings } from '@/lib/db/schema'
 import { eq, or, and, sql } from 'drizzle-orm'
 import { deliverWebhook, signPayload } from '@/lib/webhook'
 
@@ -192,7 +192,6 @@ export async function GET(
         accountOwner: shop?.accountOwner ?? 'Hisob egasi',
         logoUrl: shop?.logoUrl || null,
         tier: shop?.tier || 'free',
-        theme: shop?.theme || 'cyber_blue',
       },
     })
   } catch (error: any) {

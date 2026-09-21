@@ -674,13 +674,6 @@ export async function ensureDbSchema() {
         "addedBy" text,
         "createdAt" timestamp NOT NULL DEFAULT NOW()
       );`,
-      `ALTER TABLE "shops" ADD COLUMN IF NOT EXISTS "theme" text NOT NULL DEFAULT 'cyber_blue';`,
-      `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "orderId" text;`,
-      `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "description" text;`,
-      `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "returnUrl" text;`,
-      `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "webhookUrl" text;`,
-      `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "sourceMessage" text;`,
-      `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "isTest" boolean DEFAULT false;`,
       `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "paymentType" text NOT NULL DEFAULT 'auto';`,
       `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "manualCardNumber" text;`,
       `ALTER TABLE "paid_access_rooms" ADD COLUMN IF NOT EXISTS "manualCardOwner" text;`,

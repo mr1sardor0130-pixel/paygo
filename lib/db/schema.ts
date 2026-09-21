@@ -122,7 +122,6 @@ export const shops = pgTable(
     telegramChannelId: text('telegramChannelId'),
     userbotSession: text('userbotSession'),
     tier: text('tier').notNull().default('free'), // free, premium
-    theme: text('theme').notNull().default('cyber_blue'), // cyber_blue, emerald_pay, clean_light, dark_slate, violet_tech, royal_gold, cyberpunk_neon, sunset_ruby, aurora_glow, carbon_titanium
     createdAt: timestamp('createdAt').notNull().defaultNow(),
   },
   (table) => [
@@ -142,8 +141,6 @@ export const payments = pgTable(
     multiplier: integer('multiplier').notNull().default(1),
     status: text('status').notNull().default('pending'), // pending, paid, expired, rejected, archived
     isTest: boolean('isTest').default(false),
-    orderId: text('orderId'),
-    description: text('description'),
     returnUrl: text('returnUrl'),
     webhookUrl: text('webhookUrl'),
     expiresAt: timestamp('expiresAt').notNull(),
