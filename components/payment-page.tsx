@@ -44,6 +44,7 @@ import {
 import Link from 'next/link'
 import { HumoLogo, UzcardLogo, PayGoLogo, PaymeLogo, ClickLogo, UzumBankLogo } from '@/components/brand-logos'
 import { PAYMENT_THEMES, PaymentTheme, getPaymentTheme, DEFAULT_THEME_ID } from '@/lib/payment-themes'
+import { AdBanner, NativeAdBar } from '@/components/ad-banner'
 
 type PaymentData = {
   id: string
@@ -423,6 +424,9 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
             </button>
           </div>
         </header>
+
+        {/* TOP AD BANNER ON PAYMENT PAGE */}
+        <AdBanner variant="combined" refreshInterval={15} label="To‘lov Sahifasi Homiysi" pageContext="payment_top" />
 
         {/* 2. APP REDIRECT TOAST NOTIFICATION */}
         {appRedirectToast && (
@@ -1013,6 +1017,9 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
 
           </div>
         )}
+
+        {/* BOTTOM NATIVE AD BANNER ON PAYMENT PAGE */}
+        <NativeAdBar className="mt-2" />
 
         {/* 11. FOOTER BRANDING */}
         <footer className="pt-2 pb-4 text-center">

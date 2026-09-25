@@ -58,6 +58,7 @@ import Link from 'next/link'
 import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
 import { GearLoader, ButtonGearSpinner, DoubleGearIcon } from '@/components/gear-loader'
 import { PAYMENT_THEMES, getPaymentTheme, DEFAULT_THEME_ID } from '@/lib/payment-themes'
+import { AdBanner, NativeAdBar } from '@/components/ad-banner'
 
 export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels' | 'db_backup'
 
@@ -2235,6 +2236,10 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
 
       {/* Main Content Layout */}
       <div className="mx-auto max-w-7xl px-4 lg:px-8 py-6">
+
+        {/* Dashboard Top Auto-Refreshing Ad Banner */}
+        <AdBanner variant="combined" refreshInterval={18} label="Dashboard Homiylari" pageContext="dashboard_top" />
+
         {/* Sleek Subheader Navigation Bar */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-white border border-[#e2e8f0] rounded-2xl p-2.5 shadow-xs">
           {/* Active section info badge */}

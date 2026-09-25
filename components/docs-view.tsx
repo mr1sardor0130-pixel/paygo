@@ -17,6 +17,7 @@ import {
   Terminal,
   Zap,
 } from 'lucide-react'
+import { AdBanner, NativeAdBar } from '@/components/ad-banner'
 
 export function DocsView() {
   const [copied, setCopied] = useState<string | null>(null)
@@ -154,6 +155,11 @@ echo json_encode(['ok' => true]);
           </div>
         </div>
       </header>
+
+      {/* Top Auto-Refreshing Ad Banner */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-4">
+        <AdBanner variant="combined" refreshInterval={18} label="Hujjatlar Sahifasi Homiysi" pageContext="docs" />
+      </div>
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">

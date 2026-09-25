@@ -22,6 +22,7 @@ import {
   Home,
 } from 'lucide-react'
 import Link from 'next/link'
+import { AdBanner, NativeAdBar } from '@/components/ad-banner'
 
 interface TariffItem {
   id: string
@@ -257,6 +258,11 @@ export function TariffsView() {
           </div>
         </div>
       </header>
+
+      {/* Auto-Refreshing Ad Banner */}
+      <div className="mx-auto w-full max-w-7xl px-4 pt-4">
+        <AdBanner variant="combined" refreshInterval={18} label="Tariflar Sahifasi Homiysi" pageContext="tariffs" />
+      </div>
 
       {/* Main Content */}
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-12 space-y-10">

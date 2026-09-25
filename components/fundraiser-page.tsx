@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Heart, CreditCard, Copy, Check, Users, Target, Sparkles, ShieldCheck, ArrowRight, Clock, MessageSquare, ExternalLink, RefreshCw } from 'lucide-react'
 import { HumoLogo, UzcardLogo, PaymentAppButtons, AcceptedBrandsBar } from '@/components/brand-logos'
+import { AdBanner, NativeAdBar } from '@/components/ad-banner'
 
 interface FundraiserPageProps {
   fundraiserId: string
@@ -218,6 +219,9 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
             </span>
           </div>
         </div>
+
+        {/* Top Auto-Refreshing Ad Banner */}
+        <AdBanner variant="combined" refreshInterval={18} label="Ehson Loyihasi Homiysi" pageContext="fundraiser" />
 
         {/* Main Campaign Card */}
         <div className="bg-slate-900/80 border border-slate-800 backdrop-blur-xl rounded-3xl p-6 md:p-8 mb-8 shadow-2xl relative overflow-hidden">
