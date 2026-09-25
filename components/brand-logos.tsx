@@ -9,7 +9,7 @@ import { Check, ShieldCheck, Zap } from 'lucide-react'
    ========================================================================== */
 
 /**
- * PayGo Official Logo (Pristine High-Definition Vector SVG)
+ * PayGo Official Logo (Pristine High-Definition Vector SVG) - V0-styled update
  */
 export function PayGoLogo({ 
   className = "h-8", 
@@ -36,43 +36,26 @@ export function PayGoLogo({
 
   return (
     <div className={`inline-flex items-center gap-2 select-none shrink-0 ${className}`}>
-      {/* PayGo Emblem Icon */}
+      {/* V0-Styled Minimalist Logo */}
       <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-auto aspect-square drop-shadow-md">
-        <defs>
-          <linearGradient id="paygo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#0066ff" />
-            <stop offset="50%" stopColor="#2563eb" />
-            <stop offset="100%" stopColor="#38bdf8" />
-          </linearGradient>
-          <linearGradient id="paygo-accent" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#38bdf8" />
-            <stop offset="100%" stopColor="#ffffff" />
-          </linearGradient>
-        </defs>
-        <rect width="44" height="44" rx="12" fill="url(#paygo-grad)" />
-        {/* Stylized P / Fast Flash Wave */}
+        <rect width="44" height="44" rx="10" fill="black" />
         <path
-          d="M13 13C13 11.3431 14.3431 10 16 10H25.5C29.0899 10 32 12.9101 32 16.5C32 20.0899 29.0899 23 25.5 23H18.5V33C18.5 33.5523 18.0523 34 17.5 34H14C13.4477 34 13 33.5523 13 33V13Z"
-          fill="white"
+          d="M12 14L22 30L32 14"
+          stroke="white"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-        <path
-          d="M19 15.5H25C26.3807 15.5 27.5 16.6193 27.5 18C27.5 19.3807 26.3807 20.5 25 20.5H19V15.5Z"
-          fill="#1d4ed8"
-        />
-        {/* Fast Lightning Arrow */}
-        <path
-          d="M26 22L33 29H27L25 32L28 26H23L26 22Z"
-          fill="url(#paygo-accent)"
-        />
+        <circle cx="22" cy="14" r="3" fill="#38bdf8" />
       </svg>
 
       {showText && (
         <div className="flex flex-col text-left leading-none">
-          <span className="font-mono text-xs font-black tracking-widest text-sky-400 uppercase">
-            PAYGO <span className="text-white">SECURE</span>
+          <span className="font-mono text-xs font-black tracking-widest text-slate-100 uppercase">
+            PAYGO <span className="text-sky-400">V0</span>
           </span>
           <span className="text-[9.5px] text-slate-400 font-medium tracking-tight">
-            Xavfsiz to‘lovlar
+            Next-Gen Payments
           </span>
         </div>
       )}

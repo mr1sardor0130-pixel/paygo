@@ -2,12 +2,14 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import './globals.css'
+import { AdBanner } from '@/components/ad-banner'
 
 export const metadata: Metadata = {
-  title: 'PayGo Secure — HUMO To‘lov Avtomatlashtirish Tizimi & Telegram Bot CRM',
-  description: 'HUMO va UZCARD to‘lovlarini avtomatik tekshirish, Telegram userbot monitoringi, instant webhook va do‘konlar CRM platformasi.',
+  title: 'PayGo V0 — HUMO To‘lov Avtomatlashtirish Tizimi & Telegram Bot CRM',
+  description: 'Next-Gen HUMO va UZCARD to‘lovlarini avtomatik tekshirish, Telegram userbot monitoringi, instant webhook va do‘konlar CRM platformasi.',
   keywords: [
     'PayGo',
+    'PayGo V0',
     'PayGo uz',
     'PayGo Secure',
     'HUMO tolov',
@@ -102,7 +104,13 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        {children}
+        <div className="flex flex-col min-h-screen">
+          <AdBanner />
+          <main className="flex-grow">
+            {children}
+          </main>
+          <AdBanner />
+        </div>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
