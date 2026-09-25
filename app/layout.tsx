@@ -100,26 +100,43 @@ export default function RootLayout({
         <Script src="https://telegram.org/js/telegram-web-app.js?56" strategy="beforeInteractive" />
         <Script src="https://adsgram.ai/js/adsgram.js" strategy="afterInteractive" />
         <Script src="https://alwingulla.com/88/tag.min.js" data-zone="11886893" strategy="afterInteractive" />
-        <Script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js" strategy="afterInteractive" />
+        <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js" async></script>
         <Script id="adexium-widget-init" strategy="afterInteractive">
           {`
             (function() {
-              function initAdexium() {
-                if (typeof AdexiumWidget !== 'undefined') {
+              function startAdexium() {
+                if (typeof window.AdexiumWidget !== 'undefined') {
                   try {
-                    const adexiumWidget = new AdexiumWidget({ wid: 'fd29836a-b2c9-472d-a476-0db74457cc7b', adFormat: 'interstitial' });
-                    adexiumWidget.autoMode();
+                    if (!window.__adexiumInstance) {
+                      window.__adexiumInstance = new window.AdexiumWidget({
+                        wid: 'fd29836a-b2c9-472d-a476-0db74457cc7b',
+                        adFormat: 'interstitial'
+                      });
+                      window.__adexiumInstance.autoMode();
+                    }
                   } catch (e) {
                     console.warn('Adexium init warning:', e);
                   }
                 }
               }
 
-              if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                setTimeout(initAdexium, 500);
-              } else {
-                document.addEventListener('DOMContentLoaded', initAdexium);
+              if (window.Telegram && window.Telegram.WebApp) {
+                try {
+                  window.Telegram.WebApp.ready();
+                  window.Telegram.WebApp.expand();
+                } catch(e) {}
               }
+
+              startAdexium();
+              const timer1 = setInterval(function() {
+                if (typeof window.AdexiumWidget !== 'undefined') {
+                  startAdexium();
+                  clearInterval(timer1);
+                }
+              }, 500);
+
+              document.addEventListener('DOMContentLoaded', startAdexium);
+              window.addEventListener('load', startAdexium);
             })();
           `}
         </Script>
