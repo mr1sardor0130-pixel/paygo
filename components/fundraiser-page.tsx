@@ -220,9 +220,6 @@ export function FundraiserPage({ fundraiserId }: FundraiserPageProps) {
           </div>
         </div>
 
-        {/* Top Auto-Refreshing Ad Banner */}
-        <AdBanner variant="combined" refreshInterval={18} label="Ehson Loyihasi Homiysi" pageContext="fundraiser" />
-
         {/* Main Campaign Card */}
         <div className="bg-slate-900/80 border border-slate-800 backdrop-blur-xl rounded-3xl p-6 md:p-8 mb-8 shadow-2xl relative overflow-hidden">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">

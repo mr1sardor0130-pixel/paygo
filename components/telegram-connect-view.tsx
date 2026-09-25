@@ -200,9 +200,6 @@ export function TelegramConnectView() {
           </span>
         </div>
 
-        {/* Auto-refreshing Ad Banner */}
-        <AdBanner variant="combined" refreshInterval={18} label="Telegram Connect Homiysi" pageContext="telegram_connect" />
-
         {/* Wizard Card */}
         <div className="rounded-2xl border border-[#e3e8f0] bg-white p-7 shadow-xl shadow-slate-200/50">
           {/* Steps Indicator */}

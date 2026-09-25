@@ -425,9 +425,6 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
           </div>
         </header>
 
-        {/* TOP AD BANNER ON PAYMENT PAGE */}
-        <AdBanner variant="combined" refreshInterval={15} label="To‘lov Sahifasi Homiysi" pageContext="payment_top" />
-
         {/* 2. APP REDIRECT TOAST NOTIFICATION */}
         {appRedirectToast && (
           <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/90 to-[#0a2e1d] border border-emerald-500/50 text-emerald-200 text-xs font-semibold flex items-center justify-between shadow-xl shadow-emerald-950/40 animate-in fade-in zoom-in-95 duration-200">
@@ -1017,9 +1014,6 @@ export function PaymentPage({ paymentId }: { paymentId: string }) {
 
           </div>
         )}
-
-        {/* BOTTOM NATIVE AD BANNER ON PAYMENT PAGE */}
-        <NativeAdBar className="mt-2" />
 
         {/* 11. FOOTER BRANDING */}
         <footer className="pt-2 pb-4 text-center">
