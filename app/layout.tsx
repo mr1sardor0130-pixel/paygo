@@ -97,9 +97,32 @@ export default function RootLayout({
   return (
     <html lang="uz" className="bg-background">
       <head>
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <Script src="https://telegram.org/js/telegram-web-app.js?56" strategy="beforeInteractive" />
         <Script src="https://adsgram.ai/js/adsgram.js" strategy="afterInteractive" />
         <Script src="https://alwingulla.com/88/tag.min.js" data-zone="11886893" strategy="afterInteractive" />
+        <Script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js" strategy="afterInteractive" />
+        <Script id="adexium-widget-init" strategy="afterInteractive">
+          {`
+            (function() {
+              function initAdexium() {
+                if (typeof AdexiumWidget !== 'undefined') {
+                  try {
+                    const adexiumWidget = new AdexiumWidget({ wid: 'fd29836a-b2c9-472d-a476-0db74457cc7b', adFormat: 'interstitial' });
+                    adexiumWidget.autoMode();
+                  } catch (e) {
+                    console.warn('Adexium init warning:', e);
+                  }
+                }
+              }
+
+              if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                setTimeout(initAdexium, 500);
+              } else {
+                document.addEventListener('DOMContentLoaded', initAdexium);
+              }
+            })();
+          `}
+        </Script>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

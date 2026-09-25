@@ -11,6 +11,7 @@
 declare global {
   interface Window {
     show_11886893?: (options?: any) => Promise<any>
+    AdexiumWidget?: any
     Adsgram?: {
       init: (params: { blockId: string; debug?: boolean }) => {
         show: () => Promise<{ done: boolean; description?: string }>
