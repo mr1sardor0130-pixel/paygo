@@ -59,7 +59,6 @@ import { DatabaseBackupPanel } from '@/components/admin/database-backup-panel'
 import { GearLoader, ButtonGearSpinner, DoubleGearIcon } from '@/components/gear-loader'
 import { PAYMENT_THEMES, getPaymentTheme, DEFAULT_THEME_ID } from '@/lib/payment-themes'
 import { AdBanner, NativeAdBar } from '@/components/ad-banner'
-import { TelegramMiniAppAdsWidget } from '@/components/telegram-miniapp-ads'
 
 export type TabType = 'overview' | 'shop_settings' | 'my_shops' | 'vip_rooms' | 'test_payment' | 'webhook_docs' | 'shops' | 'tariffs' | 'admins' | 'payments' | 'users' | 'broadcast' | 'official_channels' | 'db_backup'
 
@@ -647,6 +646,17 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     if (tab === activeTab) return
     setTabLoading(true)
     setActiveTab(tab)
+
+    // Trigger Adexium Interstitial on transition (No bonus UI)
+    if (typeof window !== 'undefined' && (window as any).AdexiumWidget) {
+      try {
+        const adexiumWidget = new (window as any).AdexiumWidget({ wid: 'fd29836a-b2c9-472d-a476-0db74457cc7b', adFormat: 'interstitial' })
+        adexiumWidget.autoMode()
+      } catch (e) {
+        console.warn('Adexium transition ad trigger warning:', e)
+      }
+    }
+
     if (extraAction) {
       extraAction()
     }
@@ -2337,9 +2347,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
             </Link>
           </div>
         </div>
-
-        {/* Telegram Mini App Reklama Formatlari (Rewarded Interstitial, Rewarded Popup, In-App Interstitial) */}
-        <TelegramMiniAppAdsWidget />
 
         {/* Dynamic Gear Loader Transition for Tab changes */}
         {tabLoading && (
