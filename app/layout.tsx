@@ -98,6 +98,8 @@ export default function RootLayout({
     <html lang="uz" className="bg-background">
       <head>
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <Script src="https://adsgram.ai/js/adsgram.js" strategy="afterInteractive" />
+        <Script src="https://alwingulla.com/88/tag.min.js" data-zone="11886893" strategy="afterInteractive" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
