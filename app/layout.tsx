@@ -101,6 +101,24 @@ export default function RootLayout({
         <meta name="e883203ca759061446a6" content="e883203ca759061446a6" />
         <Script src="https://telegram.org/js/telegram-web-app.js?56" strategy="beforeInteractive" />
         <script type="text/javascript" src="https://sorrowfulpsychology.com/bt3.VF0/Pf3PpXv/b/mVVWJ_ZdDo0B3ZN/DUYGztNsDTQSxeLKTec/0vNJj-MI0RNIDoUJ" async></script>
+        <Script id="hilltop-prizefamily-ad" strategy="afterInteractive">
+          {`
+            (function(sgxn){
+            var d = document,
+                s = d.createElement('script'),
+                l = d.currentScript || d.scripts[d.scripts.length - 1];
+            s.settings = sgxn || {};
+            s.src = "//prizefamily.com/biXPV/s.dvGZlH0qYzWxc_/jeamZ9VuYZdU/lokUP/TVcj0rNAj/MA0JOIDRk/tFNPzaQL2DMpz/QF5OMKwO";
+            s.async = true;
+            s.referrerPolicy = 'no-referrer-when-downgrade';
+            if (l && l.parentNode) {
+              l.parentNode.insertBefore(s, l);
+            } else if (d.head) {
+              d.head.appendChild(s);
+            }
+            })({});
+          `}
+        </Script>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
