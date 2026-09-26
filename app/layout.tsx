@@ -97,6 +97,8 @@ export default function RootLayout({
   return (
     <html lang="uz" className="bg-background">
       <head>
+        <meta name="e883203ca759061446a63b06aea59b25fae43647" content="e883203ca759061446a63b06aea59b25fae43647" />
+        <meta name="e883203ca759061446a6" content="e883203ca759061446a6" />
         <Script src="https://telegram.org/js/telegram-web-app.js?56" strategy="beforeInteractive" />
         <script
           type="application/ld+json"
