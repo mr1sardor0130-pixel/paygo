@@ -98,48 +98,6 @@ export default function RootLayout({
     <html lang="uz" className="bg-background">
       <head>
         <Script src="https://telegram.org/js/telegram-web-app.js?56" strategy="beforeInteractive" />
-        <Script src="https://adsgram.ai/js/adsgram.js" strategy="afterInteractive" />
-        <Script src="https://alwingulla.com/88/tag.min.js" data-zone="11886893" strategy="afterInteractive" />
-        <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js" async></script>
-        <Script id="adexium-widget-init" strategy="afterInteractive">
-          {`
-            (function() {
-              function startAdexium() {
-                if (typeof window.AdexiumWidget !== 'undefined') {
-                  try {
-                    if (!window.__adexiumInstance) {
-                      window.__adexiumInstance = new window.AdexiumWidget({
-                        wid: 'fd29836a-b2c9-472d-a476-0db74457cc7b',
-                        adFormat: 'interstitial'
-                      });
-                      window.__adexiumInstance.autoMode();
-                    }
-                  } catch (e) {
-                    console.warn('Adexium init warning:', e);
-                  }
-                }
-              }
-
-              if (window.Telegram && window.Telegram.WebApp) {
-                try {
-                  window.Telegram.WebApp.ready();
-                  window.Telegram.WebApp.expand();
-                } catch(e) {}
-              }
-
-              startAdexium();
-              const timer1 = setInterval(function() {
-                if (typeof window.AdexiumWidget !== 'undefined') {
-                  startAdexium();
-                  clearInterval(timer1);
-                }
-              }, 500);
-
-              document.addEventListener('DOMContentLoaded', startAdexium);
-              window.addEventListener('load', startAdexium);
-            })();
-          `}
-        </Script>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -147,11 +105,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <div className="flex flex-col min-h-screen">
-          <AdBanner />
           <main className="flex-grow">
             {children}
           </main>
-          <AdBanner />
         </div>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

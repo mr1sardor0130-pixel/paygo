@@ -647,16 +647,6 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
     setTabLoading(true)
     setActiveTab(tab)
 
-    // Trigger Adexium Interstitial on transition (No bonus UI)
-    if (typeof window !== 'undefined' && (window as any).AdexiumWidget) {
-      try {
-        const adexiumWidget = new (window as any).AdexiumWidget({ wid: 'fd29836a-b2c9-472d-a476-0db74457cc7b', adFormat: 'interstitial' })
-        adexiumWidget.autoMode()
-      } catch (e) {
-        console.warn('Adexium transition ad trigger warning:', e)
-      }
-    }
-
     if (extraAction) {
       extraAction()
     }
