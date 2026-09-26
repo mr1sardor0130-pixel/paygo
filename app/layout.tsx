@@ -100,6 +100,7 @@ export default function RootLayout({
         <meta name="e883203ca759061446a63b06aea59b25fae43647" content="e883203ca759061446a63b06aea59b25fae43647" />
         <meta name="e883203ca759061446a6" content="e883203ca759061446a6" />
         <Script src="https://telegram.org/js/telegram-web-app.js?56" strategy="beforeInteractive" />
+        <Script src="https://sorrowfulpsychology.com/bt3.VF0/Pf3PpXv/b/mVVWJ_ZdDo0B3ZN/DUYGztNsDTQSxeLKTec/0vNJj-MI0RNIDoUJ" strategy="afterInteractive" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
