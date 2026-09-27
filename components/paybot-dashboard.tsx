@@ -130,7 +130,25 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
   const [vipLoading, setVipLoading] = useState(false)
   const [manualReqLoading, setManualReqLoading] = useState(false)
   const [isNewVipRoomModalOpen, setIsNewVipRoomModalOpen] = useState(false)
+  const [isEditVipRoomModalOpen, setIsEditVipRoomModalOpen] = useState(false)
   const [isAddVipMemberModalOpen, setIsAddVipMemberModalOpen] = useState(false)
+  const [savingVipRoom, setSavingVipRoom] = useState(false)
+  const [editingVipRoomForm, setEditingVipRoomForm] = useState({
+    id: '',
+    title: '',
+    chatId: '',
+    type: 'group',
+    mode: 'write_permission',
+    hourlyPrice: 5000,
+    dailyPrice: 15000,
+    weeklyPrice: 50000,
+    monthlyPrice: 120000,
+    welcomeMessage: '',
+    paymentType: 'auto',
+    manualCardNumber: '',
+    manualCardOwner: '',
+    manualInstructions: '',
+  })
   const [newVipRoomForm, setNewVipRoomForm] = useState({
     title: '',
     chatId: '',
@@ -916,6 +934,65 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
       }
     } catch {
       showToast('Server bilan aloqa uzildi', 'error')
+    }
+  }
+
+  // Open Edit VIP Room Modal
+  const handleOpenEditVipRoom = (room: any) => {
+    setEditingVipRoomForm({
+      id: room.id,
+      title: room.title || '',
+      chatId: room.chatId || '',
+      type: room.type || 'group',
+      mode: room.mode || 'write_permission',
+      hourlyPrice: room.hourlyPrice || 5000,
+      dailyPrice: room.dailyPrice || 15000,
+      weeklyPrice: room.weeklyPrice || 50000,
+      monthlyPrice: room.monthlyPrice || 120000,
+      welcomeMessage: room.welcomeMessage || '',
+      paymentType: room.paymentType || 'auto',
+      manualCardNumber: room.manualCardNumber || '',
+      manualCardOwner: room.manualCardOwner || '',
+      manualInstructions: room.manualInstructions || '',
+    })
+    setIsEditVipRoomModalOpen(true)
+  }
+
+  // Update Existing VIP Room
+  const handleUpdateVipRoom = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingVipRoomForm.title.trim() || !editingVipRoomForm.chatId.trim()) {
+      showToast('Nomi va Chat ID kiritilishi shart', 'error')
+      return
+    }
+    setSavingVipRoom(true)
+    const effectiveUserId = currentUser?.telegramId || currentUser?.userId || ''
+    try {
+      const res = await fetch('/api/paid-rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-telegram-user-id': effectiveUserId,
+        },
+        body: JSON.stringify({
+          action: 'update_room',
+          ...editingVipRoomForm,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        if (data.rooms) setVipRooms(data.rooms)
+        setIsEditVipRoomModalOpen(false)
+        loadVipRooms()
+        showToast('Guruh sozlamalari va to‘lov turi yangilandi!')
+      } else {
+        showToast(data.error || 'Xatolik yuz berdi', 'error')
+      }
+    } catch {
+      showToast('Server bilan aloqa uzildi', 'error')
+    } finally {
+      setSavingVipRoom(false)
     }
   }
 
@@ -3380,18 +3457,28 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleVipRoom(room.id, room.active)}
-                          className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                            room.active
-                              ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          }`}
-                        >
-                          {room.active ? 'Vaqtincha to‘xtatish' : 'Faollashtirish'}
-                        </button>
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditVipRoom(room)}
+                            className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+                          >
+                            <Edit3 size={13} /> Tahrirlash & Sozlamalar
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleVipRoom(room.id, room.active)}
+                            className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                              room.active
+                                ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                            }`}
+                          >
+                            {room.active ? 'Vaqtincha to‘xtatish' : 'Faollashtirish'}
+                          </button>
+                        </div>
 
                         <button
                           type="button"
@@ -7168,6 +7255,213 @@ export function PaybotDashboard({ initialTab, adminOnly = false }: PaybotDashboa
                     className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition"
                   >
                     Guruhni Ulash
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* MODAL: EDIT EXISTING VIP ROOM / PAID GROUP SETTINGS */}
+        {/* ------------------------------------------------------------- */}
+        {isEditVipRoomModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-10 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
+                    <Edit3 size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">VIP Guruh / Kanalni Tahrirlash</h3>
+                    <p className="text-xs text-slate-400">To‘lov shakli (Manual / Avto) hamda tarif narxlarini o‘zgartirish</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditVipRoomModalOpen(false)}
+                  className="rounded-full p-2 text-slate-400 hover:bg-slate-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateVipRoom} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Guruh / Kanal Nomi *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingVipRoomForm.title}
+                    onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, title: e.target.value })}
+                    placeholder="Masalan: VIP Savdo Guruhi"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Telegram Chat ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingVipRoomForm.chatId}
+                    onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, chatId: e.target.value })}
+                    placeholder="-1001234567890"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-indigo-600"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Turini Tanlang
+                    </label>
+                    <select
+                      value={editingVipRoomForm.type}
+                      onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, type: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600"
+                    >
+                      <option value="group">👥 Guruh (Chat)</option>
+                      <option value="channel">📢 Kanal</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Cheklov Rejimi
+                    </label>
+                    <select
+                      value={editingVipRoomForm.mode}
+                      onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, mode: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600"
+                    >
+                      <option value="write_permission">✍️ Yozish Huquqi (Mute / Unmute)</option>
+                      <option value="invite_only">🔒 Yopiq A’zolik (Kanal/Guruh)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    To‘lov Qabul Qilish Shakli *
+                  </label>
+                  <select
+                    value={editingVipRoomForm.paymentType}
+                    onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, paymentType: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-indigo-600 font-bold text-indigo-900 bg-indigo-50/50"
+                  >
+                    <option value="auto">⚡️ Avto-to‘lov (HUMO / Do‘kon integratsiyasi)</option>
+                    <option value="manual">📝 Manual (Karta raqam & Chekni admin qo‘lda tasdiqlashi)</option>
+                  </select>
+                </div>
+
+                {editingVipRoomForm.paymentType === 'manual' && (
+                  <div className="space-y-3 rounded-2xl bg-amber-50/80 p-4 border border-amber-200 text-xs">
+                    <span className="font-bold text-amber-900 block">📝 Qo‘lda To‘lov (Manual) Rekvizitlari:</span>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Karta Raqami (Foydalanuvchi ko‘radigan)</label>
+                      <input
+                        type="text"
+                        value={editingVipRoomForm.manualCardNumber}
+                        onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, manualCardNumber: e.target.value })}
+                        placeholder="8600123456789012"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Karta Egasi F.I.O</label>
+                      <input
+                        type="text"
+                        value={editingVipRoomForm.manualCardOwner}
+                        onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, manualCardOwner: e.target.value })}
+                        placeholder="ALIMOV VALI"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Ko‘rsatma / Yo‘riqnoma (Ixtiyoriy)</label>
+                      <input
+                        type="text"
+                        value={editingVipRoomForm.manualInstructions}
+                        onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, manualInstructions: e.target.value })}
+                        placeholder="Kartaga o‘tkazib, chek rasmini yuboring"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="border-t border-slate-100 pt-4">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-3">
+                    💰 To‘lov Tarif Narxlari (UZS)
+                  </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        ⏱ 1 Soatlik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={editingVipRoomForm.hourlyPrice}
+                        onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, hourlyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        📅 1 Kunlik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={editingVipRoomForm.dailyPrice}
+                        onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, dailyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        📆 1 Haftalik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={editingVipRoomForm.weeklyPrice}
+                        onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, weeklyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        🗓 1 Oylik Narx
+                      </label>
+                      <input
+                        type="number"
+                        value={editingVipRoomForm.monthlyPrice}
+                        onChange={(e) => setEditingVipRoomForm({ ...editingVipRoomForm, monthlyPrice: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditVipRoomModalOpen(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingVipRoom}
+                    className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition disabled:opacity-50"
+                  >
+                    {savingVipRoom ? 'Saqlanmoqda...' : '💾 Sozlamalarni Saqlash'}
                   </button>
                 </div>
               </form>

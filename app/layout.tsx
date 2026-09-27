@@ -119,6 +119,24 @@ export default function RootLayout({
             })({});
           `}
         </Script>
+        <Script id="hilltop-prizefamily-ad-2" strategy="afterInteractive">
+          {`
+            (function(jnkg){
+            var d = document,
+                s = d.createElement('script'),
+                l = d.currentScript || d.scripts[d.scripts.length - 1];
+            s.settings = jnkg || {};
+            s.src = "//prizefamily.com/b/X/V.sKdIGulf0SYvWdcq/NeemF9juWZZUaluk/PJTDcz0VNTjyYq0fN/DpU/t/N/zPQo2ZNLjqQX0JOlQE";
+            s.async = true;
+            s.referrerPolicy = 'no-referrer-when-downgrade';
+            if (l && l.parentNode) {
+              l.parentNode.insertBefore(s, l);
+            } else if (d.head) {
+              d.head.appendChild(s);
+            }
+            })({});
+          `}
+        </Script>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
